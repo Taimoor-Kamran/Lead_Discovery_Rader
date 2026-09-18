@@ -1,0 +1,158 @@
+{
+  "places": [
+    {
+      "id": "ChIJradar0000AustinPlumb",
+      "types": [
+        "plumber",
+        "point_of_interest",
+        "establishment"
+      ],
+      "nationalPhoneNumber": "(512) 555-0000",
+      "internationalPhoneNumber": "+1 512-555-0000",
+      "formattedAddress": "100 Congress Ave, Austin, TX 78701, USA",
+      "addressComponents": [
+        {
+          "longText": "100",
+          "shortText": "100",
+          "types": [
+            "street_number"
+          ],
+          "languageCode": "en-US"
+        },
+        {
+          "longText": "Congress Ave",
+          "shortText": "Congress Ave",
+          "types": [
+            "route"
+          ],
+          "languageCode": "en-US"
+        },
+        {
+          "longText": "Austin",
+          "shortText": "Austin",
+          "types": [
+            "locality",
+            "political"
+          ],
+          "languageCode": "en"
+        },
+        {
+          "longText": "Texas",
+          "shortText": "TX",
+          "types": [
+            "administrative_area_level_1",
+            "political"
+          ],
+          "languageCode": "en"
+        },
+        {
+          "longText": "United States",
+          "shortText": "US",
+          "types": [
+            "country",
+            "political"
+          ],
+          "languageCode": "en"
+        },
+        {
+          "longText": "78701",
+          "shortText": "78701",
+          "types": [
+            "postal_code"
+          ]
+        }
+      ],
+      "location": {
+        "latitude": 30.2672,
+        "longitude": -97.7431
+      },
+      "businessStatus": "OPERATIONAL",
+      "displayName": {
+        "text": "Austin Plumbing Co 00",
+        "languageCode": "en"
+      },
+      "primaryType": "plumber",
+      "websiteUri": "https://plumber-00.example.test/"
+    },
+    {
+      "displayName": {
+        "text": "No Place ID Ltd",
+        "languageCode": "en"
+      }
+    },
+    {
+      "id": "ChIJradar0001AustinPlumb",
+      "types": [
+        "plumber",
+        "point_of_interest",
+        "establishment"
+      ],
+      "nationalPhoneNumber": "(512) 555-0001",
+      "internationalPhoneNumber": "+1 512-555-0001",
+      "formattedAddress": "101 Guadalupe St, Austin, TX 78701, USA",
+      "addressComponents": [
+        {
+          "longText": "101",
+          "shortText": "101",
+          "types": [
+            "street_number"
+          ],
+          "languageCode": "en-US"
+        },
+        {
+          "longText": "Guadalupe St",
+          "shortText": "Guadalupe St",
+          "types": [
+            "route"
+          ],
+          "languageCode": "en-US"
+        },
+        {
+          "longText": "Austin",
+          "shortText": "Austin",
+          "types": [
+            "locality",
+            "political"
+          ],
+          "languageCode": "en"
+        },
+        {
+          "longText": "Texas",
+          "shortText": "TX",
+          "types": [
+            "administrative_area_level_1",
+            "political"
+          ],
+          "languageCode": "en"
+        },
+        {
+          "longText": "United States",
+          "shortText": "US",
+          "types": [
+            "country",
+            "political"
+          ],
+          "languageCode": "en"
+        },
+        {
+          "longText": "78701",
+          "shortText": "78701",
+          "types": [
+            "postal_code"
+          ]
+        }
+      ],
+      "location": {
+        "latitude": 30.2679,
+        "longitude": -97.7436
+      },
+      "businessStatus": "OPERATIONAL",
+      "displayName": {
+        "text": "Austin Plumbing Co 01",
+        "languageCode": "en"
+      },
+      "primaryType": "plumber",
+      "websiteUri": "https://plumber-01.example.test/"
+    }
+  ]
+}

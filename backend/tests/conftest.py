@@ -5,6 +5,7 @@ schema uses citext, JSONB, arrays, native enums and a trigger — none of which 
 Redis is faked; no test ever touches a live external service.
 """
 
+import json
 import os
 import subprocess
 import uuid
@@ -13,6 +14,7 @@ from typing import Any
 
 import fakeredis
 import pytest
+import respx
 from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
@@ -23,14 +25,49 @@ from sqlalchemy.orm import Session
 from app.core import redis as redis_module
 from app.core.config import get_settings
 from app.core.db import get_session_factory, reset_engine
+from app.modules.adapters import registry
+from app.modules.adapters.google_places.adapter import GooglePlacesAdapter
 from app.modules.auth.models import Role, User
 from app.modules.auth.schemas import UserCreate
 from app.modules.auth.service import create_user
 
 TEST_JWT_SECRET = "test-jwt-secret-value-not-used-anywhere-else"
 TEST_PASSWORD = "correct-horse-battery-staple"
+# A distinctive literal, so a leak into a log line, an error or a stored payload is
+# unmistakable rather than a judgement call.
+TEST_PLACES_API_KEY = "places-key-SENTINEL-8f2a1c-never-log-me"
 
 BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+FIXTURE_DIR = os.path.join(BACKEND_DIR, "tests", "fixtures")
+
+
+def load_fixture(*parts: str) -> Any:
+    """Read a recorded API response. No test ever calls a live service."""
+    with open(os.path.join(FIXTURE_DIR, *parts), encoding="utf-8") as handle:
+        return json.load(handle)
+
+
+def places_fixture(name: str) -> Any:
+    return load_fixture("google_places", name)
+
+
+class FakeClock:
+    """A clock that only advances when something sleeps on it.
+
+    Lets a test assert an exact backoff or rate-limit schedule instead of waiting it out,
+    while the token bucket still refills correctly as simulated time passes.
+    """
+
+    def __init__(self, start: float = 1_700_000_000.0) -> None:
+        self.now = start
+        self.delays: list[float] = []
+
+    def __call__(self) -> float:
+        return self.now
+
+    def sleep(self, seconds: float) -> None:
+        self.delays.append(seconds)
+        self.now += seconds
 
 
 def _docker_available() -> bool:
@@ -80,6 +117,11 @@ def _base_environment() -> Iterator[None]:
             "JOB_MAX_ATTEMPTS": "3",
             "JOB_BACKOFF_BASE_SECONDS": "2",
             "LOG_LEVEL": "INFO",
+            "GOOGLE_PLACES_API_KEY": TEST_PLACES_API_KEY,
+            "PLACES_MAX_RESULTS_PER_JOB": "60",
+            "PLACES_DAILY_CALL_CAP": "200",
+            "PLACES_RPS": "5",
+            "PLACES_CONTENT_TTL_DAYS": "30",
         }
     )
     get_settings.cache_clear()
@@ -104,7 +146,10 @@ def db(migrated_database: str) -> Iterator[Session]:
     reset_engine()
     session = get_session_factory()()
     session.execute(
-        text("TRUNCATE audit_logs, job_runs, search_jobs, sources, users RESTART IDENTITY CASCADE")
+        text(
+            "TRUNCATE api_calls, record_sightings, discovered_records, audit_logs, job_runs, "
+            "search_jobs, sources, users RESTART IDENTITY CASCADE"
+        )
     )
     session.commit()
     try:
@@ -123,6 +168,63 @@ def fake_redis() -> Iterator[fakeredis.FakeStrictRedis]:
     yield client
     redis_module.set_redis(None)
     redis_module.set_queue(None)
+
+
+@pytest.fixture(autouse=True)
+def mock_http() -> Iterator[respx.MockRouter]:
+    """Intercept every outbound HTTP call.
+
+    respx patches httpcore, so the ASGI TestClient is untouched but anything that would
+    really leave the machine raises instead. A test that needs a response registers a
+    route on this router; an unregistered call is a failure, which is what keeps the
+    suite honest about never touching a live API.
+    """
+    with respx.mock(assert_all_called=False) as router:
+        yield router
+
+
+@pytest.fixture(autouse=True)
+def adapter_registry() -> Iterator[None]:
+    """Restore the adapter registry after a test installs a stand-in."""
+    registry.names()  # force the built-in adapters in before snapshotting
+    snapshot = dict(registry._ADAPTERS)
+    yield
+    registry._ADAPTERS.clear()
+    registry._ADAPTERS.update(snapshot)
+
+
+@pytest.fixture
+def clock() -> FakeClock:
+    return FakeClock()
+
+
+def build_places_adapter(
+    redis_client: Any, clock: FakeClock, *, meter: Any = None
+) -> GooglePlacesAdapter:
+    """The real adapter, wired to fakeredis and a clock that never really sleeps.
+
+    Leaving `meter` unset keeps the production hook, which writes `api_calls` rows.
+    """
+    from app.modules.adapters.google_places.client import build_client
+
+    return GooglePlacesAdapter(
+        client_factory=lambda job_run_id: build_client(
+            GooglePlacesAdapter.name,
+            job_run_id=job_run_id,
+            sleeper=clock.sleep,
+            clock=clock,
+            redis_client=redis_client,
+            meter=meter,
+        )
+    )
+
+
+@pytest.fixture
+def places_adapter(fake_redis: fakeredis.FakeStrictRedis, clock: FakeClock) -> GooglePlacesAdapter:
+    """Install a Places adapter whose waiting is simulated, in place of the real one."""
+    adapter = build_places_adapter(fake_redis, clock)
+    registry.register(adapter, replace=True)
+    return adapter
 
 
 @pytest.fixture

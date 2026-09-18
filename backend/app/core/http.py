@@ -67,8 +67,8 @@ class ApiCallRecord:
     error_class: str | None = None
 
 
-class MeteringHook(Protocol):
-    def __call__(self, record: ApiCallRecord) -> None: ...
+# Called once per attempt, success or failure. See `discovery.service.api_call_meter`.
+MeteringHook = Callable[[ApiCallRecord], None]
 
 
 class Limiter(Protocol):

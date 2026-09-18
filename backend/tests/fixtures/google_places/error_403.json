@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": 403,
+    "message": "Places API (New) has not been used in project 000000000000 before or it is disabled.",
+    "status": "PERMISSION_DENIED"
+  }
+}
