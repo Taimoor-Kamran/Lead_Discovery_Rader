@@ -13,7 +13,16 @@ import pytest
 
 from app.models_registry import Base
 
-EXPECTED = {"users", "sources", "search_jobs", "job_runs", "audit_logs"}
+EXPECTED = {
+    "users",
+    "sources",
+    "search_jobs",
+    "job_runs",
+    "audit_logs",
+    "discovered_records",
+    "record_sightings",
+    "api_calls",
+}
 
 CHECK = (
     "import {module};"

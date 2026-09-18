@@ -2,7 +2,7 @@
 
 import uuid
 from datetime import datetime
-from typing import Self
+from typing import Any, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -73,6 +73,7 @@ class JobRunRead(BaseModel):
     attempts: int
     error: str | None
     cancel_requested: bool
+    result_summary: dict[str, Any] | None
     started_at: datetime | None
     finished_at: datetime | None
     created_at: datetime

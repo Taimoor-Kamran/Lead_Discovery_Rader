@@ -1,0 +1,1413 @@
+{
+  "places": [
+    {
+      "id": "ChIJradar0040AustinPlumb",
+      "types": [
+        "plumber",
+        "point_of_interest",
+        "establishment"
+      ],
+      "nationalPhoneNumber": "(512) 555-0040",
+      "internationalPhoneNumber": "+1 512-555-0040",
+      "formattedAddress": "140 Congress Ave, Austin, TX 78701, USA",
+      "addressComponents": [
+        {
+          "longText": "140",
+          "shortText": "140",
+          "types": [
+            "street_number"
+          ],
+          "languageCode": "en-US"
+        },
+        {
+          "longText": "Congress Ave",
+          "shortText": "Congress Ave",
+          "types": [
+            "route"
+          ],
+          "languageCode": "en-US"
+        },
+        {
+          "longText": "Austin",
+          "shortText": "Austin",
+          "types": [
+            "locality",
+            "political"
+          ],
+          "languageCode": "en"
+        },
+        {
+          "longText": "Texas",
+          "shortText": "TX",
+          "types": [
+            "administrative_area_level_1",
+            "political"
+          ],
+          "languageCode": "en"
+        },
+        {
+          "longText": "United States",
+          "shortText": "US",
+          "types": [
+            "country",
+            "political"
+          ],
+          "languageCode": "en"
+        },
+        {
+          "longText": "78701",
+          "shortText": "78701",
+          "types": [
+            "postal_code"
+          ]
+        }
+      ],
+      "location": {
+        "latitude": 30.2952,
+        "longitude": -97.7631
+      },
+      "businessStatus": "OPERATIONAL",
+      "displayName": {
+        "text": "Austin Plumbing Co 40",
+        "languageCode": "en"
+      },
+      "primaryType": "plumber",
+      "websiteUri": "https://plumber-40.example.test/"
+    },
+    {
+      "id": "ChIJradar0041AustinPlumb",
+      "types": [
+        "plumber",
+        "point_of_interest",
+        "establishment"
+      ],
+      "nationalPhoneNumber": "(512) 555-0041",
+      "internationalPhoneNumber": "+1 512-555-0041",
+      "formattedAddress": "141 Guadalupe St, Austin, TX 78701, USA",
+      "addressComponents": [
+        {
+          "longText": "141",
+          "shortText": "141",
+          "types": [
+            "street_number"
+          ],
+          "languageCode": "en-US"
+        },
+        {
+          "longText": "Guadalupe St",
+          "shortText": "Guadalupe St",
+          "types": [
+            "route"
+          ],
+          "languageCode": "en-US"
+        },
+        {
+          "longText": "Austin",
+          "shortText": "Austin",
+          "types": [
+            "locality",
+            "political"
+          ],
+          "languageCode": "en"
+        },
+        {
+          "longText": "Texas",
+          "shortText": "TX",
+          "types": [
+            "administrative_area_level_1",
+            "political"
+          ],
+          "languageCode": "en"
+        },
+        {
+          "longText": "United States",
+          "shortText": "US",
+          "types": [
+            "country",
+            "political"
+          ],
+          "languageCode": "en"
+        },
+        {
+          "longText": "78701",
+          "shortText": "78701",
+          "types": [
+            "postal_code"
+          ]
+        }
+      ],
+      "location": {
+        "latitude": 30.2959,
+        "longitude": -97.7636
+      },
+      "businessStatus": "OPERATIONAL",
+      "displayName": {
+        "text": "Austin Plumbing Co 41",
+        "languageCode": "en"
+      },
+      "primaryType": "plumber",
+      "websiteUri": "https://plumber-41.example.test/"
+    },
+    {
+      "id": "ChIJradar0042AustinPlumb",
+      "types": [
+        "plumber",
+        "point_of_interest",
+        "establishment"
+      ],
+      "nationalPhoneNumber": "(512) 555-0042",
+      "internationalPhoneNumber": "+1 512-555-0042",
+      "formattedAddress": "142 Lamar Blvd, Austin, TX 78701, USA",
+      "addressComponents": [
+        {
+          "longText": "142",
+          "shortText": "142",
+          "types": [
+            "street_number"
+          ],
+          "languageCode": "en-US"
+        },
+        {
+          "longText": "Lamar Blvd",
+          "shortText": "Lamar Blvd",
+          "types": [
+            "route"
+          ],
+          "languageCode": "en-US"
+        },
+        {
+          "longText": "Austin",
+          "shortText": "Austin",
+          "types": [
+            "locality",
+            "political"
+          ],
+          "languageCode": "en"
+        },
+        {
+          "longText": "Texas",
+          "shortText": "TX",
+          "types": [
+            "administrative_area_level_1",
+            "political"
+          ],
+          "languageCode": "en"
+        },
+        {
+          "longText": "United States",
+          "shortText": "US",
+          "types": [
+            "country",
+            "political"
+          ],
+          "languageCode": "en"
+        },
+        {
+          "longText": "78701",
+          "shortText": "78701",
+          "types": [
+            "postal_code"
+          ]
+        }
+      ],
+      "location": {
+        "latitude": 30.2966,
+        "longitude": -97.7641
+      },
+      "businessStatus": "OPERATIONAL",
+      "displayName": {
+        "text": "Austin Plumbing Co 42",
+        "languageCode": "en"
+      },
+      "primaryType": "plumber",
+      "websiteUri": "https://plumber-42.example.test/"
+    },
+    {
+      "id": "ChIJradar0043AustinPlumb",
+      "types": [
+        "plumber",
+        "point_of_interest",
+        "establishment"
+      ],
+      "nationalPhoneNumber": "(512) 555-0043",
+      "internationalPhoneNumber": "+1 512-555-0043",
+      "formattedAddress": "143 Burnet Rd, Austin, TX 78701, USA",
+      "addressComponents": [
+        {
+          "longText": "143",
+          "shortText": "143",
+          "types": [
+            "street_number"
+          ],
+          "languageCode": "en-US"
+        },
+        {
+          "longText": "Burnet Rd",
+          "shortText": "Burnet Rd",
+          "types": [
+            "route"
+          ],
+          "languageCode": "en-US"
+        },
+        {
+          "longText": "Austin",
+          "shortText": "Austin",
+          "types": [
+            "locality",
+            "political"
+          ],
+          "languageCode": "en"
+        },
+        {
+          "longText": "Texas",
+          "shortText": "TX",
+          "types": [
+            "administrative_area_level_1",
+            "political"
+          ],
+          "languageCode": "en"
+        },
+        {
+          "longText": "United States",
+          "shortText": "US",
+          "types": [
+            "country",
+            "political"
+          ],
+          "languageCode": "en"
+        },
+        {
+          "longText": "78701",
+          "shortText": "78701",
+          "types": [
+            "postal_code"
+          ]
+        }
+      ],
+      "location": {
+        "latitude": 30.2973,
+        "longitude": -97.7646
+      },
+      "businessStatus": "OPERATIONAL",
+      "displayName": {
+        "text": "Austin Plumbing Co 43",
+        "languageCode": "en"
+      },
+      "primaryType": "plumber",
+      "websiteUri": "https://plumber-43.example.test/"
+    },
+    {
+      "id": "ChIJradar0044AustinPlumb",
+      "types": [
+        "plumber",
+        "point_of_interest",
+        "establishment"
+      ],
+      "nationalPhoneNumber": "(512) 555-0044",
+      "internationalPhoneNumber": "+1 512-555-0044",
+      "formattedAddress": "144 Airport Blvd, Austin, TX 78701, USA",
+      "addressComponents": [
+        {
+          "longText": "144",
+          "shortText": "144",
+          "types": [
+            "street_number"
+          ],
+          "languageCode": "en-US"
+        },
+        {
+          "longText": "Airport Blvd",
+          "shortText": "Airport Blvd",
+          "types": [
+            "route"
+          ],
+          "languageCode": "en-US"
+        },
+        {
+          "longText": "Austin",
+          "shortText": "Austin",
+          "types": [
+            "locality",
+            "political"
+          ],
+          "languageCode": "en"
+        },
+        {
+          "longText": "Texas",
+          "shortText": "TX",
+          "types": [
+            "administrative_area_level_1",
+            "political"
+          ],
+          "languageCode": "en"
+        },
+        {
+          "longText": "United States",
+          "shortText": "US",
+          "types": [
+            "country",
+            "political"
+          ],
+          "languageCode": "en"
+        },
+        {
+          "longText": "78701",
+          "shortText": "78701",
+          "types": [
+            "postal_code"
+          ]
+        }
+      ],
+      "location": {
+        "latitude": 30.298,
+        "longitude": -97.7651
+      },
+      "businessStatus": "OPERATIONAL",
+      "displayName": {
+        "text": "Austin Plumbing Co 44",
+        "languageCode": "en"
+      },
+      "primaryType": "plumber",
+      "websiteUri": "https://plumber-44.example.test/"
+    },
+    {
+      "id": "ChIJradar0045AustinPlumb",
+      "types": [
+        "plumber",
+        "point_of_interest",
+        "establishment"
+      ],
+      "nationalPhoneNumber": "(512) 555-0045",
+      "internationalPhoneNumber": "+1 512-555-0045",
+      "formattedAddress": "145 Congress Ave, Austin, TX 78701, USA",
+      "addressComponents": [
+        {
+          "longText": "145",
+          "shortText": "145",
+          "types": [
+            "street_number"
+          ],
+          "languageCode": "en-US"
+        },
+        {
+          "longText": "Congress Ave",
+          "shortText": "Congress Ave",
+          "types": [
+            "route"
+          ],
+          "languageCode": "en-US"
+        },
+        {
+          "longText": "Austin",
+          "shortText": "Austin",
+          "types": [
+            "locality",
+            "political"
+          ],
+          "languageCode": "en"
+        },
+        {
+          "longText": "Texas",
+          "shortText": "TX",
+          "types": [
+            "administrative_area_level_1",
+            "political"
+          ],
+          "languageCode": "en"
+        },
+        {
+          "longText": "United States",
+          "shortText": "US",
+          "types": [
+            "country",
+            "political"
+          ],
+          "languageCode": "en"
+        },
+        {
+          "longText": "78701",
+          "shortText": "78701",
+          "types": [
+            "postal_code"
+          ]
+        }
+      ],
+      "location": {
+        "latitude": 30.2987,
+        "longitude": -97.7656
+      },
+      "businessStatus": "OPERATIONAL",
+      "displayName": {
+        "text": "Austin Plumbing Co 45",
+        "languageCode": "en"
+      },
+      "primaryType": "plumber",
+      "websiteUri": "https://plumber-45.example.test/"
+    },
+    {
+      "id": "ChIJradar0046AustinPlumb",
+      "types": [
+        "plumber",
+        "point_of_interest",
+        "establishment"
+      ],
+      "nationalPhoneNumber": "(512) 555-0046",
+      "internationalPhoneNumber": "+1 512-555-0046",
+      "formattedAddress": "146 Guadalupe St, Austin, TX 78701, USA",
+      "addressComponents": [
+        {
+          "longText": "146",
+          "shortText": "146",
+          "types": [
+            "street_number"
+          ],
+          "languageCode": "en-US"
+        },
+        {
+          "longText": "Guadalupe St",
+          "shortText": "Guadalupe St",
+          "types": [
+            "route"
+          ],
+          "languageCode": "en-US"
+        },
+        {
+          "longText": "Austin",
+          "shortText": "Austin",
+          "types": [
+            "locality",
+            "political"
+          ],
+          "languageCode": "en"
+        },
+        {
+          "longText": "Texas",
+          "shortText": "TX",
+          "types": [
+            "administrative_area_level_1",
+            "political"
+          ],
+          "languageCode": "en"
+        },
+        {
+          "longText": "United States",
+          "shortText": "US",
+          "types": [
+            "country",
+            "political"
+          ],
+          "languageCode": "en"
+        },
+        {
+          "longText": "78701",
+          "shortText": "78701",
+          "types": [
+            "postal_code"
+          ]
+        }
+      ],
+      "location": {
+        "latitude": 30.2994,
+        "longitude": -97.7661
+      },
+      "businessStatus": "OPERATIONAL",
+      "displayName": {
+        "text": "Austin Plumbing Co 46",
+        "languageCode": "en"
+      },
+      "primaryType": "plumber",
+      "websiteUri": "https://plumber-46.example.test/"
+    },
+    {
+      "id": "ChIJradar0047AustinPlumb",
+      "types": [
+        "plumber",
+        "point_of_interest",
+        "establishment"
+      ],
+      "nationalPhoneNumber": "(512) 555-0047",
+      "internationalPhoneNumber": "+1 512-555-0047",
+      "formattedAddress": "147 Lamar Blvd, Austin, TX 78701, USA",
+      "addressComponents": [
+        {
+          "longText": "147",
+          "shortText": "147",
+          "types": [
+            "street_number"
+          ],
+          "languageCode": "en-US"
+        },
+        {
+          "longText": "Lamar Blvd",
+          "shortText": "Lamar Blvd",
+          "types": [
+            "route"
+          ],
+          "languageCode": "en-US"
+        },
+        {
+          "longText": "Austin",
+          "shortText": "Austin",
+          "types": [
+            "locality",
+            "political"
+          ],
+          "languageCode": "en"
+        },
+        {
+          "longText": "Texas",
+          "shortText": "TX",
+          "types": [
+            "administrative_area_level_1",
+            "political"
+          ],
+          "languageCode": "en"
+        },
+        {
+          "longText": "United States",
+          "shortText": "US",
+          "types": [
+            "country",
+            "political"
+          ],
+          "languageCode": "en"
+        },
+        {
+          "longText": "78701",
+          "shortText": "78701",
+          "types": [
+            "postal_code"
+          ]
+        }
+      ],
+      "location": {
+        "latitude": 30.3001,
+        "longitude": -97.7666
+      },
+      "businessStatus": "OPERATIONAL",
+      "displayName": {
+        "text": "Austin Plumbing Co 47",
+        "languageCode": "en"
+      },
+      "primaryType": "plumber",
+      "websiteUri": "https://plumber-47.example.test/"
+    },
+    {
+      "id": "ChIJradar0048AustinPlumb",
+      "types": [
+        "plumber",
+        "point_of_interest",
+        "establishment"
+      ],
+      "nationalPhoneNumber": "(512) 555-0048",
+      "internationalPhoneNumber": "+1 512-555-0048",
+      "formattedAddress": "148 Burnet Rd, Austin, TX 78701, USA",
+      "addressComponents": [
+        {
+          "longText": "148",
+          "shortText": "148",
+          "types": [
+            "street_number"
+          ],
+          "languageCode": "en-US"
+        },
+        {
+          "longText": "Burnet Rd",
+          "shortText": "Burnet Rd",
+          "types": [
+            "route"
+          ],
+          "languageCode": "en-US"
+        },
+        {
+          "longText": "Austin",
+          "shortText": "Austin",
+          "types": [
+            "locality",
+            "political"
+          ],
+          "languageCode": "en"
+        },
+        {
+          "longText": "Texas",
+          "shortText": "TX",
+          "types": [
+            "administrative_area_level_1",
+            "political"
+          ],
+          "languageCode": "en"
+        },
+        {
+          "longText": "United States",
+          "shortText": "US",
+          "types": [
+            "country",
+            "political"
+          ],
+          "languageCode": "en"
+        },
+        {
+          "longText": "78701",
+          "shortText": "78701",
+          "types": [
+            "postal_code"
+          ]
+        }
+      ],
+      "location": {
+        "latitude": 30.3008,
+        "longitude": -97.7671
+      },
+      "businessStatus": "OPERATIONAL",
+      "displayName": {
+        "text": "Austin Plumbing Co 48",
+        "languageCode": "en"
+      },
+      "primaryType": "plumber",
+      "websiteUri": "https://plumber-48.example.test/"
+    },
+    {
+      "id": "ChIJradar0049AustinPlumb",
+      "types": [
+        "plumber",
+        "point_of_interest",
+        "establishment"
+      ],
+      "nationalPhoneNumber": "(512) 555-0049",
+      "internationalPhoneNumber": "+1 512-555-0049",
+      "formattedAddress": "149 Airport Blvd, Austin, TX 78701, USA",
+      "addressComponents": [
+        {
+          "longText": "149",
+          "shortText": "149",
+          "types": [
+            "street_number"
+          ],
+          "languageCode": "en-US"
+        },
+        {
+          "longText": "Airport Blvd",
+          "shortText": "Airport Blvd",
+          "types": [
+            "route"
+          ],
+          "languageCode": "en-US"
+        },
+        {
+          "longText": "Austin",
+          "shortText": "Austin",
+          "types": [
+            "locality",
+            "political"
+          ],
+          "languageCode": "en"
+        },
+        {
+          "longText": "Texas",
+          "shortText": "TX",
+          "types": [
+            "administrative_area_level_1",
+            "political"
+          ],
+          "languageCode": "en"
+        },
+        {
+          "longText": "United States",
+          "shortText": "US",
+          "types": [
+            "country",
+            "political"
+          ],
+          "languageCode": "en"
+        },
+        {
+          "longText": "78701",
+          "shortText": "78701",
+          "types": [
+            "postal_code"
+          ]
+        }
+      ],
+      "location": {
+        "latitude": 30.3015,
+        "longitude": -97.7676
+      },
+      "businessStatus": "OPERATIONAL",
+      "displayName": {
+        "text": "Austin Plumbing Co 49",
+        "languageCode": "en"
+      },
+      "primaryType": "plumber",
+      "websiteUri": "https://plumber-49.example.test/"
+    },
+    {
+      "id": "ChIJradar0050AustinPlumb",
+      "types": [
+        "plumber",
+        "point_of_interest",
+        "establishment"
+      ],
+      "nationalPhoneNumber": "(512) 555-0050",
+      "internationalPhoneNumber": "+1 512-555-0050",
+      "formattedAddress": "150 Congress Ave, Austin, TX 78701, USA",
+      "addressComponents": [
+        {
+          "longText": "150",
+          "shortText": "150",
+          "types": [
+            "street_number"
+          ],
+          "languageCode": "en-US"
+        },
+        {
+          "longText": "Congress Ave",
+          "shortText": "Congress Ave",
+          "types": [
+            "route"
+          ],
+          "languageCode": "en-US"
+        },
+        {
+          "longText": "Austin",
+          "shortText": "Austin",
+          "types": [
+            "locality",
+            "political"
+          ],
+          "languageCode": "en"
+        },
+        {
+          "longText": "Texas",
+          "shortText": "TX",
+          "types": [
+            "administrative_area_level_1",
+            "political"
+          ],
+          "languageCode": "en"
+        },
+        {
+          "longText": "United States",
+          "shortText": "US",
+          "types": [
+            "country",
+            "political"
+          ],
+          "languageCode": "en"
+        },
+        {
+          "longText": "78701",
+          "shortText": "78701",
+          "types": [
+            "postal_code"
+          ]
+        }
+      ],
+      "location": {
+        "latitude": 30.3022,
+        "longitude": -97.7681
+      },
+      "businessStatus": "OPERATIONAL",
+      "displayName": {
+        "text": "Austin Plumbing Co 50",
+        "languageCode": "en"
+      },
+      "primaryType": "plumber",
+      "websiteUri": "https://plumber-50.example.test/"
+    },
+    {
+      "id": "ChIJradar0051AustinPlumb",
+      "types": [
+        "plumber",
+        "point_of_interest",
+        "establishment"
+      ],
+      "nationalPhoneNumber": "(512) 555-0051",
+      "internationalPhoneNumber": "+1 512-555-0051",
+      "formattedAddress": "151 Guadalupe St, Austin, TX 78701, USA",
+      "addressComponents": [
+        {
+          "longText": "151",
+          "shortText": "151",
+          "types": [
+            "street_number"
+          ],
+          "languageCode": "en-US"
+        },
+        {
+          "longText": "Guadalupe St",
+          "shortText": "Guadalupe St",
+          "types": [
+            "route"
+          ],
+          "languageCode": "en-US"
+        },
+        {
+          "longText": "Austin",
+          "shortText": "Austin",
+          "types": [
+            "locality",
+            "political"
+          ],
+          "languageCode": "en"
+        },
+        {
+          "longText": "Texas",
+          "shortText": "TX",
+          "types": [
+            "administrative_area_level_1",
+            "political"
+          ],
+          "languageCode": "en"
+        },
+        {
+          "longText": "United States",
+          "shortText": "US",
+          "types": [
+            "country",
+            "political"
+          ],
+          "languageCode": "en"
+        },
+        {
+          "longText": "78701",
+          "shortText": "78701",
+          "types": [
+            "postal_code"
+          ]
+        }
+      ],
+      "location": {
+        "latitude": 30.3029,
+        "longitude": -97.7686
+      },
+      "businessStatus": "OPERATIONAL",
+      "displayName": {
+        "text": "Austin Plumbing Co 51",
+        "languageCode": "en"
+      },
+      "primaryType": "plumber",
+      "websiteUri": "https://plumber-51.example.test/"
+    },
+    {
+      "id": "ChIJradar0052AustinPlumb",
+      "types": [
+        "plumber",
+        "point_of_interest",
+        "establishment"
+      ],
+      "nationalPhoneNumber": "(512) 555-0052",
+      "internationalPhoneNumber": "+1 512-555-0052",
+      "formattedAddress": "152 Lamar Blvd, Austin, TX 78701, USA",
+      "addressComponents": [
+        {
+          "longText": "152",
+          "shortText": "152",
+          "types": [
+            "street_number"
+          ],
+          "languageCode": "en-US"
+        },
+        {
+          "longText": "Lamar Blvd",
+          "shortText": "Lamar Blvd",
+          "types": [
+            "route"
+          ],
+          "languageCode": "en-US"
+        },
+        {
+          "longText": "Austin",
+          "shortText": "Austin",
+          "types": [
+            "locality",
+            "political"
+          ],
+          "languageCode": "en"
+        },
+        {
+          "longText": "Texas",
+          "shortText": "TX",
+          "types": [
+            "administrative_area_level_1",
+            "political"
+          ],
+          "languageCode": "en"
+        },
+        {
+          "longText": "United States",
+          "shortText": "US",
+          "types": [
+            "country",
+            "political"
+          ],
+          "languageCode": "en"
+        },
+        {
+          "longText": "78701",
+          "shortText": "78701",
+          "types": [
+            "postal_code"
+          ]
+        }
+      ],
+      "location": {
+        "latitude": 30.3036,
+        "longitude": -97.7691
+      },
+      "businessStatus": "OPERATIONAL",
+      "displayName": {
+        "text": "Austin Plumbing Co 52",
+        "languageCode": "en"
+      },
+      "primaryType": "plumber",
+      "websiteUri": "https://plumber-52.example.test/"
+    },
+    {
+      "id": "ChIJradar0053AustinPlumb",
+      "types": [
+        "plumber",
+        "point_of_interest",
+        "establishment"
+      ],
+      "nationalPhoneNumber": "(512) 555-0053",
+      "internationalPhoneNumber": "+1 512-555-0053",
+      "formattedAddress": "153 Burnet Rd, Austin, TX 78701, USA",
+      "addressComponents": [
+        {
+          "longText": "153",
+          "shortText": "153",
+          "types": [
+            "street_number"
+          ],
+          "languageCode": "en-US"
+        },
+        {
+          "longText": "Burnet Rd",
+          "shortText": "Burnet Rd",
+          "types": [
+            "route"
+          ],
+          "languageCode": "en-US"
+        },
+        {
+          "longText": "Austin",
+          "shortText": "Austin",
+          "types": [
+            "locality",
+            "political"
+          ],
+          "languageCode": "en"
+        },
+        {
+          "longText": "Texas",
+          "shortText": "TX",
+          "types": [
+            "administrative_area_level_1",
+            "political"
+          ],
+          "languageCode": "en"
+        },
+        {
+          "longText": "United States",
+          "shortText": "US",
+          "types": [
+            "country",
+            "political"
+          ],
+          "languageCode": "en"
+        },
+        {
+          "longText": "78701",
+          "shortText": "78701",
+          "types": [
+            "postal_code"
+          ]
+        }
+      ],
+      "location": {
+        "latitude": 30.3043,
+        "longitude": -97.7696
+      },
+      "businessStatus": "OPERATIONAL",
+      "displayName": {
+        "text": "Austin Plumbing Co 53",
+        "languageCode": "en"
+      },
+      "primaryType": "plumber",
+      "websiteUri": "https://plumber-53.example.test/"
+    },
+    {
+      "id": "ChIJradar0054AustinPlumb",
+      "types": [
+        "plumber",
+        "point_of_interest",
+        "establishment"
+      ],
+      "nationalPhoneNumber": "(512) 555-0054",
+      "internationalPhoneNumber": "+1 512-555-0054",
+      "formattedAddress": "154 Airport Blvd, Austin, TX 78701, USA",
+      "addressComponents": [
+        {
+          "longText": "154",
+          "shortText": "154",
+          "types": [
+            "street_number"
+          ],
+          "languageCode": "en-US"
+        },
+        {
+          "longText": "Airport Blvd",
+          "shortText": "Airport Blvd",
+          "types": [
+            "route"
+          ],
+          "languageCode": "en-US"
+        },
+        {
+          "longText": "Austin",
+          "shortText": "Austin",
+          "types": [
+            "locality",
+            "political"
+          ],
+          "languageCode": "en"
+        },
+        {
+          "longText": "Texas",
+          "shortText": "TX",
+          "types": [
+            "administrative_area_level_1",
+            "political"
+          ],
+          "languageCode": "en"
+        },
+        {
+          "longText": "United States",
+          "shortText": "US",
+          "types": [
+            "country",
+            "political"
+          ],
+          "languageCode": "en"
+        },
+        {
+          "longText": "78701",
+          "shortText": "78701",
+          "types": [
+            "postal_code"
+          ]
+        }
+      ],
+      "location": {
+        "latitude": 30.305,
+        "longitude": -97.7701
+      },
+      "businessStatus": "OPERATIONAL",
+      "displayName": {
+        "text": "Austin Plumbing Co 54",
+        "languageCode": "en"
+      },
+      "primaryType": "plumber",
+      "websiteUri": "https://plumber-54.example.test/"
+    },
+    {
+      "id": "ChIJradar0055AustinPlumb",
+      "types": [
+        "plumber",
+        "point_of_interest",
+        "establishment"
+      ],
+      "nationalPhoneNumber": "(512) 555-0055",
+      "internationalPhoneNumber": "+1 512-555-0055",
+      "formattedAddress": "155 Congress Ave, Austin, TX 78701, USA",
+      "addressComponents": [
+        {
+          "longText": "155",
+          "shortText": "155",
+          "types": [
+            "street_number"
+          ],
+          "languageCode": "en-US"
+        },
+        {
+          "longText": "Congress Ave",
+          "shortText": "Congress Ave",
+          "types": [
+            "route"
+          ],
+          "languageCode": "en-US"
+        },
+        {
+          "longText": "Austin",
+          "shortText": "Austin",
+          "types": [
+            "locality",
+            "political"
+          ],
+          "languageCode": "en"
+        },
+        {
+          "longText": "Texas",
+          "shortText": "TX",
+          "types": [
+            "administrative_area_level_1",
+            "political"
+          ],
+          "languageCode": "en"
+        },
+        {
+          "longText": "United States",
+          "shortText": "US",
+          "types": [
+            "country",
+            "political"
+          ],
+          "languageCode": "en"
+        },
+        {
+          "longText": "78701",
+          "shortText": "78701",
+          "types": [
+            "postal_code"
+          ]
+        }
+      ],
+      "location": {
+        "latitude": 30.3057,
+        "longitude": -97.7706
+      },
+      "businessStatus": "OPERATIONAL",
+      "displayName": {
+        "text": "Austin Plumbing Co 55",
+        "languageCode": "en"
+      },
+      "primaryType": "plumber",
+      "websiteUri": "https://plumber-55.example.test/"
+    },
+    {
+      "id": "ChIJradar0056AustinPlumb",
+      "types": [
+        "plumber",
+        "point_of_interest",
+        "establishment"
+      ],
+      "nationalPhoneNumber": "(512) 555-0056",
+      "internationalPhoneNumber": "+1 512-555-0056",
+      "formattedAddress": "156 Guadalupe St, Austin, TX 78701, USA",
+      "addressComponents": [
+        {
+          "longText": "156",
+          "shortText": "156",
+          "types": [
+            "street_number"
+          ],
+          "languageCode": "en-US"
+        },
+        {
+          "longText": "Guadalupe St",
+          "shortText": "Guadalupe St",
+          "types": [
+            "route"
+          ],
+          "languageCode": "en-US"
+        },
+        {
+          "longText": "Austin",
+          "shortText": "Austin",
+          "types": [
+            "locality",
+            "political"
+          ],
+          "languageCode": "en"
+        },
+        {
+          "longText": "Texas",
+          "shortText": "TX",
+          "types": [
+            "administrative_area_level_1",
+            "political"
+          ],
+          "languageCode": "en"
+        },
+        {
+          "longText": "United States",
+          "shortText": "US",
+          "types": [
+            "country",
+            "political"
+          ],
+          "languageCode": "en"
+        },
+        {
+          "longText": "78701",
+          "shortText": "78701",
+          "types": [
+            "postal_code"
+          ]
+        }
+      ],
+      "location": {
+        "latitude": 30.3064,
+        "longitude": -97.7711
+      },
+      "businessStatus": "OPERATIONAL",
+      "displayName": {
+        "text": "Austin Plumbing Co 56",
+        "languageCode": "en"
+      },
+      "primaryType": "plumber",
+      "websiteUri": "https://plumber-56.example.test/"
+    },
+    {
+      "id": "ChIJradar0057AustinPlumb",
+      "types": [
+        "plumber",
+        "point_of_interest",
+        "establishment"
+      ],
+      "nationalPhoneNumber": "(512) 555-0057",
+      "internationalPhoneNumber": "+1 512-555-0057",
+      "formattedAddress": "157 Lamar Blvd, Austin, TX 78701, USA",
+      "addressComponents": [
+        {
+          "longText": "157",
+          "shortText": "157",
+          "types": [
+            "street_number"
+          ],
+          "languageCode": "en-US"
+        },
+        {
+          "longText": "Lamar Blvd",
+          "shortText": "Lamar Blvd",
+          "types": [
+            "route"
+          ],
+          "languageCode": "en-US"
+        },
+        {
+          "longText": "Austin",
+          "shortText": "Austin",
+          "types": [
+            "locality",
+            "political"
+          ],
+          "languageCode": "en"
+        },
+        {
+          "longText": "Texas",
+          "shortText": "TX",
+          "types": [
+            "administrative_area_level_1",
+            "political"
+          ],
+          "languageCode": "en"
+        },
+        {
+          "longText": "United States",
+          "shortText": "US",
+          "types": [
+            "country",
+            "political"
+          ],
+          "languageCode": "en"
+        },
+        {
+          "longText": "78701",
+          "shortText": "78701",
+          "types": [
+            "postal_code"
+          ]
+        }
+      ],
+      "location": {
+        "latitude": 30.3071,
+        "longitude": -97.7716
+      },
+      "businessStatus": "OPERATIONAL",
+      "displayName": {
+        "text": "Austin Plumbing Co 57",
+        "languageCode": "en"
+      },
+      "primaryType": "plumber",
+      "websiteUri": "https://plumber-57.example.test/"
+    },
+    {
+      "id": "ChIJradar0058AustinPlumb",
+      "types": [
+        "plumber",
+        "point_of_interest",
+        "establishment"
+      ],
+      "nationalPhoneNumber": "(512) 555-0058",
+      "internationalPhoneNumber": "+1 512-555-0058",
+      "formattedAddress": "158 Burnet Rd, Austin, TX 78701, USA",
+      "addressComponents": [
+        {
+          "longText": "158",
+          "shortText": "158",
+          "types": [
+            "street_number"
+          ],
+          "languageCode": "en-US"
+        },
+        {
+          "longText": "Burnet Rd",
+          "shortText": "Burnet Rd",
+          "types": [
+            "route"
+          ],
+          "languageCode": "en-US"
+        },
+        {
+          "longText": "Austin",
+          "shortText": "Austin",
+          "types": [
+            "locality",
+            "political"
+          ],
+          "languageCode": "en"
+        },
+        {
+          "longText": "Texas",
+          "shortText": "TX",
+          "types": [
+            "administrative_area_level_1",
+            "political"
+          ],
+          "languageCode": "en"
+        },
+        {
+          "longText": "United States",
+          "shortText": "US",
+          "types": [
+            "country",
+            "political"
+          ],
+          "languageCode": "en"
+        },
+        {
+          "longText": "78701",
+          "shortText": "78701",
+          "types": [
+            "postal_code"
+          ]
+        }
+      ],
+      "location": {
+        "latitude": 30.3078,
+        "longitude": -97.7721
+      },
+      "businessStatus": "OPERATIONAL",
+      "displayName": {
+        "text": "Austin Plumbing Co 58",
+        "languageCode": "en"
+      },
+      "primaryType": "plumber",
+      "websiteUri": "https://plumber-58.example.test/"
+    },
+    {
+      "id": "ChIJradar0059MinimalPlace"
+    }
+  ]
+}

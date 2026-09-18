@@ -12,7 +12,7 @@ from app.core.config import get_settings
 from app.modules.audit.models import AuditLog
 from app.modules.auth.models import User
 from app.modules.jobs.models import JobRun, JobRunStatus
-from app.modules.jobs.service import DEMO_JOB_KIND, enqueue_run
+from app.modules.jobs.service import DEMO_JOB_KIND, DISCOVERY_JOB_KIND, enqueue_run
 from app.workers import tasks
 from tests.conftest import auth_headers, geo_payload
 
@@ -72,12 +72,9 @@ def test_a_run_goes_queued_then_running_then_done(
     client: TestClient, db: Session, sales_user: User
 ) -> None:
     headers = auth_headers(client, sales_user)
-    job_id = make_search_job(client, sales_user)
-
-    started = client.post(f"/api/v1/search-jobs/{job_id}/run", headers=headers)
-    assert started.status_code == 202
-    run_id = started.json()["id"]
-    assert started.json()["status"] == JobRunStatus.queued.value
+    run = enqueue_run(db, search_job_id=None, kind=DEMO_JOB_KIND, actor_id=sales_user.id)
+    run_id = str(run.id)
+    assert run.status is JobRunStatus.queued
 
     assert tasks.execute_job_run(run_id) is JobRunStatus.done
 
@@ -153,8 +150,7 @@ def test_cancelling_stops_a_running_demo_job_before_it_finishes(
 ) -> None:
     """The cancel request arrives over the API while the demo job is mid-flight."""
     headers = auth_headers(client, sales_user)
-    job_id = make_search_job(client, sales_user)
-    run_id = client.post(f"/api/v1/search-jobs/{job_id}/run", headers=headers).json()["id"]
+    run_id = str(enqueue_run(db, search_job_id=None, kind=DEMO_JOB_KIND, actor_id=sales_user.id).id)
 
     cancel_at_step = 2
 
@@ -248,14 +244,14 @@ def test_the_run_is_placed_on_the_queue(client: TestClient, db: Session, sales_u
     assert run_id in queued
 
 
-def test_the_default_run_kind_is_the_demo_job(
+def test_the_default_run_kind_is_discovery(
     client: TestClient, db: Session, sales_user: User
 ) -> None:
     job_id = make_search_job(client, sales_user)
     body = client.post(
         f"/api/v1/search-jobs/{job_id}/run", headers=auth_headers(client, sales_user)
     ).json()
-    assert body["kind"] == DEMO_JOB_KIND
+    assert body["kind"] == DISCOVERY_JOB_KIND
 
 
 def test_a_run_with_no_registered_handler_ends_failed(

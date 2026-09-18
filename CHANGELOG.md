@@ -3,6 +3,61 @@
 All notable changes, one section per merged spec. Newest first.
 Format: `## [vX.Y.Z] - YYYY-MM-DD` followed by Added / Changed / Fixed.
 
+## [v0.2.0] - 2026-09-19
+
+### Added
+
+- **Source adapter contract.** `SourceAdapter` (`discover`, `fetch`, `validate`,
+  `normalize`, `emit_events`, `get_rate_limit`, `get_source_metadata`) with a registry
+  keyed by `sources.name`, and a typed error hierarchy that says whether retrying could
+  help — `TransientError` and `RateLimitedError` can, `AuthError`, `SchemaError` and
+  `QuotaExceededError` cannot, so those fail a run on its first attempt.
+- **Shared outbound HTTP client** (`app/core/http.py`): 5 s connect / 20 s read timeouts,
+  three attempts with exponential backoff and jitter, `Retry-After` honoured up to 60 s,
+  one retry on an unparseable 2xx body, secret redaction, and a metering hook that
+  records every attempt whether it succeeded or not.
+- **Rate limiting and a cost guard** (`app/core/ratelimit.py`): a Redis token bucket per
+  source plus a per-UTC-day call cap, both shared by every api and worker process.
+- **Google Places adapter.** Text Search (New) only, with a configurable field mask,
+  pagination to a per-job cap and both geo shapes (`city` + `state`, or a circular
+  location bias). No Place Details call: Text Search already returns the whole mask.
+- **Discovery storage.** `discovered_records` (unique per source and source record, with
+  `source_url`, `payload_hash`, first/last discovery and `content_expires_at`),
+  `record_sightings` (which run saw what, and where it ranked) and `api_calls` (one row
+  per attempt, for cost tracking). Re-discovering a place updates it and adds a sighting
+  rather than creating a second row.
+- **The `discovery` job.** `POST /search-jobs/{id}/run` now runs real discovery, reports
+  `{fetched, stored_new, updated, invalid, api_calls}` in the new `job_runs.result_summary`
+  and stops at the next record when cancelled, keeping everything already stored.
+- **Endpoints.** `GET /sources`, `PATCH /sources/{id}` (admin and tech_admin),
+  `GET /search-jobs/{id}/runs`, `GET /jobs/{id}/records` and `GET /discovered-records/{id}`
+  (admin, reviewer and tech_admin). Creating or updating a search job that names an
+  unknown or disabled source is rejected with a 422.
+- **Retention.** Stored Places content expires after `PLACES_CONTENT_TTL_DAYS`;
+  `make purge-expired` nulls the payload and keeps the place ID, which the Maps Platform
+  terms allow to be cached indefinitely.
+- **Commands.** `make sync-sources` (now part of `make migrate`), `make purge-expired`
+  and `make places-smoke` — the last being the only thing in the repository that calls a
+  live API, and only when a human runs it.
+- **Tests.** Recorded Places fixtures and 144 new tests covering the failure table, the
+  token bucket and cap, pagination and caps, provenance, re-discovery, cancellation,
+  purging and RBAC. An autouse respx router now fails any test that would really reach
+  the network.
+
+### Changed
+
+- Migration `0002_discovery` adds the three tables and `job_runs.result_summary`.
+- The default kind for a run started over the API is now `discovery`; the demo handler
+  from v0.1.0 remains only as the job framework's reference handler in tests.
+- The Places API key is scrubbed from log output alongside the other secrets.
+
+### Fixed
+
+- `raw_payload` is declared `none_as_null`, and `purge-expired` writes SQL `NULL`.
+  SQLAlchemy stores a Python `None` in a JSON column as the JSON scalar `null`, which
+  reads back as `None` but is not SQL `NULL`, so a purged record would otherwise have
+  been re-reported as expired on every subsequent run.
+
 ## [v0.1.0] - 2026-09-19
 
 ### Added
