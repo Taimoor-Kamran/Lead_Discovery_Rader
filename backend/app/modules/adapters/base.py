@@ -56,6 +56,19 @@ class RawDoc:
 
 
 @dataclass(frozen=True)
+class AddressPart:
+    """One structured piece of an address, in the shape Places returns them.
+
+    Source-agnostic on purpose: a future adapter fills the same three fields, and
+    normalization never learns which provider it is reading.
+    """
+
+    long_text: str | None = None
+    short_text: str | None = None
+    types: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class Candidate:
     """A light mapping of a RawDoc. Every field is optional and is never guessed."""
 
@@ -65,6 +78,8 @@ class Candidate:
     website: str | None = None
     business_status: str | None = None
     types: list[str] | None = None
+    primary_type: str | None = None
+    address_components: list[AddressPart] | None = None
     lat: float | None = None
     lng: float | None = None
 
