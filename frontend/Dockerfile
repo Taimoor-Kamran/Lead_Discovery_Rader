@@ -15,9 +15,12 @@ RUN pnpm run build
 
 FROM node:24-bookworm-slim AS runner
 WORKDIR /app
+# HOSTNAME: Next's standalone server binds to it, and Docker otherwise sets it to the
+# container id, which leaves the server unreachable on 127.0.0.1 from its own health check.
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
-    PORT=3000
+    PORT=3000 \
+    HOSTNAME=0.0.0.0
 RUN useradd --create-home --uid 10001 radar
 COPY --from=builder --chown=radar:radar /app/.next/standalone ./
 COPY --from=builder --chown=radar:radar /app/.next/static ./.next/static
