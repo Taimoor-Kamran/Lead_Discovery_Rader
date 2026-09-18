@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app import models_registry  # noqa: F401
 from app.core.config import get_settings
 from app.core.errors import AppError, ErrorBody, ErrorEnvelope
 from app.core.health import health_router

@@ -2,6 +2,7 @@
 
 from rq import Worker
 
+from app import models_registry  # noqa: F401
 from app.core.config import get_settings
 from app.core.logging import configure_logging, get_logger
 from app.core.redis import get_redis

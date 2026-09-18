@@ -4,6 +4,7 @@ import os
 import secrets
 import sys
 
+from app import models_registry  # noqa: F401
 from app.core.db import session_scope
 from app.core.logging import configure_logging, get_logger
 from app.modules.auth.service import ensure_admin

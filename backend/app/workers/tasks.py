@@ -7,6 +7,9 @@ from typing import Protocol
 
 from sqlalchemy.orm import Session
 
+# Import the registry, not single models: the worker process only ever imports this
+# module, and SQLAlchemy needs every table present to resolve foreign keys.
+from app import models_registry  # noqa: F401
 from app.core.config import get_settings
 from app.core.db import session_scope
 from app.core.logging import get_logger
@@ -96,10 +99,11 @@ def execute_job_run(
 
             transition(session, run, JobRunStatus.running)
             attempt = run.attempts
-            handler = get_handler(run.kind)
 
             try:
-                handler(session, run)
+                # Looked up inside the try so an unknown kind fails the run through the
+                # normal path instead of leaving it stuck as `running`.
+                get_handler(run.kind)(session, run)
             except JobCancelledError as exc:
                 transition(session, run, JobRunStatus.cancelled, error=str(exc))
                 logger.info("job run cancelled", extra={"job_run_id": str(run.id)})

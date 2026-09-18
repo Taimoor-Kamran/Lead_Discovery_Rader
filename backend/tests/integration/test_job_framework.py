@@ -256,3 +256,17 @@ def test_the_default_run_kind_is_the_demo_job(
         f"/api/v1/search-jobs/{job_id}/run", headers=auth_headers(client, sales_user)
     ).json()
     assert body["kind"] == DEMO_JOB_KIND
+
+
+def test_a_run_with_no_registered_handler_ends_failed(
+    db: Session, sales_user: User, sleeper: RecordingSleeper
+) -> None:
+    run = enqueue_run(db, search_job_id=None, kind="no-such-kind", actor_id=sales_user.id)
+
+    assert tasks.execute_job_run(run.id, sleeper=sleeper) is JobRunStatus.failed
+
+    db.expire_all()
+    stored = db.get(JobRun, run.id)
+    assert stored is not None
+    assert stored.error is not None
+    assert "no-such-kind" in stored.error
