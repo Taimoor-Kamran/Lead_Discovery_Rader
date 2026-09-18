@@ -80,20 +80,29 @@ def decide(
         return Decision(kind=DecisionKind.new)
 
     best = scored[0]
-    if best.match.score < limits.review:
+    if best.match.score >= limits.auto_merge and best.match.has_strong_key:
+        return Decision(kind=DecisionKind.auto_merge, best=best, candidates=(best,))
+
+    reviewable = [item for item in scored if _is_reviewable(item, limits)]
+    if not reviewable:
         return Decision(kind=DecisionKind.new)
 
-    if best.match.score >= limits.auto_merge:
-        if best.match.has_strong_key:
-            return Decision(kind=DecisionKind.auto_merge, best=best, candidates=(best,))
-        # A name is never enough on its own, however similar it is.
-        return Decision(
-            kind=DecisionKind.review,
-            best=best,
-            candidates=tuple(scored[:REVIEW_CANDIDATE_LIMIT]),
-            capped_by_hard_rule=True,
-        )
-
     return Decision(
-        kind=DecisionKind.review, best=best, candidates=tuple(scored[:REVIEW_CANDIDATE_LIMIT])
+        kind=DecisionKind.review,
+        best=reviewable[0],
+        candidates=tuple(reviewable[:REVIEW_CANDIDATE_LIMIT]),
+        # True when the score alone would have merged and only a hard rule stopped it.
+        capped_by_hard_rule=best.match.score >= limits.auto_merge,
     )
+
+
+def _is_reviewable(candidate: ScoredCandidate, limits: Thresholds) -> bool:
+    """Whether a pair is worth a human's time even if the weighted score is low.
+
+    A shared domain or a shared phone always is. Two locations of one chain share a
+    domain and nothing else, which scores below the review threshold — and quietly
+    creating a second business for them is exactly the mistake this gate exists to stop.
+    """
+    if candidate.match.score >= limits.review:
+        return True
+    return candidate.match.signals.domain_match == 1.0 or candidate.match.signals.phone_match == 1.0
