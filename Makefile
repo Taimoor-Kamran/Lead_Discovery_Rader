@@ -10,6 +10,7 @@ PNPM := cd $(FRONTEND) && pnpm
 
 .DEFAULT_GOAL := help
 .PHONY: help env install up down logs ps migrate revision seed-admin \
+        sync-sources purge-expired places-smoke \
         lint format typecheck test test-unit check check-backend check-frontend \
         frontend-install frontend-lint frontend-typecheck frontend-test clean
 
@@ -39,14 +40,25 @@ logs: ## Follow the logs of every service
 ps: ## Show the state of every service
 	$(COMPOSE) ps
 
-migrate: env ## Apply all migrations inside the api container
+migrate: env ## Apply all migrations, then register the source adapters
 	$(COMPOSE) run --rm api alembic upgrade head
+	$(MAKE) sync-sources
 
 revision: env ## Autogenerate a migration: make revision M="add businesses"
 	$(COMPOSE) run --rm api alembic revision --autogenerate -m "$(M)"
 
 seed-admin: env ## Create or promote the bootstrap admin from ADMIN_EMAIL / ADMIN_PASSWORD
 	$(COMPOSE) run --rm api python -m app.cli seed-admin
+
+sync-sources: env ## Upsert one `sources` row per registered adapter (idempotent)
+	$(COMPOSE) run --rm api python -m app.cli sync-sources
+
+purge-expired: env ## Drop stored source content past its retention window (keeps IDs)
+	$(COMPOSE) run --rm api python -m app.cli purge-expired
+
+# Costs real money and needs GOOGLE_PLACES_API_KEY. Set a budget alert first.
+places-smoke: env ## One live Google Places call: make places-smoke ARGS="--industry plumber --city Austin --state TX"
+	$(COMPOSE) run --rm api python -m app.cli places-smoke $(or $(ARGS),--industry plumber --city Austin --state TX --max 5)
 
 lint: ## Lint and format-check the backend
 	$(UV) run ruff check .

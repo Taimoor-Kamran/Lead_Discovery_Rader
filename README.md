@@ -47,6 +47,72 @@ Rules: one active spec at a time, specs merge in version order, `main` only ever
 
 Total ≈ 27–37 working days (6–8 weeks) of build; 8–10 weeks to a signed-off v1.0.0.
 
+## Running your first real search
+
+Everything below needs a Google key, so it is a human job. Nothing in the test suite
+touches a live API — the tests run entirely on recorded responses.
+
+**1. Get a key, and put a ceiling on it.**
+
+- In Google Cloud, pick (or create) a project and **enable billing** on it.
+- Enable **Places API (New)**.
+- Create an API key and **restrict it to Places API (New)** only.
+- In Billing → Budgets & alerts, set a **budget alert** (e.g. $20/month) *before* the
+  first live call. Discovery is metered, capped and rate limited, but a budget alert is
+  the only thing that catches a mistake nobody predicted.
+- Check the current [Places pricing](https://developers.google.com/maps/documentation/places/web-service/usage-and-billing):
+  the default `PLACES_FIELD_MASK` asks for phone, website and address components, which
+  fall into the **Enterprise** SKU. Trim the mask if you want the cheaper Pro tier.
+- Check the current [Maps Platform terms](https://cloud.google.com/maps-platform/terms)
+  for how long Places content may be stored, and set `PLACES_CONTENT_TTL_DAYS` to match
+  (default 30). Place IDs may be kept indefinitely.
+
+**2. Configure and start.**
+
+```bash
+cp .env.example .env         # then set GOOGLE_PLACES_API_KEY, JWT_SECRET and ADMIN_EMAIL
+make up
+make migrate                 # applies migrations, then registers the adapters as sources
+make seed-admin
+```
+
+`.env` is never committed, and the key never reaches a log line, an `api_calls` row, a job
+error or a stored payload — there is a test that proves it with a sentinel key.
+
+**3. Smoke-test the key** (one live call, prints a table, stores nothing):
+
+```bash
+make places-smoke
+make places-smoke ARGS="--industry dentist --city Portland --state OR --max 5"
+```
+
+**4. Run a real search** at <http://localhost:8000/docs>:
+
+1. `POST /auth/login` with the admin credentials, then authorize with the access token.
+2. `GET /sources` — copy the `id` of `google_places`.
+3. `POST /search-jobs` with an industry, a geo (`city` + `state`, or `lat`/`lng`/`radius_m`)
+   and that source id. A job naming an unknown or disabled source is rejected with a 422.
+4. `POST /search-jobs/{id}/run` — note the returned run id.
+5. `GET /jobs/{run_id}/status` until it reads `done`; `result_summary` reports
+   `{fetched, stored_new, updated, invalid, api_calls}`.
+6. `GET /jobs/{run_id}/records` for what it found, and
+   `GET /discovered-records/{id}` for one record in full, payload and all.
+7. Run the job again: the record count stays the same, `last_discovered_at` moves and a
+   second sighting is added. Re-discovery never duplicates a place.
+8. Compare `api_calls` with the request count in the Google Cloud console.
+
+**Cost and retention controls**
+
+| Setting | What it does |
+|---|---|
+| `PLACES_MAX_RESULTS_PER_JOB` | Results per job. Text Search returns at most 60 (3 pages of 20) |
+| `PLACES_DAILY_CALL_CAP` | Calls per source per UTC day. Exceeding it fails the run *before* the call |
+| `PLACES_RPS` | Outbound requests per second, shared across every api and worker process |
+| `PLACES_CONTENT_TTL_DAYS` | How long a payload is kept. `make purge-expired` nulls it and keeps the place ID |
+
+Known limit: one query returns at most 60 results, so a dense city is not exhaustively
+covered. Splitting an area into tiles is out of scope for v0.2.0.
+
 ## Versioning
 
 - `v0.x.0` = one spec merged. `v0.x.y` = a fix spec on top of it (e.g. `specs/v0.3.1.md`,
