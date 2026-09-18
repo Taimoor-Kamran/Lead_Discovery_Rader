@@ -14,6 +14,7 @@ from app.modules.adapters import registry
 from app.modules.adapters.base import RawDoc
 from app.modules.adapters.google_places.adapter import GooglePlacesAdapter
 from app.modules.auth.models import User
+from app.modules.businesses.models import Business, BusinessFieldValue
 from app.modules.discovery.models import DiscoveredRecord
 from app.modules.discovery.service import add_sighting, payload_hash, purge_expired, store_raw
 from app.modules.jobs.models import JobRun, JobRunStatus, SearchJob, SearchJobStatus
@@ -118,7 +119,7 @@ def test_purge_drops_expired_content_and_keeps_the_place_id(db: Session) -> None
     db.commit()
     db.expire_all()
 
-    assert purged == 1
+    assert purged.records == 1
     expired = db.get(DiscoveredRecord, expired.id)  # type: ignore[assignment]
     fresh = db.get(DiscoveredRecord, fresh.id)  # type: ignore[assignment]
     assert expired.raw_payload is None
@@ -140,10 +141,10 @@ def test_purging_twice_does_not_report_the_same_record_again(db: Session) -> Non
     )
     db.commit()
 
-    assert purge_expired(db, now=NOW) == 1
+    assert purge_expired(db, now=NOW).records == 1
     db.commit()
 
-    assert purge_expired(db, now=NOW) == 0
+    assert purge_expired(db, now=NOW).records == 0
 
 
 def test_a_record_with_no_expiry_is_never_purged(db: Session) -> None:
@@ -151,7 +152,7 @@ def test_a_record_with_no_expiry_is_never_purged(db: Session) -> None:
     store_raw(db, source_id=source.id, raw=raw("ChIJforever"), content_ttl_days=0, now=NOW)
     db.commit()
 
-    assert purge_expired(db, now=NOW + timedelta(days=3650)) == 0
+    assert purge_expired(db, now=NOW + timedelta(days=3650)).records == 0
 
 
 def test_rediscovering_a_purged_record_brings_its_content_back(db: Session) -> None:
@@ -267,3 +268,125 @@ def test_a_second_row_for_the_same_place_is_impossible(db: Session) -> None:
         db.rollback()
     else:  # pragma: no cover - the unique constraint is missing
         raise AssertionError("the (source_id, source_record_id) unique key is not enforced")
+
+
+# --- v0.3.0: business field values expire with the record they came from --------------
+
+
+def business_from(db: Session, source: Source, place_id: str, *, now: datetime) -> object:
+    """One business built the way resolution builds one, with a known expiry."""
+    from app.modules.discovery.models import DiscoveredRecord
+    from app.modules.resolution import service as resolution
+
+    record, _ = store_raw(
+        db,
+        source_id=source.id,
+        raw=raw(
+            place_id,
+            nationalPhoneNumber="(512) 555-0142",
+            websiteUri="https://someplumber.invalid/",
+            formattedAddress="123 Main St, Austin, TX 78701, USA",
+        ),
+        content_ttl_days=30,
+        now=now,
+    )
+    resolution.resolve_record(db, record, now=now)
+    db.commit()
+    assert isinstance(record, DiscoveredRecord)
+    return db.get(Business, record.business_id)
+
+
+def test_a_field_value_expires_when_its_record_does(db: Session) -> None:
+    source = places_source(db)
+    business = business_from(db, source, "ChIJold", now=NOW - timedelta(days=40))
+    assert isinstance(business, Business)
+
+    result = purge_expired(db, now=NOW)
+    db.commit()
+    db.expire_all()
+
+    assert result.records == 1
+    assert result.field_values > 0
+    assert result.businesses_recomputed == 1
+    values = list(
+        db.scalars(select(BusinessFieldValue).where(BusinessFieldValue.business_id == business.id))
+    )
+    assert values, "the provenance rows survive; only their content goes"
+    assert all(v.value is None and v.purged_at == NOW for v in values)
+
+
+def test_survivorship_follows_the_purge(db: Session) -> None:
+    source = places_source(db)
+    business = business_from(db, source, "ChIJold", now=NOW - timedelta(days=40))
+    assert isinstance(business, Business)
+    assert business.phone_e164 == "+15125550142"
+
+    purge_expired(db, now=NOW)
+    db.commit()
+    db.expire_all()
+
+    purged = db.get(Business, business.id)
+    assert purged is not None
+    assert purged.phone_e164 is None
+    assert purged.city is None
+    assert purged.domain is None
+
+
+def test_a_business_with_no_name_left_says_which_place_it_was(db: Session) -> None:
+    from app.modules.resolution.survivorship import EXPIRED_NAME_TEMPLATE
+
+    source = places_source(db)
+    business = business_from(db, source, "ChIJold", now=NOW - timedelta(days=40))
+    assert isinstance(business, Business)
+
+    purge_expired(db, now=NOW)
+    db.commit()
+    db.expire_all()
+
+    purged = db.get(Business, business.id)
+    assert purged is not None
+    assert purged.display_name == EXPIRED_NAME_TEMPLATE.format(source_record_id="ChIJold")
+
+
+def test_an_unexpired_business_is_untouched(db: Session) -> None:
+    source = places_source(db)
+    business = business_from(db, source, "ChIJnew", now=NOW)
+    assert isinstance(business, Business)
+
+    result = purge_expired(db, now=NOW)
+    db.commit()
+    db.expire_all()
+
+    assert result.field_values == 0
+    fresh = db.get(Business, business.id)
+    assert fresh is not None
+    assert fresh.phone_e164 == "+15125550142"
+
+
+def test_purging_twice_does_not_report_the_same_values_again(db: Session) -> None:
+    source = places_source(db)
+    business_from(db, source, "ChIJold", now=NOW - timedelta(days=40))
+
+    assert purge_expired(db, now=NOW).field_values > 0
+    db.commit()
+
+    assert purge_expired(db, now=NOW).field_values == 0
+
+
+def test_rediscovering_and_resolving_brings_the_business_back(db: Session) -> None:
+    from app.modules.resolution import service as resolution
+
+    source = places_source(db)
+    business = business_from(db, source, "ChIJold", now=NOW - timedelta(days=40))
+    assert isinstance(business, Business)
+    purge_expired(db, now=NOW)
+    db.commit()
+
+    refreshed = business_from(db, source, "ChIJold", now=NOW)
+    assert isinstance(refreshed, Business)
+    db.expire_all()
+
+    assert refreshed.id == business.id, "the business is refreshed, never replaced"
+    assert refreshed.phone_e164 == "+15125550142"
+    assert refreshed.display_name == "Some Plumber"
+    assert resolution is not None

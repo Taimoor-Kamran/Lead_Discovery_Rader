@@ -85,6 +85,22 @@ _RESERVED = frozenset(logging.LogRecord("", 0, "", 0, "", None, None).__dict__) 
     "taskName",
 }
 
+# Where `log_fields()` parks its values. `extra={"created": ...}` would raise, because
+# `created` is the LogRecord's own timestamp; nested under one key, nothing can collide.
+FIELDS_KEY = "fields"
+
+
+def log_fields(**fields: Any) -> dict[str, Any]:
+    """Build an `extra` whose keys cannot clash with a LogRecord attribute.
+
+    `logging` raises `KeyError` if `extra` carries a name a LogRecord already uses, and
+    the names it uses (`created`, `module`, `name`, `process`, …) are ordinary words that
+    turn up in result summaries. Pass anything computed through here:
+
+        logger.info("resolution finished", extra=log_fields(**summary.model_dump()))
+    """
+    return {FIELDS_KEY: fields}
+
 
 class JsonFormatter(logging.Formatter):
     """Renders a log record as a single JSON object, with every value scrubbed."""
@@ -99,6 +115,11 @@ class JsonFormatter(logging.Formatter):
         }
         extras = {k: v for k, v in record.__dict__.items() if k not in _RESERVED}
         extras.pop("request_id", None)
+        nested = extras.pop(FIELDS_KEY, None)
+        if isinstance(nested, dict):
+            # Flattened back out, so a field parked by `log_fields()` reads the same as
+            # one passed directly.
+            extras.update(nested)
         if extras:
             payload.update(scrub_value(extras))
         if record.exc_info:

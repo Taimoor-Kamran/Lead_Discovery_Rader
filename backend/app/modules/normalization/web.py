@@ -78,7 +78,10 @@ def parse_website(raw: str | None) -> tuple[str | None, str | None, WebsiteKind]
     website = _clean_url(raw)
     registered = registered_domain(host)
     if registered is None:
-        return website, None, WebsiteKind.none
+        # A suffix the bundled snapshot does not know: a brand-new TLD, an intranet
+        # name, or a reserved one such as `.invalid`. The whole host is then the
+        # identity, which is the spec's own fallback rule and can only under-merge.
+        return website, host, WebsiteKind.own_site
     if registered in SOCIAL_DOMAINS:
         return website, None, WebsiteKind.social_profile
     if registered in BUILDER_DOMAINS:

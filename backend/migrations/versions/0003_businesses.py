@@ -178,6 +178,13 @@ def upgrade() -> None:
         "ix_match_candidates_created_at_id", "match_candidates", ["created_at", "id"], unique=False
     )
 
+    # Every token carries the version it was issued under; `reset-password` raises it,
+    # which retires every token that user already holds.
+    op.add_column(
+        "users",
+        sa.Column("token_version", sa.Integer(), nullable=False, server_default="1"),
+    )
+
     # `job_runs.kind` is a plain string, so the new `resolution` kind needs no change.
     # `params` is what a run was asked to do: a resolution run carries its parent run id.
     op.add_column(
@@ -229,6 +236,7 @@ def downgrade() -> None:
     op.drop_column("discovered_records", "resolution_error")
     op.drop_column("discovered_records", "resolution_status")
     op.drop_column("job_runs", "params")
+    op.drop_column("users", "token_version")
 
     op.drop_index("ix_match_candidates_created_at_id", table_name="match_candidates")
     op.drop_index("ix_match_candidates_status", table_name="match_candidates")

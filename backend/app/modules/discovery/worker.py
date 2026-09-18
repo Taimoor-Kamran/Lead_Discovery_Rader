@@ -8,7 +8,7 @@ records, so a cancelled run keeps everything it had already stored.
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.core.logging import get_logger
+from app.core.logging import get_logger, log_fields
 from app.modules.adapters import registry
 from app.modules.adapters.base import DiscoveryConfig, SourceAdapter
 from app.modules.audit import service as audit
@@ -62,7 +62,7 @@ def run_discovery(session: Session, run: JobRun) -> None:
     session.flush()
     logger.info(
         "discovery finished",
-        extra={"job_run_id": str(run.id), "search_job_id": str(job.id), **summary.model_dump()},
+        extra=log_fields(job_run_id=str(run.id), search_job_id=str(job.id), **summary.model_dump()),
     )
 
 

@@ -216,6 +216,22 @@ def test_no_website_means_no_domain_and_kind_none(raw: str | None) -> None:
     assert parse_website(raw) == (None, None, WebsiteKind.none)
 
 
+def test_an_unknown_suffix_falls_back_to_the_whole_host() -> None:
+    """A reserved or brand-new TLD keeps its host as the identity rather than losing one."""
+    website, domain, kind = parse_website("https://www.lonestarplumbing.invalid/services")
+
+    assert domain == "lonestarplumbing.invalid"
+    assert kind is WebsiteKind.own_site
+    assert website == "https://www.lonestarplumbing.invalid/services"
+
+
+def test_two_unknown_suffix_hosts_stay_different_businesses() -> None:
+    _, left, _ = parse_website("https://abc.invalid/")
+    _, right, _ = parse_website("https://xyz.invalid/")
+
+    assert left != right
+
+
 def test_host_of_drops_www_and_the_port() -> None:
     assert host_of("https://WWW.Example.com:8443/x") == "example.com"
     assert host_of("localhost") is None

@@ -1,6 +1,7 @@
 """Small operational commands. Run with `python -m app.cli <command> [options]`."""
 
 import argparse
+import getpass
 import os
 import secrets
 import sys
@@ -10,10 +11,13 @@ from collections.abc import Callable
 from app import models_registry  # noqa: F401
 from app.core.config import get_settings
 from app.core.db import session_scope
+from app.core.errors import NotFoundError, ValidationFailedError
 from app.core.logging import configure_logging, get_logger
 from app.modules.adapters import registry
 from app.modules.adapters.base import DiscoveryConfig
 from app.modules.adapters.google_places.adapter import SOURCE_NAME as GOOGLE_PLACES
+from app.modules.auth import service as auth_service
+from app.modules.auth.schemas import MIN_PASSWORD_LENGTH
 from app.modules.auth.service import ensure_admin
 from app.modules.discovery.service import purge_expired
 from app.modules.jobs.schemas import GeoSpec
@@ -44,8 +48,13 @@ def seed_admin(argv: list[str]) -> int:
     action = "created" if created else "promoted to admin"
     print(f"Admin {email} {action} (id {user_id}).")
     if generated and created:
-        # Printed once, to the operator's terminal only; never logged.
+        # Printed once, to the operator's terminal only; never logged and never stored
+        # in a form anything can read back.
         print(f"Generated password: {password}")
+        print(
+            "This is shown ONCE and cannot be recovered. Save it now — if you lose it, "
+            "use `make reset-password EMAIL=...`."
+        )
     elif not created:
         print("Existing user kept its current password.")
     return 0
@@ -65,7 +74,79 @@ def purge_expired_command(argv: list[str]) -> int:
     """Drop stored source content whose retention window has closed. Place IDs are kept."""
     with session_scope() as session:
         purged = purge_expired(session)
-    print(f"Purged the stored payload of {purged} expired record(s); their IDs were kept.")
+    print(f"Purged the stored payload of {purged.records} expired record(s); their IDs were kept.")
+    print(
+        f"Nulled {purged.field_values} expired business field value(s) and recomputed "
+        f"{purged.businesses_recomputed} business(es)."
+    )
+    return 0
+
+
+def load_demo_data_command(argv: list[str]) -> int:
+    """Load the checked-in demo fixture and queue the resolution run that dedupes it."""
+    from app.demo.loader import load_demo_data
+
+    settings = get_settings()
+    if not settings.is_development:
+        print(
+            f"APP_ENV is '{settings.environment}'. The demo fixture is fictional data and "
+            "is only available in development."
+        )
+        return 2
+
+    with session_scope() as session:
+        try:
+            result = load_demo_data(session)
+        except ValidationFailedError as exc:
+            print(exc.message)
+            return 2
+
+    print(
+        f"Loaded {result.stored_new} new and {result.updated} existing demo record(s) "
+        f"under search job {result.search_job_id}."
+    )
+    print(f"Discovery run:  {result.discovery_run_id}")
+    print(f"Resolution run: {result.resolution_run_id} (queued)")
+    print("Watch it with GET /api/v1/jobs/<resolution run>/status, then GET /api/v1/businesses.")
+    return 0
+
+
+def reset_password(argv: list[str]) -> int:
+    """Set a new password for one user and invalidate every token they already hold.
+
+    Interactive by default: the password is typed twice and never echoed, never passed on
+    the command line (where it would land in shell history) and never logged.
+    """
+    parser = argparse.ArgumentParser(prog="python -m app.cli reset-password")
+    parser.add_argument("--email", required=True)
+    args = parser.parse_args(argv)
+
+    from_env = os.environ.get("NEW_PASSWORD")
+    if from_env is not None:
+        password = from_env
+    else:
+        password = getpass.getpass("New password: ")
+        if password != getpass.getpass("Repeat new password: "):
+            print("The two passwords do not match. Nothing was changed.")
+            return 2
+
+    if len(password) < MIN_PASSWORD_LENGTH:
+        print(f"A password must be at least {MIN_PASSWORD_LENGTH} characters. Nothing was changed.")
+        return 2
+
+    with session_scope() as session:
+        try:
+            user = auth_service.reset_password(session, args.email.strip(), password)
+        except NotFoundError:
+            print(f"No user has the email {args.email.strip()}. Nothing was changed.")
+            return 2
+        except ValidationFailedError as exc:
+            print(f"{exc.message}. Nothing was changed.")
+            return 2
+        version = user.token_version
+
+    print(f"Password reset for {args.email.strip()}.")
+    print(f"Every existing access and refresh token for that user is now invalid (v{version}).")
     return 0
 
 
@@ -145,6 +226,8 @@ COMMANDS: dict[str, Callable[[list[str]], int]] = {
     "sync-sources": sync_sources,
     "purge-expired": purge_expired_command,
     "places-smoke": places_smoke,
+    "load-demo-data": load_demo_data_command,
+    "reset-password": reset_password,
 }
 
 

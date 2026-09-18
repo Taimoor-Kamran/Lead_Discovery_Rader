@@ -9,7 +9,7 @@ import uuid
 
 from sqlalchemy.orm import Session
 
-from app.core.logging import get_logger
+from app.core.logging import get_logger, log_fields
 from app.modules.audit import service as audit
 from app.modules.jobs.models import JobRun
 from app.modules.resolution import service
@@ -61,11 +61,13 @@ def run_resolution(session: Session, run: JobRun) -> None:
         after=summary.model_dump(),
     )
     session.flush()
+    # `log_fields`: the summary has a `created` count, which is also the name of a
+    # LogRecord attribute — passing it straight through would raise.
     logger.info(
         "resolution finished",
-        extra={
-            "job_run_id": str(run.id),
-            PARENT_RUN_PARAM: str(source_run_id),
+        extra=log_fields(
+            job_run_id=str(run.id),
+            **{PARENT_RUN_PARAM: str(source_run_id)},
             **summary.model_dump(),
-        },
+        ),
     )

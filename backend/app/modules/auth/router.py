@@ -22,7 +22,7 @@ AdminUser = Annotated[User, Depends(require_role(Role.admin))]
 
 def _set_refresh_cookie(response: Response, user: User) -> None:
     settings = get_settings()
-    token, _ = create_refresh_token(user.id, user.role.value)
+    token, _ = create_refresh_token(user.id, user.role.value, user.token_version)
     response.set_cookie(
         key=settings.refresh_cookie_name,
         value=token,
@@ -37,7 +37,7 @@ def _set_refresh_cookie(response: Response, user: User) -> None:
 @auth_router.post("/login", response_model=TokenResponse)
 def login(payload: LoginRequest, response: Response, session: DbSession) -> TokenResponse:
     user = service.authenticate(session, str(payload.email), payload.password)
-    access_token, expires_at = create_access_token(user.id, user.role.value)
+    access_token, expires_at = create_access_token(user.id, user.role.value, user.token_version)
     _set_refresh_cookie(response, user)
     return TokenResponse(access_token=access_token, expires_at=expires_at)
 
@@ -56,8 +56,11 @@ def refresh(request: Request, response: Response, session: DbSession) -> TokenRe
     user = session.get(User, claims.subject)
     if user is None or not user.is_active:
         raise AuthenticationError("Refresh token is no longer valid", code="unauthenticated")
+    # A password reset retires every refresh token issued before it.
+    if claims.token_version != user.token_version:
+        raise AuthenticationError("Refresh token has been revoked", code="token_revoked")
 
-    access_token, expires_at = create_access_token(user.id, user.role.value)
+    access_token, expires_at = create_access_token(user.id, user.role.value, user.token_version)
     _set_refresh_cookie(response, user)
     service.record_refresh(session, user)
     return TokenResponse(access_token=access_token, expires_at=expires_at)

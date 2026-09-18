@@ -1,0 +1,88 @@
+{
+  "note": [
+    "What `austin_plumbers.json` must resolve to. Written by hand from how the fixture",
+    "was designed, not copied from a run: an integration test asserts every number here,",
+    "so a change to the thresholds, the weights or the hard rules shows up as a failure",
+    "rather than as a quietly different answer."
+  ],
+  "records": 40,
+  "run_summary": {
+    "processed": 40,
+    "linked_existing": 5,
+    "created": 29,
+    "needs_review": 6,
+    "invalid": 0
+  },
+  "businesses": 29,
+  "pending_match_candidates": 6,
+
+  "auto_merged": {
+    "why": "Same business under two place ids: same name, phone, domain and address.",
+    "pairs": [
+      ["demo-a1-1", "demo-a1-2"],
+      ["demo-a2-1", "demo-a2-2"],
+      ["demo-a3-1", "demo-a3-2"],
+      ["demo-a4-1", "demo-a4-2"],
+      ["demo-a5-1", "demo-a5-2"]
+    ]
+  },
+
+  "needs_review": {
+    "why": [
+      "Near-duplicates (b*): near-identical names about 100 m apart in one postal code,",
+      "with no shared phone or domain. Chain locations (d*): one domain, three addresses",
+      "and three phones. Neither may auto-merge, and neither creates a business until a",
+      "human has decided."
+    ],
+    "records": [
+      {"record": "demo-b1-2", "against": "demo-b1-1", "kind": "near_duplicate"},
+      {"record": "demo-b2-2", "against": "demo-b2-1", "kind": "near_duplicate"},
+      {"record": "demo-b3-2", "against": "demo-b3-1", "kind": "near_duplicate"},
+      {"record": "demo-b4-2", "against": "demo-b4-1", "kind": "near_duplicate"},
+      {"record": "demo-d2", "against": "demo-d1", "kind": "chain_location"},
+      {"record": "demo-d3", "against": "demo-d1", "kind": "chain_location"}
+    ]
+  },
+
+  "kept_apart": {
+    "why": [
+      "One name, two genuinely different businesses in different cities. They share no",
+      "strong key and are nowhere near each other, so they are never even candidates."
+    ],
+    "pairs": [
+      ["demo-c1-1", "demo-c1-2"],
+      ["demo-c2-1", "demo-c2-2"],
+      ["demo-c3-1", "demo-c3-2"]
+    ]
+  },
+
+  "website_kinds": {
+    "own_site": ["demo-a1-1", "demo-e7", "demo-e12"],
+    "builder_subdomain": {
+      "demo-e1": "wixwaterworks.wixsite.com",
+      "demo-e2": "squaresitesewer.square.site",
+      "demo-e3": "godaddygutters.godaddysites.com"
+    },
+    "social_profile": ["demo-e4", "demo-e5"],
+    "none": ["demo-e6"]
+  },
+
+  "normalization": {
+    "why": "The messy inputs the spec calls for, and what they must come out as.",
+    "records": {
+      "demo-e7": {
+        "display_name": "Messy Format Plumbing",
+        "phone_e164": "+15125550507",
+        "domain": "messyformat-demo.com",
+        "street_key": "123 main street",
+        "postal_code": "78702"
+      },
+      "demo-e8": {"business_status": "closed_permanently"},
+      "demo-e9": {"business_status": "closed_temporarily"},
+      "demo-e10": {"business_status": "unknown"},
+      "demo-e11": {"phone_e164": null},
+      "demo-e12": {"city": "Austin", "state": "TX", "postal_code": "78757", "street_key": null},
+      "demo-e13": {"industry": "roofing"}
+    }
+  }
+}

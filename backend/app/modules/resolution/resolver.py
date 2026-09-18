@@ -14,6 +14,8 @@ from app.modules.resolution.scoring import MatchScore, Weights, score_pair
 
 # How many candidates a reviewer is shown for one record.
 REVIEW_CANDIDATE_LIMIT = 3
+# How alike two names must be before sharing an address area is worth a human's time.
+REVIEW_NAME_FLOOR = 0.8
 
 
 class DecisionKind(enum.StrEnum):
@@ -97,12 +99,19 @@ def decide(
 
 
 def _is_reviewable(candidate: ScoredCandidate, limits: Thresholds) -> bool:
-    """Whether a pair is worth a human's time even if the weighted score is low.
+    """Whether a pair is worth a human's time even when the weighted score is low.
 
-    A shared domain or a shared phone always is. Two locations of one chain share a
-    domain and nothing else, which scores below the review threshold — and quietly
-    creating a second business for them is exactly the mistake this gate exists to stop.
+    The weights cannot take a pair with no shared domain or phone past 0.40, so the score
+    alone would send every near-duplicate straight to a second business. Two cases
+    therefore reach a human regardless of the score, and neither can ever auto-merge:
+
+    * a shared domain or phone — two locations of one chain look exactly like this;
+    * near-identical names in the same postal code — `ABC Plumbing LLC` next door to
+      `ABC Plumbing & HVAC` is a question, not an answer.
     """
     if candidate.match.score >= limits.review:
         return True
-    return candidate.match.signals.domain_match == 1.0 or candidate.match.signals.phone_match == 1.0
+    signals = candidate.match.signals
+    if signals.domain_match == 1.0 or signals.phone_match == 1.0:
+        return True
+    return signals.address_match >= 0.5 and signals.name_similarity >= REVIEW_NAME_FLOOR

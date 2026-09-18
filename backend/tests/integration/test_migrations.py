@@ -57,6 +57,7 @@ def test_one_step_down_and_back_up_leaves_the_schema_as_it_was(database_url: str
     engine = create_engine(url)
     after_downgrade = set(inspect(engine).get_table_names())
     record_columns = {c["name"] for c in inspect(engine).get_columns("discovered_records")}
+    user_columns = {c["name"] for c in inspect(engine).get_columns("users")}
     engine.dispose()
 
     assert at_head - after_downgrade == {
@@ -65,6 +66,7 @@ def test_one_step_down_and_back_up_leaves_the_schema_as_it_was(database_url: str
         "match_candidates",
     }
     assert "resolution_status" not in record_columns
+    assert "token_version" not in user_columns
     assert "business_id" in record_columns, "the column predates v0.3.0; only its FK is new"
 
     command.upgrade(config, "head")
@@ -73,6 +75,7 @@ def test_one_step_down_and_back_up_leaves_the_schema_as_it_was(database_url: str
     assert "resolution_status" in {
         c["name"] for c in inspect(engine).get_columns("discovered_records")
     }
+    assert "token_version" in {c["name"] for c in inspect(engine).get_columns("users")}
     engine.dispose()
 
 

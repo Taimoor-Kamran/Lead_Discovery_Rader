@@ -6,13 +6,18 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.errors import AuthenticationError, ConflictError, NotFoundError
+from app.core.errors import (
+    AuthenticationError,
+    ConflictError,
+    NotFoundError,
+    ValidationFailedError,
+)
 from app.core.logging import get_logger
 from app.core.pagination import DEFAULT_LIMIT, Page, apply_cursor, encode_cursor
 from app.core.security import hash_password, needs_rehash, verify_password
 from app.modules.audit import service as audit
 from app.modules.auth.models import Role, User
-from app.modules.auth.schemas import UserCreate, UserRead, UserUpdate
+from app.modules.auth.schemas import MIN_PASSWORD_LENGTH, UserCreate, UserRead, UserUpdate
 
 logger = get_logger("app.auth")
 
@@ -175,6 +180,39 @@ def record_refresh(session: Session, user: User) -> None:
         actor_id=user.id,
         after={"role": user.role.value},
     )
+
+
+def reset_password(session: Session, email: str, new_password: str) -> User:
+    """Set a new password and retire every token the user already holds.
+
+    Raises `NotFoundError` for an unknown email and `ValidationFailedError` for a
+    password that is too short — both before anything is written.
+    """
+    if len(new_password) < MIN_PASSWORD_LENGTH:
+        raise ValidationFailedError(
+            f"A password must be at least {MIN_PASSWORD_LENGTH} characters",
+            details={"minimum_length": MIN_PASSWORD_LENGTH},
+        )
+
+    user = get_user_by_email(session, email)
+    if user is None:
+        raise NotFoundError("No user has that email address", details={"email": email})
+
+    user.password_hash = hash_password(new_password)
+    user.token_version += 1
+    session.flush()
+
+    audit.record(
+        session,
+        action="user.password_reset",
+        entity_type="user",
+        entity_id=user.id,
+        # A reset is run from a terminal, so there is no authenticated actor to record.
+        actor_id=None,
+        after={"via": "cli", "token_version": user.token_version},
+    )
+    logger.info("password reset", extra={"user_id": str(user.id), "via": "cli"})
+    return user
 
 
 def ensure_admin(session: Session, email: str, password: str) -> tuple[User, bool]:

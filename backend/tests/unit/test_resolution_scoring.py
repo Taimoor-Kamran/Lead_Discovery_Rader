@@ -342,10 +342,31 @@ def test_a_closed_business_is_still_eligible_to_match() -> None:
 
 
 def test_thresholds_come_from_configuration() -> None:
-    twin = business(domain=None, phone_e164=None, street_key=None, lat=None, lng=None)
+    """A pair that only the score speaks for: no shared key, no shared postal code."""
+    twin = business(
+        domain=None,
+        phone_e164=None,
+        street_key=None,
+        postal_code=None,
+        lat=None,
+        lng=None,
+    )
 
     lenient = decide(record(), [twin], weights=WEIGHTS, thresholds=Thresholds(0.1, 0.05))
     strict = decide(record(), [twin], weights=WEIGHTS, thresholds=Thresholds(0.99, 0.98))
 
     assert lenient.kind is DecisionKind.review, "still capped: the pair has no strong key"
     assert strict.kind is DecisionKind.new
+
+
+def test_a_review_floor_overrides_the_threshold_but_never_the_auto_merge_rule() -> None:
+    """Raising the thresholds cannot hide a near-duplicate; it also cannot merge one."""
+    near_duplicate = business(domain=None, phone_e164=None, street_key="9 oak avenue")
+
+    unreachable = decide(
+        record(), [near_duplicate], weights=WEIGHTS, thresholds=Thresholds(0.99, 0.98)
+    )
+
+    assert unreachable.kind is DecisionKind.review
+    assert unreachable.best is not None
+    assert unreachable.best.match.score < 0.98, "it is reviewed on its keys, not its score"

@@ -122,6 +122,8 @@ class SourceMeta:
     terms_url: str
     commercial_use_note: str
     content_ttl_days: int
+    # Set by sources whose records must never leave the system, such as the demo fixture.
+    exclude_from_crm_export: bool = False
 
     def as_config(self, rate_limit: RateLimit) -> dict[str, Any]:
         """The JSON stored on the `sources` row."""
@@ -130,6 +132,7 @@ class SourceMeta:
             "terms_url": self.terms_url,
             "commercial_use_note": self.commercial_use_note,
             "content_ttl_days": self.content_ttl_days,
+            "exclude_from_crm_export": self.exclude_from_crm_export,
             "rate_limit": {
                 "requests_per_second": rate_limit.requests_per_second,
                 "burst": rate_limit.burst,
