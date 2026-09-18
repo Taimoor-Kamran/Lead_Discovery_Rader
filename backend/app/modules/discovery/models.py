@@ -47,7 +47,11 @@ class DiscoveredRecord(Base):
     source_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Nulled by `purge-expired` once the provider's storage window closes; the row and its
     # source_record_id survive, so the record can be re-fetched rather than re-discovered.
-    raw_payload: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    # `none_as_null` matters: without it SQLAlchemy would store the JSON scalar `null`,
+    # which reads back as None but is not SQL NULL, so `purged is null` would never match.
+    raw_payload: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB(none_as_null=True), nullable=True
+    )
     payload_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     # The FK to `businesses` arrives with entity resolution in v0.3.0.
     business_id: Mapped[uuid.UUID | None] = mapped_column(PGUUID(as_uuid=True), nullable=True)

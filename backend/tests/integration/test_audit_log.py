@@ -72,7 +72,13 @@ def test_every_job_status_change_is_audited(
         db.scalars(select(AuditLog).where(AuditLog.entity_id == run_id).order_by(AuditLog.id))
     )
     actions = [row.action for row in rows]
-    assert actions == ["job_run.enqueued", "job_run.status_changed", "job_run.status_changed"]
+    assert actions == [
+        "job_run.enqueued",
+        "job_run.status_changed",  # queued -> running
+        "discovery.run_started",
+        "discovery.run_finished",
+        "job_run.status_changed",  # running -> done
+    ]
 
     transitions = [(row.before, row.after) for row in rows if row.before and row.after]
     assert transitions[0][0] == {"status": JobRunStatus.queued.value}

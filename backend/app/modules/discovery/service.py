@@ -7,7 +7,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import Select, func, select, update
+from sqlalchemy import Select, func, null, select, update
 from sqlalchemy.orm import Session
 
 from app.core.db import session_scope
@@ -129,7 +129,7 @@ def purge_expired(session: Session, *, now: datetime | None = None) -> int:
             DiscoveredRecord.content_expires_at < moment,
             DiscoveredRecord.raw_payload.is_not(None),
         )
-        .values(raw_payload=None, purged_at=moment)
+        .values(raw_payload=null(), purged_at=moment)
     )
     purged = int(getattr(result, "rowcount", 0) or 0)
     if purged:
