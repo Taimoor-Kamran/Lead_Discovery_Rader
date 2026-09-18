@@ -13,7 +13,7 @@ from app.modules.adapters.google_places.adapter import GooglePlacesAdapter
 from app.modules.adapters.google_places.client import PLACES_BASE_URL, TEXT_SEARCH_PATH
 from app.modules.auth.models import Role, User
 from app.modules.jobs.models import JobRunStatus, SearchJob, SearchJobStatus
-from app.modules.jobs.service import DISCOVERY_JOB_KIND, enqueue_run
+from app.modules.jobs.service import DISCOVERY_JOB_KIND, RESOLUTION_JOB_KIND, enqueue_run
 from app.modules.sources.models import Source
 from app.workers import tasks
 from tests.conftest import auth_headers, make_user, places_fixture
@@ -197,9 +197,12 @@ def test_the_runs_of_a_search_job_are_listed_newest_first(
     response = client.get(f"/api/v1/search-jobs/{job.id}/runs", headers=headers)
 
     assert response.status_code == 200
-    ids = [item["id"] for item in response.json()["items"]]
-    assert ids == [second, str(first_run_id)]
-    finished = response.json()["items"][1]
+    items = response.json()["items"]
+    # A finished discovery run queues its own resolution run, which lands between the two.
+    kinds = [item["kind"] for item in items]
+    assert kinds == [DISCOVERY_JOB_KIND, RESOLUTION_JOB_KIND, DISCOVERY_JOB_KIND]
+    assert [items[0]["id"], items[2]["id"]] == [second, str(first_run_id)]
+    finished = items[2]
     assert finished["status"] == JobRunStatus.done.value
     assert finished["result_summary"]["stored_new"] == 20
 

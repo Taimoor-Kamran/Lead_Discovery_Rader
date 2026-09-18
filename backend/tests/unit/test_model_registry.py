@@ -22,6 +22,9 @@ EXPECTED = {
     "discovered_records",
     "record_sightings",
     "api_calls",
+    "businesses",
+    "business_field_values",
+    "match_candidates",
 }
 
 CHECK = (

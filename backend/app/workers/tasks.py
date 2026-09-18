@@ -15,8 +15,14 @@ from app.core.db import session_scope
 from app.core.logging import get_logger
 from app.modules.discovery.worker import run_discovery
 from app.modules.jobs.models import JobRun, JobRunStatus
-from app.modules.jobs.service import DEMO_JOB_KIND, DISCOVERY_JOB_KIND, get_job_run
+from app.modules.jobs.service import (
+    DEMO_JOB_KIND,
+    DISCOVERY_JOB_KIND,
+    RESOLUTION_JOB_KIND,
+    get_job_run,
+)
 from app.modules.jobs.state import backoff_seconds, transition
+from app.modules.resolution.worker import run_resolution
 
 logger = get_logger("app.worker")
 
@@ -86,6 +92,21 @@ def demo_handler(session: Session, run: JobRun) -> None:
 
 register_handler(DEMO_JOB_KIND, demo_handler)
 register_handler(DISCOVERY_JOB_KIND, run_discovery)
+register_handler(RESOLUTION_JOB_KIND, run_resolution)
+
+
+def follow_up(session: Session, run: JobRun) -> None:
+    """Queue whatever a finished run implies. A discovery run is resolved immediately.
+
+    The idempotency key is derived from the discovery run, so a retried or re-requested
+    discovery never leaves two resolution runs behind.
+    """
+    if run.kind != DISCOVERY_JOB_KIND:
+        return
+
+    from app.modules.resolution.service import enqueue_resolution
+
+    enqueue_resolution(session, run.id, idempotency_key=f"resolution:{run.id}")
 
 
 def execute_job_run(
@@ -145,6 +166,7 @@ def execute_job_run(
                 )
             else:
                 transition(session, run, JobRunStatus.done)
+                follow_up(session, run)
                 logger.info("job run done", extra={"job_run_id": str(run.id)})
                 return JobRunStatus.done
 

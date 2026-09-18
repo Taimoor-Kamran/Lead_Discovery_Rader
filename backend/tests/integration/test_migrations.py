@@ -16,8 +16,20 @@ EXPECTED_TABLES = {
     "discovered_records",
     "record_sightings",
     "api_calls",
+    "businesses",
+    "business_field_values",
+    "match_candidates",
 }
-EXPECTED_ENUMS = {"user_role", "source_kind", "search_job_status", "job_run_status"}
+EXPECTED_ENUMS = {
+    "user_role",
+    "source_kind",
+    "search_job_status",
+    "job_run_status",
+    "website_kind",
+    "business_status",
+    "match_candidate_status",
+    "resolution_status",
+}
 
 
 def _fresh_database(database_url: str) -> str:
@@ -44,20 +56,23 @@ def test_one_step_down_and_back_up_leaves_the_schema_as_it_was(database_url: str
     command.downgrade(config, "-1")
     engine = create_engine(url)
     after_downgrade = set(inspect(engine).get_table_names())
-    job_run_columns = {c["name"] for c in inspect(engine).get_columns("job_runs")}
+    record_columns = {c["name"] for c in inspect(engine).get_columns("discovered_records")}
     engine.dispose()
 
     assert at_head - after_downgrade == {
-        "discovered_records",
-        "record_sightings",
-        "api_calls",
+        "businesses",
+        "business_field_values",
+        "match_candidates",
     }
-    assert "result_summary" not in job_run_columns
+    assert "resolution_status" not in record_columns
+    assert "business_id" in record_columns, "the column predates v0.3.0; only its FK is new"
 
     command.upgrade(config, "head")
     engine = create_engine(url)
     assert set(inspect(engine).get_table_names()) == at_head
-    assert "result_summary" in {c["name"] for c in inspect(engine).get_columns("job_runs")}
+    assert "resolution_status" in {
+        c["name"] for c in inspect(engine).get_columns("discovered_records")
+    }
     engine.dispose()
 
 
