@@ -58,6 +58,18 @@ def update_search_job(
     return SearchJobRead.model_validate(job)
 
 
+@search_jobs_router.get("/{search_job_id}/runs", response_model=Page[JobRunRead])
+def list_search_job_runs(
+    search_job_id: uuid.UUID,
+    user: CurrentUser,
+    session: DbSession,
+    limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
+    cursor: Annotated[str | None, Query()] = None,
+) -> Page[JobRunRead]:
+    """Every run of this search job, newest first."""
+    return service.list_runs_for_search_job(session, search_job_id, limit=limit, cursor=cursor)
+
+
 @search_jobs_router.post(
     "/{search_job_id}/run", response_model=JobRunRead, status_code=status.HTTP_202_ACCEPTED
 )

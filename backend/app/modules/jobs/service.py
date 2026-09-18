@@ -21,10 +21,12 @@ from app.modules.jobs.schemas import (
     SearchJobUpdate,
 )
 from app.modules.jobs.state import transition
+from app.modules.sources import service as sources_service
 
 logger = get_logger("app.jobs")
 
 DEMO_JOB_KIND = "demo"
+DISCOVERY_JOB_KIND = "discovery"
 
 
 def get_search_job(session: Session, search_job_id: uuid.UUID) -> SearchJob:
@@ -37,6 +39,7 @@ def get_search_job(session: Session, search_job_id: uuid.UUID) -> SearchJob:
 def create_search_job(
     session: Session, payload: SearchJobCreate, *, actor_id: uuid.UUID
 ) -> SearchJob:
+    sources_service.validate_source_ids(session, list(payload.source_ids))
     job = SearchJob(
         name=payload.name,
         geo=payload.geo.model_dump(exclude_none=True),
@@ -71,6 +74,7 @@ def update_search_job(
     if payload.industry is not None:
         job.industry = payload.industry
     if payload.source_ids is not None:
+        sources_service.validate_source_ids(session, list(payload.source_ids))
         job.source_ids = list(payload.source_ids)
     if payload.status is not None:
         job.status = payload.status
@@ -107,6 +111,32 @@ def list_search_jobs(
     )
 
 
+def list_runs_for_search_job(
+    session: Session,
+    search_job_id: uuid.UUID,
+    *,
+    limit: int = DEFAULT_LIMIT,
+    cursor: str | None = None,
+) -> Page[JobRunRead]:
+    """Runs of one search job, newest first."""
+    get_search_job(session, search_job_id)
+    stmt = (
+        select(JobRun)
+        .where(JobRun.search_job_id == search_job_id)
+        .order_by(JobRun.created_at.desc(), JobRun.id.desc())
+        .limit(limit + 1)
+    )
+    stmt = apply_cursor(stmt, JobRun.created_at, JobRun.id, cursor)
+    rows = list(session.scalars(stmt))
+    next_cursor = None
+    if len(rows) > limit:
+        rows = rows[:limit]
+        next_cursor = encode_cursor(rows[-1].created_at, rows[-1].id)
+    return Page[JobRunRead](
+        items=[JobRunRead.model_validate(row) for row in rows], next_cursor=next_cursor
+    )
+
+
 def get_job_run(session: Session, job_run_id: uuid.UUID) -> JobRun:
     run = session.get(JobRun, job_run_id)
     if run is None:
@@ -118,7 +148,7 @@ def enqueue_run(
     session: Session,
     *,
     search_job_id: uuid.UUID | None,
-    kind: str = DEMO_JOB_KIND,
+    kind: str = DISCOVERY_JOB_KIND,
     actor_id: uuid.UUID | None = None,
     idempotency_key: str | None = None,
     progress_total: int = 0,

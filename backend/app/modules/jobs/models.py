@@ -75,6 +75,8 @@ class JobRun(Base):
     attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     idempotency_key: Mapped[str | None] = mapped_column(String(200), nullable=True, unique=True)
+    # What the handler produced, e.g. {"fetched", "stored_new", "updated", "invalid", "api_calls"}.
+    result_summary: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     cancel_requested: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

@@ -13,8 +13,9 @@ from app import models_registry  # noqa: F401
 from app.core.config import get_settings
 from app.core.db import session_scope
 from app.core.logging import get_logger
+from app.modules.discovery.worker import run_discovery
 from app.modules.jobs.models import JobRun, JobRunStatus
-from app.modules.jobs.service import DEMO_JOB_KIND, get_job_run
+from app.modules.jobs.service import DEMO_JOB_KIND, DISCOVERY_JOB_KIND, get_job_run
 from app.modules.jobs.state import backoff_seconds, transition
 
 logger = get_logger("app.worker")
@@ -64,8 +65,17 @@ def checkpoint(session: Session, run: JobRun, *, done: int | None = None) -> Non
         raise JobCancelledError(f"Job run {run.id} was cancelled at step {run.progress_done}")
 
 
+def is_retryable(exc: BaseException) -> bool:
+    """Whether putting a failed run back on the queue could plausibly help.
+
+    Adapter errors carry the answer (`AuthError`, `QuotaExceededError` and `SchemaError`
+    say no). Anything else is treated as transient, which is the v0.1.0 behaviour.
+    """
+    return bool(getattr(exc, "retryable", True))
+
+
 def demo_handler(session: Session, run: JobRun) -> None:
-    """A no-op unit of work. Real discovery work arrives in v0.2.0."""
+    """A no-op unit of work, kept as the reference handler for the job framework tests."""
     steps = run.progress_total or DEMO_DEFAULT_STEPS
     run.progress_total = steps
     run.progress_done = 0
@@ -75,6 +85,7 @@ def demo_handler(session: Session, run: JobRun) -> None:
 
 
 register_handler(DEMO_JOB_KIND, demo_handler)
+register_handler(DISCOVERY_JOB_KIND, run_discovery)
 
 
 def execute_job_run(
@@ -110,11 +121,15 @@ def execute_job_run(
                 return JobRunStatus.cancelled
             except Exception as exc:  # a handler failure is data, not a crash
                 message = f"{type(exc).__name__}: {exc}"
-                if attempt >= max_attempts:
+                if attempt >= max_attempts or not is_retryable(exc):
                     transition(session, run, JobRunStatus.failed, error=message)
                     logger.error(
                         "job run failed permanently",
-                        extra={"job_run_id": str(run.id), "attempts": attempt},
+                        extra={
+                            "job_run_id": str(run.id),
+                            "attempts": attempt,
+                            "retryable": is_retryable(exc),
+                        },
                     )
                     return JobRunStatus.failed
 
