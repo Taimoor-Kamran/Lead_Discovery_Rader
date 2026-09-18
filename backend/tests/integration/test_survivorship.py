@@ -10,8 +10,12 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.modules.adapters.base import RawDoc
+from app.modules.adapters.demo_fixture import SOURCE_NAME as DEMO_SOURCE
+from app.modules.adapters.demo_fixture import DemoFixtureAdapter, demo_places
 from app.modules.businesses.models import PROVENANCED_FIELDS, Business, BusinessFieldValue
 from app.modules.discovery.models import DiscoveredRecord
+from app.modules.normalization.normalize import normalize
 from app.modules.normalization.schemas import (
     Address,
     BusinessStatus,
@@ -19,7 +23,9 @@ from app.modules.normalization.schemas import (
     WebsiteKind,
 )
 from app.modules.resolution.survivorship import (
+    ADDRESS_GROUP,
     EXPIRED_NAME_TEMPLATE,
+    WEBSITE_GROUP,
     field_values,
     recompute,
     write_field_values,
@@ -87,6 +93,19 @@ def new_business(session: Session) -> Business:
     session.add(business)
     session.flush()
     return business
+
+
+def demo_normalized(place_id: str) -> NormalizedBusiness:
+    """One demo place put through the very normalizer the loader uses."""
+    payload = next(place for place in demo_places() if place["id"] == place_id)
+    raw = RawDoc(
+        source=DEMO_SOURCE,
+        source_record_id=place_id,
+        source_url=None,
+        payload=payload,
+        fetched_at=NOW,
+    )
+    return normalize(DemoFixtureAdapter().normalize(raw), DEMO_SOURCE)
 
 
 # --- writing ------------------------------------------------------------------------
@@ -314,3 +333,280 @@ def test_the_earliest_expiry_is_shown_on_the_business(db: Session) -> None:
     db.commit()
 
     assert business.places_content_expires_at == NOW + timedelta(days=3)
+
+
+# --- fields that survive together ---------------------------------------------------
+
+
+def test_the_two_groups_are_disjoint_and_are_real_fields() -> None:
+    assert not set(WEBSITE_GROUP) & set(ADDRESS_GROUP)
+    assert set(WEBSITE_GROUP) | set(ADDRESS_GROUP) <= set(PROVENANCED_FIELDS)
+
+
+def test_the_web_presence_comes_whole_from_one_record(db: Session) -> None:
+    """A Facebook page from one record must not be shown with another record's domain."""
+    places = source(db, "google_places")
+    business = new_business(db)
+
+    write_field_values(
+        db,
+        business=business,
+        record=record(db, places, "ChIJsite"),
+        normalized=normalized(
+            "google_places",
+            website="https://abc.invalid/",
+            domain="abc.invalid",
+            website_kind=WebsiteKind.own_site,
+        ),
+        observed_at=NOW - timedelta(days=5),
+    )
+    write_field_values(
+        db,
+        business=business,
+        record=record(db, places, "ChIJsocial"),
+        normalized=normalized(
+            "google_places",
+            website="https://www.facebook.com/abcplumbing",
+            domain=None,
+            website_kind=WebsiteKind.social_profile,
+        ),
+        observed_at=NOW,
+    )
+
+    recompute(db, business)
+    db.commit()
+
+    assert business.website == "https://abc.invalid/"
+    assert business.domain == "abc.invalid"
+    assert business.website_kind is WebsiteKind.own_site
+
+
+def test_a_builder_subdomain_beats_a_social_page(db: Session) -> None:
+    places = source(db, "google_places")
+    business = new_business(db)
+
+    write_field_values(
+        db,
+        business=business,
+        record=record(db, places, "ChIJbuilder"),
+        normalized=normalized(
+            "google_places",
+            website="https://abcplumbing.wixsite.com/home",
+            domain="abcplumbing.wixsite.com",
+            website_kind=WebsiteKind.builder_subdomain,
+        ),
+        observed_at=NOW - timedelta(days=5),
+    )
+    write_field_values(
+        db,
+        business=business,
+        record=record(db, places, "ChIJsocial"),
+        normalized=normalized(
+            "google_places",
+            website="https://www.facebook.com/abcplumbing",
+            domain=None,
+            website_kind=WebsiteKind.social_profile,
+        ),
+        observed_at=NOW,
+    )
+
+    recompute(db, business)
+    db.commit()
+
+    assert business.domain == "abcplumbing.wixsite.com"
+    assert business.website_kind is WebsiteKind.builder_subdomain
+
+
+def test_a_social_page_is_shown_with_no_domain_when_it_is_all_there_is(db: Session) -> None:
+    """Winning the group must never invent a domain the source did not report."""
+    places = source(db, "google_places")
+    business = new_business(db)
+
+    write_field_values(
+        db,
+        business=business,
+        record=record(db, places, "ChIJsocial"),
+        normalized=normalized(
+            "google_places",
+            website="https://www.facebook.com/abcplumbing",
+            domain=None,
+            website_kind=WebsiteKind.social_profile,
+        ),
+        observed_at=NOW,
+    )
+
+    recompute(db, business)
+    db.commit()
+
+    assert business.website == "https://www.facebook.com/abcplumbing"
+    assert business.domain is None
+    assert business.website_kind is WebsiteKind.social_profile
+
+
+def test_the_oak_hill_pair_from_the_demo_data_keeps_one_web_presence(db: Session) -> None:
+    """The case found in manual testing: merged, the pair mixed Facebook with a domain.
+
+    `demo-b4-1` has its own site, `demo-b4-2` only a Facebook page. A reviewer who merges
+    the two must see one record's answer, not a business whose website is a Facebook page
+    while its domain comes from somewhere else entirely.
+    """
+    demo = source(db, DEMO_SOURCE)
+    business = new_business(db)
+
+    write_field_values(
+        db,
+        business=business,
+        record=record(db, demo, "demo-b4-1"),
+        normalized=demo_normalized("demo-b4-1"),
+        observed_at=NOW,
+    )
+    # Merged by a reviewer afterwards, so it is the more recent of the two.
+    write_field_values(
+        db,
+        business=business,
+        record=record(db, demo, "demo-b4-2"),
+        normalized=demo_normalized("demo-b4-2"),
+        observed_at=NOW + timedelta(minutes=5),
+    )
+
+    recompute(db, business)
+    db.commit()
+
+    assert business.website == "https://oakhillplumbing.invalid/"
+    assert business.domain == "oakhillplumbing.invalid"
+    assert business.website_kind is WebsiteKind.own_site
+    # The address is one record's too - 910 Patton Ranch Road, not a blend of both.
+    assert business.address_line1 == "910 Patton Ranch Road"
+    assert business.street_key == "910 patton ranch road"
+    assert business.lat == 30.4249
+
+
+def test_the_address_comes_whole_from_one_record(db: Session) -> None:
+    """A newer record's street must not be shown with an older record's suite or postcode."""
+    places = source(db, "google_places")
+    business = new_business(db)
+
+    write_field_values(
+        db,
+        business=business,
+        record=record(db, places, "ChIJold"),
+        normalized=normalized(
+            "google_places",
+            address=Address(
+                line1="123 Main Street",
+                line2="Suite 4",
+                street_key="123 main street",
+                city="Austin",
+                state="TX",
+                postal_code="78701",
+                country="US",
+            ),
+            lat=30.2672,
+            lng=-97.7431,
+            geohash7="9v6kpvc",
+        ),
+        observed_at=NOW - timedelta(days=5),
+    )
+    write_field_values(
+        db,
+        business=business,
+        record=record(db, places, "ChIJnew"),
+        normalized=normalized(
+            "google_places",
+            address=Address(
+                line1="900 Patton Ranch Road",
+                street_key="900 patton ranch road",
+                city="Austin",
+                state="TX",
+                postal_code="78745",
+                country="US",
+            ),
+            lat=30.424,
+            lng=-97.745,
+            geohash7="9v6mpf8",
+        ),
+        observed_at=NOW,
+    )
+
+    recompute(db, business)
+    db.commit()
+
+    assert business.address_line1 == "900 Patton Ranch Road"
+    assert business.address_line2 is None, "the older record's suite must not leak through"
+    assert business.street_key == "900 patton ranch road"
+    assert business.postal_code == "78745"
+    assert business.lat == 30.424
+    assert business.geohash7 == "9v6mpf8"
+
+
+def test_a_street_address_beats_a_more_recent_town_only_one(db: Session) -> None:
+    places = source(db, "google_places")
+    business = new_business(db)
+
+    write_field_values(
+        db,
+        business=business,
+        record=record(db, places, "ChIJstreet"),
+        normalized=normalized(
+            "google_places",
+            address=Address(
+                line1="123 Main Street",
+                street_key="123 main street",
+                city="Austin",
+                state="TX",
+                postal_code="78701",
+                country="US",
+            ),
+        ),
+        observed_at=NOW - timedelta(days=5),
+    )
+    write_field_values(
+        db,
+        business=business,
+        record=record(db, places, "ChIJtown"),
+        normalized=normalized(
+            "google_places",
+            address=Address(city="Round Rock", state="TX", country="US"),
+            lat=None,
+            lng=None,
+            geohash7=None,
+        ),
+        observed_at=NOW,
+    )
+
+    recompute(db, business)
+    db.commit()
+
+    assert business.address_line1 == "123 Main Street"
+    assert business.city == "Austin", "the town of a vaguer record must not override its street"
+    assert business.postal_code == "78701"
+
+
+def test_a_record_with_no_address_at_all_never_wins_the_group(db: Session) -> None:
+    places = source(db, "google_places")
+    demo = source(db, "demo_fixture")
+    business = new_business(db)
+
+    write_field_values(
+        db,
+        business=business,
+        record=record(db, demo, "demo-1"),
+        normalized=normalized("demo_fixture"),
+        observed_at=NOW,
+    )
+    # The preferred source knows the business but not where it is.
+    write_field_values(
+        db,
+        business=business,
+        record=record(db, places, "ChIJnowhere"),
+        normalized=normalized(
+            "google_places", address=Address(), lat=None, lng=None, geohash7=None
+        ),
+        observed_at=NOW + timedelta(days=1),
+    )
+
+    recompute(db, business)
+    db.commit()
+
+    assert business.city == "Austin"
+    assert business.street_key == "123 main street"

@@ -6,6 +6,7 @@ what makes both a merge and a retention purge show up correctly.
 """
 
 import uuid
+from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
@@ -24,6 +25,41 @@ logger = get_logger("app.resolution.survivorship")
 # Shown when every value for the name has been purged. The place ID may be kept
 # indefinitely, so the business stays identifiable and re-discovery refreshes it.
 EXPIRED_NAME_TEMPLATE = "[expired] {source_record_id}"
+
+# Fields that only mean anything together. Chosen one by one, a merged business could show
+# one record's Facebook page beside another record's own domain — a web presence no source
+# ever reported, and the same for half of one address beside half of another. Each group is
+# therefore taken whole, from a single record.
+WEBSITE_GROUP = ("website", "domain", "website_kind")
+# `website_kind` only describes the other two, so it is not what makes a record a candidate:
+# a record that knows of no site cannot win the group away from one that does.
+WEBSITE_GROUP_IDENTITY = ("website", "domain")
+ADDRESS_GROUP = (
+    "address_line1",
+    "address_line2",
+    "street_key",
+    "city",
+    "state",
+    "postal_code",
+    "country",
+    "lat",
+    "lng",
+    "geohash7",
+)
+GROUPED_FIELDS = frozenset(WEBSITE_GROUP + ADDRESS_GROUP)
+
+# Which record answers "where is this business online?" best: a real site beats a site
+# builder, which beats a social page. `none` can only win when nothing else is known.
+WEBSITE_KIND_RANK = {
+    WebsiteKind.own_site.value: 0,
+    WebsiteKind.builder_subdomain.value: 1,
+    WebsiteKind.social_profile.value: 2,
+    WebsiteKind.none.value: 3,
+}
+
+# The surviving rows of one discovered record, keyed by field.
+RecordFields = dict[str, BusinessFieldValue]
+SortKey = Callable[[BusinessFieldValue], tuple[int, float, int]]
 
 
 def field_values(normalized: NormalizedBusiness) -> dict[str, str | None]:
@@ -107,29 +143,96 @@ def recompute(session: Session, business: Business, *, now: datetime | None = No
     )
     source_names = _source_names(session, [row.source_id for row in rows])
 
-    winners: dict[str, BusinessFieldValue] = {}
-    for row in sorted(
-        rows,
-        key=lambda r: (
-            priority.get(source_names.get(r.source_id, ""), len(priority)),
-            -r.observed_at.timestamp(),
-            -r.id,
-        ),
-    ):
-        if row.value is not None and row.field not in winners:
-            winners[row.field] = row
+    def sort_key(row: BusinessFieldValue) -> tuple[int, float, int]:
+        """Source priority first, then the most recent, then the newest row."""
+        return (
+            priority.get(source_names.get(row.source_id, ""), len(priority)),
+            -row.observed_at.timestamp(),
+            -row.id,
+        )
+
+    by_record: dict[uuid.UUID, RecordFields] = {}
+    for row in rows:
+        by_record.setdefault(row.discovered_record_id, {})[row.field] = row
+
+    resolved: dict[str, str | None] = {}
+    website = _group_winner(
+        by_record,
+        group=WEBSITE_GROUP,
+        identity=WEBSITE_GROUP_IDENTITY,
+        rank=_website_rank,
+        sort_key=sort_key,
+    )
+    address = _group_winner(
+        by_record,
+        group=ADDRESS_GROUP,
+        identity=ADDRESS_GROUP,
+        rank=_address_rank,
+        sort_key=sort_key,
+    )
+    for group, winner in ((WEBSITE_GROUP, website), (ADDRESS_GROUP, address)):
+        for field in group:
+            won = winner.get(field)
+            resolved[field] = won.value if won is not None else None
+
+    for row in sorted(rows, key=sort_key):
+        if row.field in GROUPED_FIELDS or row.value is None:
+            continue
+        resolved.setdefault(row.field, row.value)
 
     for field in PROVENANCED_FIELDS:
-        winner = winners.get(field)
-        _apply(business, field, winner.value if winner else None)
+        _apply(business, field, resolved.get(field))
 
-    if not winners.get("display_name"):
+    if not resolved.get("display_name"):
         business.display_name = _expired_name(session, business)
 
     expiries = [row.expires_at for row in rows if row.expires_at is not None]
     business.places_content_expires_at = min(expiries) if expiries else None
     session.flush()
     return business
+
+
+def _group_winner(
+    by_record: dict[uuid.UUID, RecordFields],
+    *,
+    group: tuple[str, ...],
+    identity: tuple[str, ...],
+    rank: Callable[[RecordFields], int],
+    sort_key: SortKey,
+) -> RecordFields:
+    """The one record the whole group is read from, or `{}` when no record knows any of it.
+
+    A record that knows nothing about the group cannot win it, so a group never falls back
+    field by field: what is shown is what one source actually said, together.
+    """
+    best: RecordFields = {}
+    best_key: tuple[int, tuple[int, float, int]] | None = None
+    for fields in by_record.values():
+        rows = [fields[field] for field in group if field in fields]
+        if not rows:
+            continue
+        if all(fields[field].value is None for field in identity if field in fields):
+            continue
+        key = (rank(fields), min(sort_key(row) for row in rows))
+        if best_key is None or key < best_key:
+            best, best_key = fields, key
+    return best
+
+
+def _website_rank(fields: RecordFields) -> int:
+    """Prefer a real site, then a site builder, then a social page, then nothing."""
+    row = fields.get("website_kind")
+    value = row.value if row is not None else None
+    return WEBSITE_KIND_RANK.get(value or WebsiteKind.none.value, len(WEBSITE_KIND_RANK))
+
+
+def _address_rank(fields: RecordFields) -> int:
+    """Prefer an address that reaches a street over one that only knows the town."""
+    for field in ("street_key", "address_line1"):
+        row = fields.get(field)
+        if row is not None and row.value is not None:
+            return 0
+    return 1
 
 
 def _apply(business: Business, field: str, value: str | None) -> None:

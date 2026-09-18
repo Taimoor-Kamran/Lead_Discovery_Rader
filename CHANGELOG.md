@@ -51,6 +51,12 @@ Format: `## [vX.Y.Z] - YYYY-MM-DD` followed by Added / Changed / Fixed.
 
 ### Fixed
 
+- **A merged business no longer mixes half of one record with half of another.**
+  Survivorship picked every field on its own, which let a Facebook page from one record
+  be shown beside a domain from another. `website`/`domain`/`website_kind` and the ten
+  address fields now each survive as one group taken whole from a single record — the web
+  group preferring a real site over a builder subdomain over a social page, the address
+  group preferring one that reaches a street.
 - **Swagger has an Authorize button.** The current-user dependency now declares an
   `HTTPBearer` scheme, so `openapi.json` carries it and protected routes reference it.
   `auto_error=False` keeps 401s in the project's own error envelope.
