@@ -26,6 +26,8 @@ EXPECTED = {
     "business_field_values",
     "match_candidates",
     "website_audits",
+    "ai_classifications",
+    "opportunities",
 }
 
 CHECK = (
