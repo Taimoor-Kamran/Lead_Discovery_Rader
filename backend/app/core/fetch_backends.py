@@ -198,15 +198,23 @@ def demo_sites_root() -> str:
 
 
 def demo_site_dir(host: str, *, root: str | None = None) -> str | None:
-    """The directory holding one demo host's files, or `None` when there is none."""
+    """The directory holding one demo host's files, or `None` when there is none.
+
+    `www.example.invalid` falls back to `example.invalid`, the way a real site serves both
+    names — a listing that spells the host with `www.` still reaches its fixture.
+    """
     base = root or demo_sites_root()
-    candidate = os.path.join(base, host.lower())
-    # `os.path.join` with a host containing `..` could otherwise walk out of the tree.
-    if os.path.commonpath([os.path.abspath(candidate), os.path.abspath(base)]) != os.path.abspath(
-        base
-    ):
-        return None
-    return candidate if os.path.isdir(candidate) else None
+    lowered = host.lower().rstrip(".")
+    for name in (lowered, lowered.removeprefix("www.")):
+        candidate = os.path.join(base, name)
+        # A host containing `..` could otherwise walk out of the tree.
+        if os.path.commonpath(
+            [os.path.abspath(candidate), os.path.abspath(base)]
+        ) != os.path.abspath(base):
+            continue
+        if os.path.isdir(candidate):
+            return candidate
+    return None
 
 
 class FixtureFetchBackend:

@@ -116,6 +116,10 @@ class RobotsDecision:
     status_code: int | None = None
     tls_valid: bool = True
     from_cache: bool = False
+    # Set when robots.txt could not be read at all ("connect", "timeout", ...). A host
+    # that does not connect is unreachable, which is a different thing to report than a
+    # site that asked us to stay away — the caller decides which it is.
+    error_kind: str | None = None
 
 
 # --- the guard, as pure functions so the tests can hit every rule ---------------------
@@ -320,7 +324,7 @@ class SafeFetcher:
 
     def __post_init__(self) -> None:
         if not self.backends:
-            self.backends = default_backends(allow_fixtures=self.settings.is_development)
+            self.backends = default_backends(allow_fixtures=self.settings.fixtures_allowed)
         if self.throttle is None:
             self.throttle = HostThrottle(
                 self.redis,
@@ -361,25 +365,33 @@ class SafeFetcher:
             status, body = cached
             return self._decide_robots(parts, robots_url, status, body, from_cache=True)
 
-        try:
-            response = self._request(robots_url, record=False)
-        except FetchError as exc:
-            if isinstance(exc, TlsVerificationError):
-                return RobotsDecision(
-                    allowed=False,
-                    reason=f"the certificate for {parts.hostname} could not be verified",
-                    robots_url=robots_url,
-                    tls_valid=False,
-                )
+        # Redirects are followed here too — a site that serves robots.txt from https, or
+        # from a canonical host, is not a site refusing us — and every hop is validated
+        # exactly as a page's would be.
+        outcome = self.fetch(robots_url, record=False)
+
+        if not outcome.tls_valid:
             return RobotsDecision(
                 allowed=False,
-                reason=f"robots.txt could not be read ({exc.kind}), so the site is left alone",
+                reason=f"the certificate for {parts.hostname} could not be verified",
                 robots_url=robots_url,
+                tls_valid=False,
+                error_kind=outcome.error_kind,
+            )
+        if outcome.error is not None or outcome.status_code is None:
+            return RobotsDecision(
+                allowed=False,
+                reason=(
+                    f"robots.txt could not be read ({outcome.error_kind}), so the site is "
+                    "left alone"
+                ),
+                robots_url=robots_url,
+                error_kind=outcome.error_kind,
             )
 
-        body = response.body.decode("utf-8", errors="replace")
-        self._cache_robots(origin, response.status_code, body)
-        return self._decide_robots(parts, robots_url, response.status_code, body)
+        body = outcome.body.decode("utf-8", errors="replace")
+        self._cache_robots(origin, outcome.status_code, body)
+        return self._decide_robots(parts, robots_url, outcome.status_code, body)
 
     def _decide_robots(
         self,
@@ -442,11 +454,15 @@ class SafeFetcher:
 
     # --- pages ------------------------------------------------------------------
 
-    def fetch(self, url: str) -> FetchOutcome:
+    def fetch(self, url: str, *, record: bool = True) -> FetchOutcome:
         """Fetch one page, following at most `AUDIT_MAX_REDIRECTS` validated hops.
 
         Raises `UnsafeUrlError` when the URL — or any hop it leads to — is one this
         system refuses to request. Every other failure comes back inside the outcome.
+
+        `record=False` keeps the request out of `self.requested`, which is reserved for
+        page requests: the robots check uses it, and the tests assert on it to prove a
+        disallowed site was never asked for its homepage.
         """
         start = normalize_url(url)
         current = start
@@ -464,7 +480,7 @@ class SafeFetcher:
                     error_kind="timeout",
                 )
             try:
-                response = self._request(current, read_timeout=remaining)
+                response = self._request(current, read_timeout=remaining, record=record)
             except TlsVerificationError as exc:
                 return FetchOutcome(
                     url=start,
@@ -524,11 +540,14 @@ class SafeFetcher:
         parts = split_safe_url(url)
         host = parts.hostname or ""
         backend = self._backend(host)
+        assert self.throttle is not None and self.concurrency is not None
         if backend.resolves_dns:
             self._validate_dns(host, port_of(parts), url)
+            # Politeness is owed to a real server. A fixture answered from disk has nobody
+            # to be polite to, which is what keeps a demo load and the test suite quick
+            # instead of sleeping five seconds between every page.
+            self.throttle.wait(host)
 
-        assert self.throttle is not None and self.concurrency is not None
-        self.throttle.wait(host)
         self.concurrency.acquire()
         if record:
             self.requested.append(url)

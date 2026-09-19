@@ -125,9 +125,10 @@ make down && make up && make migrate && make seed-admin
 make load-demo-data
 ```
 
-That stores the fixture as a discovery run and queues the resolution run that dedupes it.
-The command prints both run ids; watch the second with `GET /api/v1/jobs/{id}/status`
-until it reads `done`.
+That stores the fixture as a discovery run, resolves it, and then audits every resulting
+business's website — all in that one command, with no network call and no API key. It
+prints each run id and its counts. Pass `ARGS=--queue-only` to hand the resolution run to
+the worker instead and watch it with `GET /api/v1/jobs/{id}/status`.
 
 What you should then see:
 
@@ -155,6 +156,125 @@ fails the suite rather than quietly producing a different answer.
 source is registered **only** when `ENVIRONMENT` (or `APP_ENV`) is `local` or
 `development`, so fictional businesses cannot reach staging or production.
 
+### The demo websites
+
+`make load-demo-data` also runs the website audits, so it leaves you with 29 businesses
+*and* 28 audits. The demo businesses' domains have checked-in websites under
+`backend/app/demo/sites/<host>/`, and the audit fetcher answers from those files: **no
+request leaves the machine and no API key is involved.** Between them they cover a modern
+site with a booking widget, an http-only site with a 2016 copyright, WordPress with no
+meta description, Wix / Square / GoDaddy builder sites, a Shopify store, a `robots.txt`
+that disallows everything, a `robots.txt` that answers 503, an http→https redirect chain,
+a host that cannot connect, a JavaScript shell, a certificate that does not verify, and a
+PageSpeed quota error.
+
+```
+GET /api/v1/businesses?finding=no_online_booking
+GET /api/v1/businesses?audit_status=robots_blocked
+GET /api/v1/businesses/{id}/audits
+GET /api/v1/website-audits/{id}
+```
+
+`backend/app/demo/sites/expected_audits.json` records the status and finding codes every
+demo domain must produce, and `test_demo_audits.py` asserts them — so a change to a check
+or a threshold fails the suite rather than quietly producing a different answer.
+
+## How the website audit works
+
+Every business that has a website of its own gets a **deterministic, evidence-backed audit
+of its homepage**. Audits run automatically after each resolution run, and can be asked for
+by hand at any time. Nothing in the audit is an opinion: each finding carries the verbatim
+text it was read from and the URL it was read at, so a salesperson can open the page and
+point at it.
+
+```
+discovery -> resolution -> audit
+```
+
+One audit, in order:
+
+1. **What to fetch.** A business whose listing has no website, or only a social profile,
+   is audited with **zero network calls** — the finding is about the listing
+   (`no_website`, `social_profile_only`), not about a page.
+2. **robots.txt first**, fetched through the same guard as everything else and cached per
+   host for 24 hours. If it disallows us the homepage is **never requested** and the audit
+   ends as `robots_blocked`, with no findings about the site's content.
+3. **The homepage, once.** No crawling, no sitemap, no second page, no JavaScript. A
+   page that builds itself with JavaScript is flagged (`js_shell_suspected`) rather than
+   rendered, so nobody mistakes an empty shell for an empty website.
+4. **The deterministic checks**: reachability and the redirect chain, HTTPS and the
+   certificate, the mobile viewport, title, meta description, `h1`, LocalBusiness
+   structured data, favicon, phone/email/contact-form presence, booking and shop
+   signatures, linked social platforms, the tech stack and the copyright year.
+5. **PageSpeed Insights (mobile)** for the performance score, LCP, CLS, TBT and the CrUX
+   category. PageSpeed is a bonus, not a dependency: if it is out of quota or down, the
+   audit still finishes with `psi = null` and `checks.psi_error` saying why.
+6. **Findings.** Each gap becomes a coded finding with a severity, the service category it
+   points at (`web_design`, `seo`, `booking`, `performance`, `ecommerce`, `security`,
+   `web_presence`), a neutral message, and its evidence.
+
+Wording is enforced by a test over the whole catalogue: every message begins with "Audit
+found", "Audit could not", "PageSpeed" or "Listing shows", and may never contain "needs",
+"should", "bad", "terrible" or "outdated website". `Audit found no online booking or
+scheduling link on the homepage.` is a fact the owner can check; "needs a new website" is
+a sales pitch the data does not support.
+
+### Reading audits
+
+```
+GET  /businesses?finding=no_online_booking&finding=no_https   # AND, on the newest audit
+GET  /businesses?audit_status=robots_blocked
+GET  /businesses/{id}/audits                                  # history, newest first
+GET  /website-audits/{id}                                     # checks, findings, PSI, tech
+POST /businesses/{id}/audit                                    # a fresh audit now
+POST /jobs/{resolution_run_id}/audit                           # that run's businesses
+```
+
+Each item in `GET /businesses` carries a `latest_audit` of `{status, finding_codes,
+audited_at}`; `null` means never audited, which is not the same as an audit that found
+nothing. `page_text` on an audit — the visible text kept as input for the v0.5.0 AI step —
+is readable by `admin`, `reviewer` and `tech_admin` only; other roles see
+`page_text_hidden: true`.
+
+Retention: `make purge-expired` nulls `page_text` once `AUDIT_CONTENT_TTL_DAYS` (90) has
+passed. The checks, the findings and their evidence snippets are our own observations and
+stay. Full HTML is never stored — only a SHA-256 of it.
+
+## What the bot does and doesn't do
+
+The audit identifies itself as `LeadDiscoveryRadarBot/0.4 (+BOT_CONTACT)`. Set
+`BOT_CONTACT` in `.env` to a URL or an email address where a site owner who sees us in
+their logs can reach a human.
+
+**It does:**
+
+- read `robots.txt` first, obey it, and cache it for 24 hours;
+- fetch **one page** — the homepage the business's own listing gives — over `http` or
+  `https`, on port 80 or 443 only;
+- verify TLS certificates, always. A certificate that does not verify is reported as
+  `tls_invalid` and the request is **never** retried with verification off;
+- wait at least `AUDIT_HOST_THROTTLE_SECONDS` (5) between two requests to the same host,
+  and keep at most `AUDIT_MAX_CONCURRENCY` (4) fetches in flight across the whole system;
+- stop reading at `AUDIT_MAX_BYTES` (2 MB) and mark the result `truncated`;
+- refuse, before connecting, any URL that resolves to a private, loopback, link-local,
+  multicast, reserved, unspecified or CGNAT address — including via a redirect.
+
+**It does not:**
+
+- crawl. No second page, no sitemap, no link following beyond validated redirects;
+- run JavaScript, take screenshots, or store the HTML it read;
+- log in, submit a form, click anything, or interact with a site in any way;
+- touch social media. A social profile is *recorded* from the listing and from links on
+  the homepage; it is never fetched, scraped or read;
+- collect owner or personal contact details. Only the *presence* of a business phone
+  link, email link or contact form is recorded, plus one example of each — never a
+  harvested list;
+- send anything to anybody. This system has no outreach of any kind.
+
+If a site owner asks to be left out, add a `Disallow: /` for
+`LeadDiscoveryRadarBot` — or for `*` — and the next audit records `robots_blocked` and
+reads nothing.
+
 ## Resetting a password
 
 ```bash
@@ -178,6 +298,20 @@ NEW_PASSWORD='a-long-enough-passphrase' make reset-password EMAIL=you@example.co
 
 `make seed-admin` prints a generated password exactly once and says so. If you lose it,
 use the command above.
+
+## Recomputing businesses
+
+A business row holds no facts of its own: every value on it is the survivorship winner
+among the field values beneath it. So when the survivorship rules change, existing rows
+still show what the *old* rules decided, and nothing else would ever revisit them.
+
+```bash
+make recompute-businesses                                    # every business
+make recompute-businesses ARGS="--business-id <uuid>"        # just one
+```
+
+It is batched and idempotent, and prints `changed / unchanged` counts — a business that
+already agrees with the rules is left alone.
 
 ## Versioning
 

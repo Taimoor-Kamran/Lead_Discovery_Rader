@@ -159,6 +159,16 @@ class Settings(BaseSettings):
         return self.database_url
 
     @property
+    def fixtures_allowed(self) -> bool:
+        """Whether the offline fixture backends may answer at all.
+
+        Wider than `is_development`, which gates the demo *source*: `ci` is where the test
+        suite runs, and the whole point of the fixture backends is that the suite never
+        touches the network. Staging and production get the network backend only.
+        """
+        return self.environment in DEVELOPMENT_ENVIRONMENTS
+
+    @property
     def jwt_secret_is_strong(self) -> bool:
         return len(self.jwt_secret.get_secret_value().encode()) >= MIN_JWT_SECRET_BYTES
 
