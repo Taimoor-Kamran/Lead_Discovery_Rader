@@ -124,10 +124,11 @@ class PurgeResult:
     field_values: int = 0
     businesses_recomputed: int = 0
     audit_page_texts: int = 0
+    ai_classifications: int = 0
 
     @property
     def total(self) -> int:
-        return self.records + self.field_values + self.audit_page_texts
+        return self.records + self.field_values + self.audit_page_texts + self.ai_classifications
 
 
 def purge_expired(session: Session, *, now: datetime | None = None) -> PurgeResult:
@@ -155,8 +156,11 @@ def purge_expired(session: Session, *, now: datetime | None = None) -> PurgeResu
     from app.modules.audit_web.service import purge_expired_page_text
 
     audit_page_texts = purge_expired_page_text(session, now=moment)
+    from app.modules.opportunities.service import purge_expired_ai_content
 
-    if records or field_values or audit_page_texts:
+    ai_classifications = purge_expired_ai_content(session, now=moment)
+
+    if records or field_values or audit_page_texts or ai_classifications:
         logger.info(
             "purged expired content",
             extra={
@@ -164,6 +168,7 @@ def purge_expired(session: Session, *, now: datetime | None = None) -> PurgeResu
                 "field_values": field_values,
                 "businesses_recomputed": businesses,
                 "audit_page_texts": audit_page_texts,
+                "ai_classifications": ai_classifications,
             },
         )
     return PurgeResult(
@@ -171,6 +176,7 @@ def purge_expired(session: Session, *, now: datetime | None = None) -> PurgeResu
         field_values=field_values,
         businesses_recomputed=businesses,
         audit_page_texts=audit_page_texts,
+        ai_classifications=ai_classifications,
     )
 
 

@@ -17,6 +17,7 @@ from app.core.security import check_jwt_secret
 from app.modules.adapters import registry
 from app.modules.adapters.base import DiscoveryConfig
 from app.modules.adapters.google_places.adapter import SOURCE_NAME as GOOGLE_PLACES
+from app.modules.ai.client import Tier
 from app.modules.auth import service as auth_service
 from app.modules.auth.schemas import MIN_PASSWORD_LENGTH
 from app.modules.auth.service import ensure_admin
@@ -84,6 +85,10 @@ def purge_expired_command(argv: list[str]) -> int:
         f"Nulled the stored page text of {purged.audit_page_texts} expired website audit(s); "
         "their checks, findings and evidence were kept."
     )
+    print(
+        f"Nulled the raw model output and summary of {purged.ai_classifications} expired AI "
+        "classification(s); their validated opportunities and rejected claims were kept."
+    )
     return 0
 
 
@@ -122,7 +127,7 @@ def recompute_businesses(argv: list[str]) -> int:
 
 
 def load_demo_data_command(argv: list[str]) -> int:
-    """Load the checked-in demo fixture and run it through resolution and the audits.
+    """Load the checked-in demo fixture and run it through resolution, audits and scoring.
 
     Everything it needs is checked in: the demo websites are answered from
     `app/demo/sites`, so no request leaves the machine and no API key is involved.
@@ -174,7 +179,14 @@ def load_demo_data_command(argv: list[str]) -> int:
     status = pipeline.audit_status.value if pipeline.audit_status else "unknown"
     print(f"Audit run:      {pipeline.audit_run_id} ({status})")
     print(f"  {_counts(pipeline.audit_summary)}")
-    print("Now try GET /api/v1/businesses?finding=no_online_booking.")
+    if pipeline.classification_run_id is None:
+        print("No classification run was queued. Check the worker logs.")
+        return 1
+    status = pipeline.classification_status.value if pipeline.classification_status else "unknown"
+    print(f"Classification: {pipeline.classification_run_id} ({status})")
+    print(f"  {_counts(pipeline.classification_summary)}")
+    print(f"  AI provider: {settings.resolved_ai_provider} (no network call was made)")
+    print("Now try GET /api/v1/opportunities.")
     return 0
 
 
@@ -292,12 +304,119 @@ def places_smoke(argv: list[str]) -> int:
     return 0
 
 
+def ai_smoke(argv: list[str]) -> int:
+    """Make one real OpenAI call for one demo business and print what came back. Stores nothing.
+
+    The second of only two commands that talk to a live external API, and a human has to
+    run it. It spends the client's money — set the monthly limit in the OpenAI dashboard
+    first. The session is rolled back at the end: no classification row, no opportunity,
+    no api_calls row and no budget counter is written.
+    """
+    parser = argparse.ArgumentParser(prog="python -m app.cli ai-smoke")
+    parser.add_argument("--domain", help="Classify the business with this domain (default: any)")
+    parser.add_argument("--escalation", action="store_true", help="Use the escalation model")
+    args = parser.parse_args(argv)
+
+    settings = get_settings()
+    if not settings.openai_api_key.get_secret_value():
+        print("OPENAI_API_KEY is not set. Put the client's key in .env first.")
+        return 2
+    tier: Tier = "escalation" if args.escalation else "triage"
+    model = settings.ai_escalation_model if args.escalation else settings.ai_triage_model
+    if not model:
+        print(
+            "AI_TRIAGE_MODEL / AI_ESCALATION_MODEL are not set. Copy exact model names into .env."
+        )
+        return 2
+
+    from sqlalchemy import select
+
+    from app.modules.ai import guardrails
+    from app.modules.ai.budget import estimate_cost
+    from app.modules.ai.client import LLMError, LLMRequest
+    from app.modules.ai.openai_client import OpenAIClient
+    from app.modules.ai.prompt import build_input, render
+    from app.modules.ai.schema import SCHEMA_NAME, SchemaDriftError, json_schema, parse_output
+    from app.modules.audit_web.models import AuditStatus, WebsiteAudit
+    from app.modules.businesses.models import Business
+    from app.modules.opportunities.catalogue import service_keys
+
+    with session_scope() as session:
+        stmt = (
+            select(Business, WebsiteAudit)
+            .join(WebsiteAudit, WebsiteAudit.business_id == Business.id)
+            .where(WebsiteAudit.status == AuditStatus.done, WebsiteAudit.page_text.is_not(None))
+            .order_by(WebsiteAudit.created_at.desc())
+        )
+        if args.domain:
+            stmt = stmt.where(Business.domain == args.domain.strip().lower())
+        row = session.execute(stmt.limit(1)).first()
+        if row is None:
+            print("No audited business with page text was found. Run `make load-demo-data` first.")
+            return 2
+        business, audit = row
+        classification_input = build_input(business, audit, settings=settings)
+        system, user = render(classification_input)
+        context = guardrails.GuardrailContext.build(
+            corpus=classification_input.corpus(),
+            finding_codes=classification_input.finding_codes,
+            urls=classification_input.urls(),
+            industries=classification_input.industries,
+            intent_patterns=settings.ai_explicit_intent_patterns,
+            page_url=classification_input.page_url,
+        )
+        # No meter and no limiter: this call is deliberately not recorded anywhere.
+        client = OpenAIClient(
+            api_key=settings.openai_api_key.get_secret_value(),
+            timeout=settings.ai_timeout_seconds,
+            max_retries=settings.ai_max_retries,
+        )
+        request = LLMRequest(
+            model=model,
+            tier=tier,
+            system=system,
+            user=user,
+            schema_name=SCHEMA_NAME,
+            json_schema=json_schema(service_keys()),
+            fixture_key=business.domain,
+        )
+        print(f"Classifying {business.display_name} ({business.domain}) with {model} ...")
+        try:
+            result = client.complete(request)
+        except LLMError as exc:
+            print(f"The call failed: {exc}")
+            return 1
+        finally:
+            client.close()
+            session.rollback()
+
+    cost = estimate_cost(settings, tier, tokens_in=result.tokens_in, tokens_out=result.tokens_out)
+    print(f"Tokens: {result.tokens_in} in, {result.tokens_out} out; {result.latency_ms} ms")
+    print(f"Estimated cost: {'$' + str(cost) if cost is not None else 'unknown (prices not set)'}")
+    try:
+        parsed = parse_output(result.text)
+    except SchemaDriftError as exc:
+        print(f"The answer did not match the schema ({exc.reason}). Raw text:")
+        print(result.text[:4000])
+        return 1
+    checked = guardrails.apply(parsed, context)
+    print("Validated output (after guardrails):")
+    print(checked.output.model_dump_json(indent=2))
+    if checked.rejected_claims:
+        print("Rejected claims:")
+        for claim in checked.rejected_claims:
+            print(f"  - {claim}")
+    print("Nothing was stored.")
+    return 0
+
+
 COMMANDS: dict[str, Callable[[list[str]], int]] = {
     "seed-admin": seed_admin,
     "sync-sources": sync_sources,
     "purge-expired": purge_expired_command,
     "recompute-businesses": recompute_businesses,
     "places-smoke": places_smoke,
+    "ai-smoke": ai_smoke,
     "load-demo-data": load_demo_data_command,
     "reset-password": reset_password,
 }

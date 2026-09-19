@@ -10,7 +10,7 @@ PNPM := cd $(FRONTEND) && pnpm
 
 .DEFAULT_GOAL := help
 .PHONY: help env install up down logs ps migrate revision seed-admin \
-        sync-sources purge-expired recompute-businesses places-smoke load-demo-data \
+        sync-sources purge-expired recompute-businesses places-smoke ai-smoke load-demo-data \
         reset-password \
         lint format typecheck test test-unit check check-backend check-frontend \
         frontend-install frontend-lint frontend-typecheck frontend-test clean
@@ -57,8 +57,8 @@ sync-sources: env ## Upsert one `sources` row per registered adapter (idempotent
 purge-expired: env ## Drop stored source content past its retention window (keeps IDs)
 	$(COMPOSE) run --rm api python -m app.cli purge-expired
 
-# Runs the whole pipeline: discovery, resolution and the website audits. No network, no key.
-load-demo-data: env ## Load the fictional demo businesses, resolve and audit them (development only)
+# Runs the whole pipeline: discovery, resolution, website audits and scoring. No network, no key.
+load-demo-data: env ## Load the fictional demo businesses, resolve, audit and score them (development only)
 	$(COMPOSE) run --rm api python -m app.cli load-demo-data $(ARGS)
 
 # Run after the survivorship rules change: existing rows were computed by the old ones.
@@ -73,6 +73,10 @@ reset-password: env ## Reset one user's password: make reset-password EMAIL=you@
 # Costs real money and needs GOOGLE_PLACES_API_KEY. Set a budget alert first.
 places-smoke: env ## One live Google Places call: make places-smoke ARGS="--industry plumber --city Austin --state TX"
 	$(COMPOSE) run --rm api python -m app.cli places-smoke $(or $(ARGS),--industry plumber --city Austin --state TX --max 5)
+
+# Costs real money and needs OPENAI_API_KEY + the model names. Set a monthly limit first.
+ai-smoke: env ## One live OpenAI call on one demo business, stores nothing: make ai-smoke ARGS="--domain bartoncreekplumbing.invalid"
+	$(COMPOSE) run --rm api python -m app.cli ai-smoke $(ARGS)
 
 lint: ## Lint and format-check the backend
 	$(UV) run ruff check .

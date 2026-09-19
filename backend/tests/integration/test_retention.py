@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.modules.adapters import registry
 from app.modules.adapters.base import RawDoc
 from app.modules.adapters.google_places.adapter import GooglePlacesAdapter
+from app.modules.ai.models import AIClassification, ClassificationStatus
 from app.modules.audit_web.models import AuditStatus, WebsiteAudit
 from app.modules.auth.models import User
 from app.modules.businesses.models import Business, BusinessFieldValue
@@ -482,3 +483,51 @@ def test_purging_twice_reports_nothing_the_second_time(db: Session) -> None:
 
     assert purge_expired(db, now=NOW).audit_page_texts == 1
     assert purge_expired(db, now=NOW).audit_page_texts == 0
+
+
+# --- v0.5.0: AI classification content ------------------------------------------------
+
+
+def classification_row(
+    db: Session, business_id: uuid.UUID, audit_id: uuid.UUID, *, expires: datetime | None
+) -> "AIClassification":
+    row = AIClassification(
+        business_id=business_id,
+        website_audit_id=audit_id,
+        model="fake-triage",
+        prompt_version="classify-1",
+        input_hash="abc",
+        status=ClassificationStatus.ok,
+        output={"business_summary": "A plumber.", "buying_intent": "none_detected"},
+        raw_output='{"business_summary": "A plumber."}',
+        rejected_claims=[{"rule": "quote_not_in_input"}],
+        content_expires_at=expires,
+    )
+    db.add(row)
+    db.flush()
+    return row
+
+
+def test_purge_nulls_the_raw_output_and_summary_of_an_expired_classification(
+    db: Session,
+) -> None:
+    business = bare_business(db, "AI Retention Plumbing")
+    audit = audit_row(db, business=business, expires_at=None)
+    expired = classification_row(db, business.id, audit.id, expires=NOW - timedelta(days=1))
+    fresh = classification_row(db, business.id, audit.id, expires=NOW + timedelta(days=30))
+    db.commit()
+
+    purged = purge_expired(db, now=NOW)
+    db.commit()
+    db.refresh(expired)
+    db.refresh(fresh)
+
+    assert purged.ai_classifications == 1
+    assert expired.raw_output is None
+    assert expired.output is not None and expired.output["business_summary"] is None
+    assert expired.output["buying_intent"] == "none_detected", "the validated claims stay"
+    assert expired.rejected_claims == [{"rule": "quote_not_in_input"}]
+    assert expired.purged_at == NOW
+    assert fresh.raw_output is not None
+    assert fresh.output is not None and fresh.output["business_summary"] == "A plumber."
+    assert purge_expired(db, now=NOW).ai_classifications == 0, "not reported twice"
