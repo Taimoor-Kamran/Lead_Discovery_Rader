@@ -36,6 +36,8 @@ from app.modules.audit_web.fingerprints import (
 )
 
 EVIDENCE_MAX_CHARS = 300
+# What `tls_valid` says about a page that was never served over https.
+NOT_APPLICABLE_OVER_HTTP = "not applicable: served over http"
 # The earliest copyright year worth believing; anything older is a typo or a date in prose.
 EARLIEST_COPYRIGHT_YEAR = 1995
 JS_SHELL_TEXT_CHARS = 200
@@ -99,6 +101,8 @@ def value_of(checks: Checks, key: str) -> Any:
 def fetch_checks(outcome: FetchOutcome) -> Checks:
     """Everything knowable without parsing: reachability, the URL chain, HTTPS and TLS."""
     final_url = outcome.final_url or outcome.url
+    scheme = urlsplit(final_url).scheme.lower()
+    over_https = scheme == "https"
     checks: Checks = {
         "reachable": CheckResult(
             outcome.reachable,
@@ -128,12 +132,19 @@ def fetch_checks(outcome: FetchOutcome) -> Checks:
             ),
             evidence_url=final_url,
         ),
+        # There is no certificate to judge on a page served over plain http, so the
+        # answer is `None` rather than `True`: saying a certificate verified when none was
+        # ever presented would be inventing the one fact this check exists to establish.
         "tls_valid": CheckResult(
-            outcome.tls_valid,
+            outcome.tls_valid if over_https else None,
             evidence_text=(
-                f"The certificate for {final_url} verified"
-                if outcome.tls_valid
-                else f"The certificate for {final_url} did not verify: {outcome.error}"
+                NOT_APPLICABLE_OVER_HTTP
+                if not over_https
+                else (
+                    f"The certificate for {final_url} verified"
+                    if outcome.tls_valid
+                    else f"The certificate for {final_url} did not verify: {outcome.error}"
+                )
             ),
             evidence_url=final_url,
         ),
@@ -162,15 +173,14 @@ def fetch_checks(outcome: FetchOutcome) -> Checks:
         ),
     }
 
-    scheme = urlsplit(final_url).scheme.lower()
     started_http = urlsplit(outcome.url).scheme.lower() == "http"
     checks["https"] = CheckResult(
-        scheme == "https" if outcome.reachable or outcome.error_kind == "tls" else None,
+        over_https if outcome.reachable or outcome.error_kind == "tls" else None,
         evidence_text=f"The final URL is {final_url}",
         evidence_url=final_url,
     )
     checks["http_redirects_to_https"] = CheckResult(
-        (scheme == "https") if started_http and outcome.reachable else None,
+        over_https if started_http and outcome.reachable else None,
         evidence_text=(
             f"{outcome.url} ended on {final_url}" if started_http and outcome.reachable else None
         ),
