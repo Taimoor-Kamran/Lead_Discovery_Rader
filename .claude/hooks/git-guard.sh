@@ -12,6 +12,10 @@ echo "$CMD" | grep -qE '(^|[;&|[:space:]])git[[:space:]]+rebase' && deny "git re
 echo "$CMD" | grep -qE 'git[[:space:]]+reset[[:space:]].*--hard'  && deny "git reset --hard"
 echo "$CMD" | grep -qE 'git[[:space:]]+branch[[:space:]].*-D'     && deny "git branch -D"
 echo "$CMD" | grep -qE 'git[[:space:]]+(checkout|switch)[[:space:]]+(-[a-zA-Z]+[[:space:]]+)?main([[:space:];&|]|$)' && deny "switching to main"
+echo "$CMD" | grep -qE 'git[[:space:]]+checkout[[:space:]]+(--[[:space:]]+)?\.([[:space:]]|$)' && deny "git checkout . (discards uncommitted work)"
+echo "$CMD" | grep -qE 'git[[:space:]]+restore[[:space:]]'              && deny "git restore (discards uncommitted work)"
+echo "$CMD" | grep -qE 'git[[:space:]]+clean[[:space:]].*-[a-zA-Z]*f'   && deny "git clean -f"
+echo "$CMD" | grep -qE 'git[[:space:]]+stash[[:space:]]+(drop|clear)'  && deny "git stash drop/clear"
 if echo "$CMD" | grep -qE 'git[[:space:]]+commit'; then
   BR="$(git -C "${CLAUDE_PROJECT_DIR:-.}" branch --show-current 2>/dev/null)"
   [[ "$BR" == "main" ]] && deny "committing on main"
