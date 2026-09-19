@@ -1,0 +1,9 @@
+{
+  "note": "robots.txt answers 503, which RFC 9309 says to treat as disallowed.",
+  "paths": {
+    "/robots.txt": {
+      "status": 503,
+      "body": "Service Unavailable"
+    }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "note": "The listing gives the http URL; the site redirects to https.",
+  "paths": {
+    "http:/": {
+      "status": 301,
+      "headers": {
+        "location": "https://travisheightsplumbers.invalid/"
+      }
+    },
+    "http:/robots.txt": {
+      "status": 301,
+      "headers": {
+        "location": "https://travisheightsplumbers.invalid/robots.txt"
+      }
+    }
+  }
+}

@@ -1,0 +1,5 @@
+User-agent: *
+Disallow: /wp-admin/
+Allow: /
+
+Sitemap: https://unknownstatus.invalid/sitemap.xml

@@ -210,7 +210,7 @@
         }
       ],
       "nationalPhoneNumber": "(512) 555-0102",
-      "websiteUri": "https://bartoncreekplumbing.invalid/",
+      "websiteUri": "http://bartoncreekplumbing.invalid/",
       "businessStatus": "OPERATIONAL"
     },
     {
@@ -278,7 +278,7 @@
         }
       ],
       "nationalPhoneNumber": "+1 512 555 0102",
-      "websiteUri": "https://bartoncreekplumbing.invalid/",
+      "websiteUri": "http://bartoncreekplumbing.invalid/",
       "businessStatus": "OPERATIONAL"
     },
     {
@@ -889,7 +889,7 @@
         }
       ],
       "nationalPhoneNumber": "(512) 555-0203",
-      "websiteUri": "https://travisheightsplumbers.invalid/",
+      "websiteUri": "http://travisheightsplumbers.invalid/",
       "businessStatus": "OPERATIONAL"
     },
     {

@@ -1,0 +1,21 @@
+{
+  "id": "demo",
+  "lighthouseResult": {
+    "categories": {
+      "performance": {
+        "score": 0.68
+      }
+    },
+    "audits": {
+      "largest-contentful-paint": {
+        "numericValue": 2384
+      },
+      "cumulative-layout-shift": {
+        "numericValue": 0.086
+      },
+      "total-blocking-time": {
+        "numericValue": 200
+      }
+    }
+  }
+}

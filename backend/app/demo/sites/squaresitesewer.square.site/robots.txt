@@ -1,0 +1,5 @@
+User-agent: *
+Disallow: /wp-admin/
+Allow: /
+
+Sitemap: https://squaresitesewer.square.site/sitemap.xml

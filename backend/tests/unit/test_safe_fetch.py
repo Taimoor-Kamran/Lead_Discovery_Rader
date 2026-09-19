@@ -248,6 +248,13 @@ def test_redirects_stop_at_the_configured_maximum() -> None:
 # --- caps, content types and TLS ------------------------------------------------------
 
 
+def test_the_default_cap_is_two_megabytes() -> None:
+    """The number the spec fixes, so a change to it is a deliberate one."""
+    from pydantic import SecretStr
+
+    assert Settings(jwt_secret=SecretStr("x" * 32)).audit_max_bytes == 2_000_000
+
+
 def test_a_body_over_the_cap_is_cut_off_and_marked_truncated() -> None:
     backend = RecordingBackend(default=html("x" * 100, truncated=True))
     fetcher = build(backend)
