@@ -9,8 +9,11 @@ import jwt
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatchError
 
-from app.core.config import get_settings
+from app.core.config import MIN_JWT_SECRET_BYTES, Settings, get_settings
 from app.core.errors import AuthenticationError
+from app.core.logging import get_logger
+
+logger = get_logger("app.security")
 
 _hasher = PasswordHasher()
 
@@ -20,6 +23,41 @@ TokenType = Literal["access", "refresh"]
 # A token minted before `token_version` existed is read as version 1, which is what
 # every user starts at — so adding the claim did not log anybody out.
 DEFAULT_TOKEN_VERSION = 1
+
+WEAK_JWT_SECRET_MESSAGE = (
+    "JWT_SECRET is only {actual} bytes long. HS256 needs at least "
+    f"{MIN_JWT_SECRET_BYTES}"
+    " bytes (RFC 7518 §3.2). Generate one with: openssl rand -hex 32"
+)
+
+
+class InsecureConfigurationError(RuntimeError):
+    """Raised at startup when a setting is too weak for the environment it runs in.
+
+    It stops the process on purpose: an API that signs tokens with a guessable secret is
+    worse than an API that does not start.
+    """
+
+
+def check_jwt_secret(settings: Settings | None = None) -> None:
+    """Refuse to start on a weak JWT secret outside development; warn inside it.
+
+    Called from every entrypoint (the API factory, the worker, the CLI) so there is no
+    way into the system that skips the check. The secret itself is never in the message.
+    """
+    config = settings or get_settings()
+    if config.jwt_secret_is_strong:
+        return
+    actual = len(config.jwt_secret.get_secret_value().encode())
+    message = WEAK_JWT_SECRET_MESSAGE.format(actual=actual)
+    if config.requires_strong_jwt_secret:
+        raise InsecureConfigurationError(
+            f"{message} Refusing to start in environment '{config.environment}'."
+        )
+    logger.warning(
+        "the JWT secret is shorter than the recommended minimum",
+        extra={"jwt_secret_bytes": actual, "minimum_bytes": MIN_JWT_SECRET_BYTES},
+    )
 
 
 @dataclass(frozen=True)

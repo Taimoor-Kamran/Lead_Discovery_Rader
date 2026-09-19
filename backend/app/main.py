@@ -15,6 +15,7 @@ from app.core.errors import AppError, ErrorBody, ErrorEnvelope
 from app.core.health import health_router
 from app.core.logging import configure_logging, get_logger
 from app.core.middleware import RequestIdMiddleware, get_request_id
+from app.core.security import check_jwt_secret
 from app.modules.auth.router import auth_router, users_router
 from app.modules.businesses.router import businesses_router
 from app.modules.discovery.router import discovered_records_router, job_records_router
@@ -50,10 +51,11 @@ def _envelope(
 def create_app() -> FastAPI:
     configure_logging()
     settings = get_settings()
+    check_jwt_secret(settings)
 
     app = FastAPI(
         title="Lead Discovery Radar API",
-        version="0.3.0",
+        version="0.4.0",
         docs_url="/docs",
         openapi_url="/openapi.json",
     )

@@ -13,6 +13,7 @@ from app.core.config import get_settings
 from app.core.db import session_scope
 from app.core.errors import NotFoundError, ValidationFailedError
 from app.core.logging import configure_logging, get_logger
+from app.core.security import check_jwt_secret
 from app.modules.adapters import registry
 from app.modules.adapters.base import DiscoveryConfig
 from app.modules.adapters.google_places.adapter import SOURCE_NAME as GOOGLE_PLACES
@@ -233,6 +234,7 @@ COMMANDS: dict[str, Callable[[list[str]], int]] = {
 
 def main(argv: list[str] | None = None) -> int:
     configure_logging()
+    check_jwt_secret()
     args = list(sys.argv[1:] if argv is None else argv)
     if not args or args[0] not in COMMANDS:
         print(f"usage: python -m app.cli [{' | '.join(COMMANDS)}] [options]")

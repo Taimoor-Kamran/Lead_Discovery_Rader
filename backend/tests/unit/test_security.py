@@ -1,14 +1,19 @@
 """Password hashing and JWT behaviour."""
 
+import logging
+import secrets
 import uuid
 from datetime import UTC, datetime, timedelta
 
 import jwt
 import pytest
+from pydantic import SecretStr
 
-from app.core.config import get_settings
+from app.core.config import Settings, get_settings
 from app.core.errors import AuthenticationError
 from app.core.security import (
+    InsecureConfigurationError,
+    check_jwt_secret,
     create_access_token,
     create_refresh_token,
     decode_token,
@@ -78,9 +83,39 @@ def test_token_signed_with_another_secret_is_rejected() -> None:
             "type": "access",
             "exp": int((datetime.now(UTC) + timedelta(minutes=5)).timestamp()),
         },
-        "a-different-secret",
+        # At least 32 bytes: PyJWT warns about a shorter HMAC key, and `make check`
+        # must stay free of warnings that are really about the test, not the code.
+        "a-different-secret-of-at-least-32-bytes",
         algorithm="HS256",
     )
     with pytest.raises(AuthenticationError) as exc:
         decode_token(token, "access")
     assert exc.value.code == "token_invalid"
+
+
+def test_a_weak_jwt_secret_only_warns_in_development(caplog: pytest.LogCaptureFixture) -> None:
+    settings = Settings(environment="development", jwt_secret=SecretStr("too-short"))
+
+    with caplog.at_level(logging.WARNING, logger="app.security"):
+        check_jwt_secret(settings)
+
+    assert "shorter than the recommended minimum" in caplog.text
+
+
+def test_a_weak_jwt_secret_refuses_to_start_in_production() -> None:
+    settings = Settings(environment="production", jwt_secret=SecretStr("0123456789abcdef"))
+
+    with pytest.raises(InsecureConfigurationError) as exc:
+        check_jwt_secret(settings)
+
+    message = str(exc.value)
+    assert "16 bytes" in message
+    assert "openssl rand -hex 32" in message
+    assert "0123456789abcdef" not in message, "the secret itself is never in the message"
+
+
+def test_a_strong_jwt_secret_starts_anywhere() -> None:
+    for environment in ("development", "staging", "production"):
+        check_jwt_secret(
+            Settings(environment=environment, jwt_secret=SecretStr(secrets.token_hex(32)))
+        )
