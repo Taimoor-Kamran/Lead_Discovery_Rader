@@ -59,6 +59,13 @@ PRESENCE_CHECKS = (
 )
 
 
+DEMO_HOSTS = sorted(
+    path.name
+    for path in pathlib.Path(demo_sites_root()).iterdir()
+    if (path / "index.html").is_file()
+)
+
+
 def demo_page(host: str) -> str:
     return (pathlib.Path(demo_sites_root()) / host / "index.html").read_text(encoding="utf-8")
 
@@ -162,3 +169,25 @@ def test_a_page_that_was_never_parsed_keeps_null() -> None:
     assert value_of(checks, "parsed") is False
     for check in PRESENCE_CHECKS:
         assert check not in checks, "a page we could not parse produces no content checks"
+
+
+# --- 3. evidence a person can read ------------------------------------------------------
+
+
+def test_the_copyright_evidence_is_the_visible_line_not_a_slice_of_html(
+    barton_creek: Checks,
+) -> None:
+    check = barton_creek["copyright_year"]
+
+    assert check.value == 2016
+    assert check.evidence_text == "© 2016 Barton Creek Plumbing LLC. All rights reserved."
+
+
+@pytest.mark.parametrize("host", DEMO_HOSTS)
+def test_no_demo_homepage_produces_evidence_cut_through_a_tag(host: str) -> None:
+    """Across every demo homepage: no snippet closes a tag it never opened, or vice versa."""
+    for key, check in audited(host, f"https://{host}/").items():
+        evidence = check.evidence_text or ""
+        assert evidence.count("<") == evidence.count(">"), (
+            f"{host}: the {key} evidence is cut through a tag: {evidence!r}"
+        )

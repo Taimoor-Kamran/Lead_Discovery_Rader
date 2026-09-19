@@ -5,8 +5,9 @@ table, not a new code path, which is the only way a signature list stays maintai
 and it means one test can walk every signature and prove each one is actually matched.
 
 A pattern is a lowercase substring looked for in the raw HTML. Substrings rather than
-regexes on purpose: they cannot backtrack, they are readable by whoever adds the next
-one, and the evidence we store is simply the text around the hit.
+regexes on purpose: they cannot backtrack, they are readable by whoever adds the next one,
+and the evidence we store is verbatim: the whole tag the hit sits in (see `snippet_around`),
+never a window cut blind through the middle of one.
 """
 
 import re
@@ -15,6 +16,8 @@ from dataclasses import dataclass
 
 # How much of the page around a hit is kept as evidence.
 EVIDENCE_WINDOW = 120
+# The most markup one hit may cite, for the rare signature that sits inside a huge tag.
+EVIDENCE_MAX_SNIPPET = 300
 
 
 @dataclass(frozen=True)
@@ -211,10 +214,59 @@ def find_signatures(haystack: str, signatures: Iterable[Signature]) -> list[Sign
 
 
 def snippet_around(haystack: str, position: int, length: int, window: int = EVIDENCE_WINDOW) -> str:
-    """The verbatim text around a hit, for the evidence field. Never invented."""
+    """The verbatim markup around a hit, never cut through the middle of a tag.
+
+    A signature is matched in the HTML rather than in what a reader sees, so this evidence
+    is markup by nature — `cdn.shopify.com` appears in a `src`, never in a sentence. What
+    it must not be is a *fragment*: a window cut blind lands mid-tag and reads as garbage
+    (`r" content="wordpress 6.5.2">`). So when the hit sits inside a tag, which is where
+    almost every signature lives, the whole tag is the evidence; when it sits in the page's
+    text the window is trimmed back to whole words. Either way nothing is invented, and a
+    person can recognise what they are being shown.
+    """
+    enclosing = enclosing_tag(haystack, position, position + length)
+    if enclosing is not None:
+        start, end = enclosing
+        return " ".join(haystack[start:end].split())[:EVIDENCE_MAX_SNIPPET]
     start = max(position - window // 2, 0)
     end = min(position + length + window // 2, len(haystack))
-    return " ".join(haystack[start:end].split())
+    return trim_to_words(haystack, start, end)
+
+
+def enclosing_tag(haystack: str, start: int, end: int) -> tuple[int, int] | None:
+    """The bounds of the one tag that contains `haystack[start:end]`, or `None` for text."""
+    opened = haystack.rfind("<", 0, start + 1)
+    if opened < 0:
+        return None
+    closed = haystack.find(">", opened)
+    # A `>` before the hit ends means the hit is not inside this tag but after it.
+    if closed < 0 or closed < end - 1:
+        return None
+    return opened, closed + 1
+
+
+def trim_to_words(text: str, start: int, end: int, *, trim_start: bool = True) -> str:
+    """`text[start:end]`, pulled in to whole-word boundaries, whitespace collapsed.
+
+    A snippet is read by a person, so it may not begin or end halfway through a word.
+    `trim_start=False` is for a cut that starts somewhere deliberate — a copyright mark,
+    say — where the first characters are the point of the snippet.
+    """
+    words = text[start:end].split()
+    if words and trim_start and start > 0 and not text[start - 1].isspace():
+        words = words[1:]
+    if words and end < len(text) and not text[end].isspace():
+        words = words[:-1]
+    return " ".join(words)
+
+
+def snippet_forward(text: str, position: int, limit: int) -> str:
+    """The text from `position` on, cut at `limit` and trimmed to a whole word.
+
+    Used where the interesting thing is the start of the snippet and what follows it, such
+    as the line a copyright notice is printed on.
+    """
+    return trim_to_words(text, position, min(position + limit, len(text)), trim_start=False)
 
 
 def booking_text_match(text: str) -> str | None:

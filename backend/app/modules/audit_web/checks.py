@@ -37,7 +37,7 @@ from app.modules.audit_web.fingerprints import (
     find_signatures,
     generator_label,
     is_local_business_type,
-    snippet_around,
+    snippet_forward,
 )
 
 EVIDENCE_MAX_CHARS = 300
@@ -45,6 +45,8 @@ EVIDENCE_MAX_CHARS = 300
 NOT_APPLICABLE_OVER_HTTP = "not applicable: served over http"
 # The earliest copyright year worth believing; anything older is a typo or a date in prose.
 EARLIEST_COPYRIGHT_YEAR = 1995
+# How much of the line a copyright notice sits on is kept as its evidence.
+COPYRIGHT_EVIDENCE_CHARS = 160
 JS_SHELL_TEXT_CHARS = 200
 JS_SHELL_SCRIPT_TAGS = 5
 CONTACT_INPUT_HINTS = ("email", "e-mail", "mail", "phone", "tel", "mobile")
@@ -223,7 +225,7 @@ def analyse_html(
     checks["social_links"] = _social_links(soup, url)
     checks["structured_data"] = _structured_data(soup, url)
     checks["tech_stack"] = _tech_stack(soup, lowered, url)
-    checks["copyright_year"] = _copyright_year(outcome.text, url, moment)
+    checks["copyright_year"] = _copyright_year(text, url, moment)
     checks["js_shell_suspected"] = _js_shell(soup, url, text)
     stored = text[:page_text_limit] or None if page_text_limit else None
     return checks, stored
@@ -430,14 +432,21 @@ def _tech_stack(soup: BeautifulSoup, lowered: str, url: str) -> CheckResult:
     )
 
 
-def _copyright_year(html: str, url: str, now: datetime) -> CheckResult:
-    """The highest believable year printed next to a copyright mark."""
+def _copyright_year(text: str, url: str, now: datetime) -> CheckResult:
+    """The highest believable year printed next to a copyright mark, and the line it is on.
+
+    Read from the page's **visible text**, not its HTML. A copyright notice is something a
+    visitor reads, so cutting a window out of the markup produced evidence that began and
+    ended mid-tag — true, and unreadable. Taken from the text it reads
+    "© 2016 Barton Creek Plumbing LLC. All rights reserved.", which is what is actually
+    printed at the foot of the page.
+    """
     years: list[tuple[int, str]] = []
     for pattern in (COPYRIGHT_RANGE_PATTERN, COPYRIGHT_PATTERN):
-        for match in pattern.finditer(html):
+        for match in pattern.finditer(text):
             year = int(match.group(1))
             if EARLIEST_COPYRIGHT_YEAR <= year <= now.year:
-                years.append((year, snippet_around(html, match.start(), len(match.group(0)))))
+                years.append((year, snippet_forward(text, match.start(), COPYRIGHT_EVIDENCE_CHARS)))
     if not years:
         return CheckResult(
             False, evidence_text="No copyright year on the homepage", evidence_url=url
