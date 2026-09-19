@@ -114,6 +114,53 @@ class Settings(BaseSettings):
         ]
     )
 
+    # --- AI classification (v0.5.0) ---
+    # openai | fake | disabled. Unset → resolved from the environment and the key: see
+    # `resolved_ai_provider`. The fake provider answers from `app/demo/ai/` and never
+    # leaves the machine.
+    ai_provider: Literal["openai", "fake", "disabled"] | None = None
+    openai_api_key: SecretStr = SecretStr("")
+    # Exact API model names from OpenAI's current list. Left empty, the fake provider
+    # uses placeholder names and the real one refuses to start.
+    ai_triage_model: str = ""
+    ai_escalation_model: str = ""
+    # Per-million-token prices, copied from the pricing page. Only our cost estimate uses
+    # them; missing prices record `est_cost_usd = null` and the budget counts calls.
+    ai_triage_price_in_per_m: float | None = None
+    ai_triage_price_out_per_m: float | None = None
+    ai_escalation_price_in_per_m: float | None = None
+    ai_escalation_price_out_per_m: float | None = None
+    ai_escalation_enabled: bool = True
+    ai_daily_budget_usd: float = 2.0
+    ai_max_calls_per_run: int = 200
+    # The call-count guard behind the daily budget, and what the `openai` source row is
+    # rate limited to. Also the only daily guard when prices are not configured.
+    ai_daily_call_cap: int = 500
+    ai_rps: float = 2.0
+    ai_page_text_max_chars: int = 8_000
+    ai_timeout_seconds: float = 60.0
+    ai_max_retries: int = 2
+    ai_raw_output_max_chars: int = 20_000
+    # `buying_intent = explicit` survives the guardrails only when a valid evidence quote
+    # contains one of these. Anything else is `none_detected`: intent is never guessed.
+    ai_explicit_intent_patterns: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: [
+            "looking for a new website",
+            "looking for a web designer",
+            "hiring a web designer",
+            "need a new website",
+            "want a new website",
+            "need help with marketing",
+            "looking for marketing help",
+            "hiring a marketing agency",
+        ]
+    )
+    # Scoring weights (`scoring-1`). Assumptions until calibrated; they add up to 1.0.
+    scoring_weight_facts: float = 0.25
+    scoring_weight_inference: float = 0.45
+    scoring_weight_intent: float = 0.10
+    scoring_weight_contactability: float = 0.20
+
     # --- Entity resolution (v0.3.0) ---
     resolution_auto_merge: float = 0.85
     resolution_review: float = 0.60
@@ -138,7 +185,11 @@ class Settings(BaseSettings):
     )
 
     @field_validator(
-        "cors_origins", "resolution_source_priority", "audit_booking_industries", mode="before"
+        "cors_origins",
+        "resolution_source_priority",
+        "audit_booking_industries",
+        "ai_explicit_intent_patterns",
+        mode="before",
     )
     @classmethod
     def _split_csv(cls, value: object) -> object:
@@ -176,6 +227,25 @@ class Settings(BaseSettings):
     def requires_strong_jwt_secret(self) -> bool:
         """Whether a weak JWT secret must stop the process rather than warn."""
         return self.environment not in DEVELOPMENT_ENVIRONMENTS
+
+    @property
+    def resolved_ai_provider(self) -> str:
+        """Which LLM provider the classification step talks to.
+
+        An explicit `AI_PROVIDER` always wins. Otherwise a configured key means the real
+        provider; without one, development and CI get the fake provider (so the demo and
+        the tests work offline) and every other environment skips AI entirely rather than
+        pretend. Nothing here ever invents an answer.
+        """
+        if self.ai_provider is not None:
+            return self.ai_provider
+        if self.openai_api_key.get_secret_value():
+            return "openai"
+        return "fake" if self.fixtures_allowed else "disabled"
+
+    @property
+    def ai_enabled(self) -> bool:
+        return self.resolved_ai_provider != "disabled"
 
     @property
     def user_agent(self) -> str:
