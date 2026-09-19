@@ -2683,6 +2683,74 @@
       "nationalPhoneNumber": "(512) 555-0513",
       "websiteUri": "https://roofingcousins.invalid/",
       "businessStatus": "OPERATIONAL"
+    },
+    {
+      "id": "demo-e14",
+      "displayName": {
+        "text": "Riverside Plumbing Co",
+        "languageCode": "en"
+      },
+      "formattedAddress": "2100 Riverside Drive, Austin, TX 78741, USA",
+      "location": {
+        "latitude": 30.238,
+        "longitude": -97.727
+      },
+      "types": [
+        "plumber",
+        "point_of_interest",
+        "establishment"
+      ],
+      "primaryType": "plumber",
+      "addressComponents": [
+        {
+          "longText": "2100",
+          "shortText": "2100",
+          "types": [
+            "street_number"
+          ]
+        },
+        {
+          "longText": "Riverside Drive",
+          "shortText": "Riverside Dr",
+          "types": [
+            "route"
+          ]
+        },
+        {
+          "longText": "Austin",
+          "shortText": "Austin",
+          "types": [
+            "locality",
+            "political"
+          ]
+        },
+        {
+          "longText": "Texas",
+          "shortText": "TX",
+          "types": [
+            "administrative_area_level_1",
+            "political"
+          ]
+        },
+        {
+          "longText": "78741",
+          "shortText": "78741",
+          "types": [
+            "postal_code"
+          ]
+        },
+        {
+          "longText": "United States",
+          "shortText": "US",
+          "types": [
+            "country",
+            "political"
+          ]
+        }
+      ],
+      "nationalPhoneNumber": "(512) 555-0514",
+      "websiteUri": "https://riversideplumbing.invalid/",
+      "businessStatus": "OPERATIONAL"
     }
   ]
 }

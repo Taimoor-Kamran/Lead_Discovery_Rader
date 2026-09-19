@@ -1,0 +1,40 @@
+{
+  "note": "Schema drift: the first answer is prose, not JSON. The retry is valid.",
+  "triage": [
+    {
+      "tokens_in": 1380,
+      "tokens_out": 90,
+      "raw": "Sure! Here is my analysis. Zilker Pipe Works is a WordPress site with no meta description. I would suggest SEO work and an online booking widget."
+    },
+    {
+      "tokens_in": 1380,
+      "tokens_out": 210,
+      "output": {
+        "business_summary": "A family-run, licensed plumber in greater Austin offering emergency leak repair, drain and sewer cleaning and water heater replacement.",
+        "industry": "plumbing",
+        "industry_matches_listing": true,
+        "opportunities": [
+          {
+            "service": "seo_gbp",
+            "confidence": 0.8,
+            "rationale": "Audit found no meta description on the homepage of a WordPress site.",
+            "evidence": [
+              {"finding_code": "missing_meta_description", "quote": "Audit found no meta description on the homepage.", "source_url": "https://zilkerpipeworks.invalid/"}
+            ]
+          },
+          {
+            "service": "booking_setup",
+            "confidence": 0.7,
+            "rationale": "Audit found no online booking or scheduling link on the homepage.",
+            "evidence": [
+              {"finding_code": "no_online_booking", "quote": "Audit found no online booking or scheduling link on the homepage.", "source_url": "https://zilkerpipeworks.invalid/"}
+            ]
+          }
+        ],
+        "buying_intent": "none_detected",
+        "unknowns": [],
+        "needs_human_review": true
+      }
+    }
+  ]
+}

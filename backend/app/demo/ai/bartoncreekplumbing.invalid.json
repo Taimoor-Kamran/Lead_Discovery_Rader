@@ -1,0 +1,46 @@
+{
+  "note": "The clean case: a good answer that agrees with every rule and quotes real evidence.",
+  "triage": [
+    {
+      "tokens_in": 1450,
+      "tokens_out": 260,
+      "output": {
+        "business_summary": "A family-run, licensed plumber serving greater Austin with leak repair, drain and sewer cleaning and water heater replacement, usually the same day.",
+        "industry": "plumbing",
+        "industry_matches_listing": true,
+        "opportunities": [
+          {
+            "service": "website_design",
+            "confidence": 0.9,
+            "rationale": "Audit found the homepage served over plain http with no mobile viewport tag and a 2016 copyright notice.",
+            "evidence": [
+              {"finding_code": "no_https", "quote": "Audit found the homepage served over http, not https.", "source_url": "http://bartoncreekplumbing.invalid/"},
+              {"finding_code": "no_mobile_viewport", "quote": "Audit found no mobile viewport tag on the homepage.", "source_url": "http://bartoncreekplumbing.invalid/"},
+              {"finding_code": "stale_copyright", "quote": "2016 Barton Creek Plumbing LLC. All rights reserved.", "source_url": "http://bartoncreekplumbing.invalid/"}
+            ]
+          },
+          {
+            "service": "seo_gbp",
+            "confidence": 0.85,
+            "rationale": "Audit found no meta description and no LocalBusiness structured data on the homepage.",
+            "evidence": [
+              {"finding_code": "missing_meta_description", "quote": "Audit found no meta description on the homepage.", "source_url": "http://bartoncreekplumbing.invalid/"},
+              {"finding_code": "no_structured_data", "quote": "Audit found no LocalBusiness structured data on the homepage.", "source_url": "http://bartoncreekplumbing.invalid/"}
+            ]
+          },
+          {
+            "service": "booking_setup",
+            "confidence": 0.7,
+            "rationale": "Audit found no online booking or scheduling link; the page offers a phone call only.",
+            "evidence": [
+              {"finding_code": "no_online_booking", "quote": "Audit found no online booking or scheduling link on the homepage.", "source_url": "http://bartoncreekplumbing.invalid/"}
+            ]
+          }
+        ],
+        "buying_intent": "none_detected",
+        "unknowns": ["Whether the business takes bookings by another channel"],
+        "needs_human_review": true
+      }
+    }
+  ]
+}

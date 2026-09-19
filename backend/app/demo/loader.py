@@ -6,7 +6,7 @@ job, the run and every record are keyed, so loading twice changes nothing.
 """
 
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
@@ -52,6 +52,9 @@ class DemoPipelineResult:
     audit_run_id: uuid.UUID | None
     audit_status: JobRunStatus | None
     audit_summary: dict[str, Any]
+    classification_run_id: uuid.UUID | None = None
+    classification_status: JobRunStatus | None = None
+    classification_summary: dict[str, Any] = field(default_factory=dict)
 
 
 def load_demo_data(session: Session, *, now: datetime | None = None) -> DemoLoadResult:
@@ -129,12 +132,12 @@ def load_demo_data(session: Session, *, now: datetime | None = None) -> DemoLoad
 
 
 def run_pipeline(result: DemoLoadResult) -> DemoPipelineResult:
-    """Run the queued resolution, then the audit run it triggers, in this process.
+    """Run the queued resolution, the audit run it triggers, then the classification run.
 
-    `make load-demo-data` is meant to leave a developer with a finished dataset — 29
-    businesses *and* their website audits — rather than two run ids to poll. The audits
-    are answered from the checked-in demo sites, so this makes no network call and needs
-    no API key.
+    `make load-demo-data` is meant to leave a developer with a finished dataset — 30
+    businesses, their website audits *and* their scored opportunities — rather than run
+    ids to poll. The audits are answered from the checked-in demo sites and the AI step by
+    the fake provider, so this makes no network call and needs no API key.
     """
     from app.workers.tasks import execute_job_run
 
@@ -152,11 +155,28 @@ def run_pipeline(result: DemoLoadResult) -> DemoPipelineResult:
         ).first()
         audit_run_id = audit_run.id if audit_run is not None else None
 
+    classification_run_id: uuid.UUID | None = None
+    classification_status: JobRunStatus | None = None
+    classification_summary: dict[str, Any] = {}
     if audit_run_id is not None:
         audit_status = execute_job_run(audit_run_id)
         with session_scope() as session:
             audit_run = session.get(JobRun, audit_run_id)
             audit_summary = dict((audit_run.result_summary if audit_run else None) or {})
+            classification_run = session.scalars(
+                select(JobRun).where(JobRun.idempotency_key == classification_key(audit_run_id))
+            ).first()
+            classification_run_id = (
+                classification_run.id if classification_run is not None else None
+            )
+
+    if classification_run_id is not None:
+        classification_status = execute_job_run(classification_run_id)
+        with session_scope() as session:
+            classification_run = session.get(JobRun, classification_run_id)
+            classification_summary = dict(
+                (classification_run.result_summary if classification_run else None) or {}
+            )
 
     return DemoPipelineResult(
         resolution_status=resolution_status,
@@ -164,12 +184,20 @@ def run_pipeline(result: DemoLoadResult) -> DemoPipelineResult:
         audit_run_id=audit_run_id,
         audit_status=audit_status,
         audit_summary=audit_summary,
+        classification_run_id=classification_run_id,
+        classification_status=classification_status,
+        classification_summary=classification_summary,
     )
 
 
 def audit_key(resolution_run_id: uuid.UUID) -> str:
     """The idempotency key `follow_up` gives the audit run of one resolution run."""
     return f"audit:{resolution_run_id}"
+
+
+def classification_key(audit_run_id: uuid.UUID) -> str:
+    """The idempotency key `follow_up` gives the classification run of one audit run."""
+    return f"classification:{audit_run_id}"
 
 
 def _demo_source(session: Session) -> Source:
