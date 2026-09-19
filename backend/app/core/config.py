@@ -3,7 +3,7 @@
 from functools import lru_cache
 from typing import Annotated, Literal
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import AliasChoices, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 # The response fields we ask Places for. Anything not listed here is never returned, so
@@ -21,7 +21,10 @@ class Settings(BaseSettings):
     )
 
     app_name: str = "lead-discovery-radar"
-    environment: Literal["local", "ci", "staging", "production"] = "local"
+    # `APP_ENV` is the name the specs use; `ENVIRONMENT` is what v0.1.0 shipped with.
+    environment: Literal["local", "development", "ci", "staging", "production"] = Field(
+        default="local", validation_alias=AliasChoices("ENVIRONMENT", "APP_ENV")
+    )
     debug: bool = False
     api_v1_prefix: str = "/api/v1"
 
@@ -49,18 +52,43 @@ class Settings(BaseSettings):
     places_rps: float = 5.0
     places_content_ttl_days: int = 30
 
+    # --- Entity resolution (v0.3.0) ---
+    resolution_auto_merge: float = 0.85
+    resolution_review: float = 0.60
+    resolution_weight_domain: float = 0.30
+    resolution_weight_phone: float = 0.30
+    resolution_weight_name: float = 0.20
+    resolution_weight_address: float = 0.15
+    resolution_weight_geo: float = 0.05
+    # Blocking guards: how many candidates one record may be scored against, and how
+    # close two names must be before a shared map cell is treated as a candidate.
+    resolution_max_candidates: int = 25
+    resolution_block_name_ratio: float = 80.0
+    # Highest priority first. Survivorship prefers a value from an earlier source.
+    resolution_source_priority: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: ["google_places", "demo_fixture"]
+    )
+
     log_level: str = "INFO"
     # NoDecode: the value is a plain comma-separated list in .env, not JSON.
     cors_origins: Annotated[list[str], NoDecode] = Field(
         default_factory=lambda: ["http://localhost:3000"]
     )
 
-    @field_validator("cors_origins", mode="before")
+    @field_validator("cors_origins", "resolution_source_priority", mode="before")
     @classmethod
-    def _split_origins(cls, value: object) -> object:
+    def _split_csv(cls, value: object) -> object:
         if isinstance(value, str):
             return [item.strip() for item in value.split(",") if item.strip()]
         return value
+
+    @property
+    def is_development(self) -> bool:
+        """Whether developer-only fixtures (the demo source) may be registered.
+
+        `local` counts: it is what `.env.example` ships and what `make up` runs as.
+        """
+        return self.environment in {"local", "development"}
 
     @property
     def sync_database_url(self) -> str:

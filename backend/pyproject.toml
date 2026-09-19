@@ -20,6 +20,10 @@ dependencies = [
     "pyjwt>=2.10,<3.0",
     "python-multipart>=0.0.20,<1.0",
     "email-validator>=2.2,<3.0",
+    "phonenumbers>=8.13,<10.0",
+    "rapidfuzz>=3.10,<4.0",
+    "jellyfish>=1.1,<2.0",
+    "tldextract>=5.1,<6.0",
 ]
 
 [dependency-groups]

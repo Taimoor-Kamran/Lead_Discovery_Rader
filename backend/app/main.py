@@ -16,8 +16,10 @@ from app.core.health import health_router
 from app.core.logging import configure_logging, get_logger
 from app.core.middleware import RequestIdMiddleware, get_request_id
 from app.modules.auth.router import auth_router, users_router
+from app.modules.businesses.router import businesses_router
 from app.modules.discovery.router import discovered_records_router, job_records_router
 from app.modules.jobs.router import jobs_router, search_jobs_router
+from app.modules.resolution.router import job_resolution_router, match_candidates_router
 from app.modules.sources.router import sources_router
 
 logger = get_logger("app")
@@ -51,7 +53,7 @@ def create_app() -> FastAPI:
 
     app = FastAPI(
         title="Lead Discovery Radar API",
-        version="0.2.0",
+        version="0.3.0",
         docs_url="/docs",
         openapi_url="/openapi.json",
     )
@@ -98,6 +100,9 @@ def create_app() -> FastAPI:
     app.include_router(job_records_router, prefix=settings.api_v1_prefix)
     app.include_router(sources_router, prefix=settings.api_v1_prefix)
     app.include_router(discovered_records_router, prefix=settings.api_v1_prefix)
+    app.include_router(businesses_router, prefix=settings.api_v1_prefix)
+    app.include_router(match_candidates_router, prefix=settings.api_v1_prefix)
+    app.include_router(job_resolution_router, prefix=settings.api_v1_prefix)
     return app
 
 

@@ -16,6 +16,7 @@ from pydantic import ValidationError
 from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.modules.adapters.base import (
+    AddressPart,
     Candidate,
     DiscoveryConfig,
     Event,
@@ -136,6 +137,19 @@ class GooglePlacesAdapter:
             website=place.website_uri,
             business_status=place.business_status,
             types=list(place.types) if place.types else None,
+            primary_type=place.primary_type,
+            address_components=(
+                [
+                    AddressPart(
+                        long_text=part.long_text,
+                        short_text=part.short_text,
+                        types=tuple(part.types),
+                    )
+                    for part in place.address_components
+                ]
+                if place.address_components
+                else None
+            ),
             lat=place.location.latitude if place.location else None,
             lng=place.location.longitude if place.location else None,
         )

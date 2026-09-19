@@ -147,8 +147,9 @@ def db(migrated_database: str) -> Iterator[Session]:
     session = get_session_factory()()
     session.execute(
         text(
-            "TRUNCATE api_calls, record_sightings, discovered_records, audit_logs, job_runs, "
-            "search_jobs, sources, users RESTART IDENTITY CASCADE"
+            "TRUNCATE api_calls, match_candidates, business_field_values, businesses, "
+            "record_sightings, discovered_records, audit_logs, job_runs, search_jobs, "
+            "sources, users RESTART IDENTITY CASCADE"
         )
     )
     session.commit()

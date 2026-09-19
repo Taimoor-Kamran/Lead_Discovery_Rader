@@ -17,6 +17,11 @@ _hasher = PasswordHasher()
 TokenType = Literal["access", "refresh"]
 
 
+# A token minted before `token_version` existed is read as version 1, which is what
+# every user starts at — so adding the claim did not log anybody out.
+DEFAULT_TOKEN_VERSION = 1
+
+
 @dataclass(frozen=True)
 class TokenClaims:
     subject: uuid.UUID
@@ -24,6 +29,7 @@ class TokenClaims:
     token_type: TokenType
     jti: str
     expires_at: datetime
+    token_version: int = DEFAULT_TOKEN_VERSION
 
 
 def hash_password(password: str) -> str:
@@ -45,7 +51,11 @@ def needs_rehash(password_hash: str) -> bool:
 
 
 def _create_token(
-    subject: uuid.UUID, role: str, token_type: TokenType, ttl: timedelta
+    subject: uuid.UUID,
+    role: str,
+    token_type: TokenType,
+    ttl: timedelta,
+    token_version: int = DEFAULT_TOKEN_VERSION,
 ) -> tuple[str, datetime]:
     settings = get_settings()
     now = datetime.now(UTC)
@@ -55,6 +65,7 @@ def _create_token(
         "role": role,
         "type": token_type,
         "jti": uuid.uuid4().hex,
+        "tv": token_version,
         "iat": int(now.timestamp()),
         "exp": int(expires_at.timestamp()),
     }
@@ -64,16 +75,30 @@ def _create_token(
     return token, expires_at
 
 
-def create_access_token(subject: uuid.UUID, role: str) -> tuple[str, datetime]:
+def create_access_token(
+    subject: uuid.UUID, role: str, token_version: int = DEFAULT_TOKEN_VERSION
+) -> tuple[str, datetime]:
     settings = get_settings()
     return _create_token(
-        subject, role, "access", timedelta(minutes=settings.access_token_ttl_minutes)
+        subject,
+        role,
+        "access",
+        timedelta(minutes=settings.access_token_ttl_minutes),
+        token_version,
     )
 
 
-def create_refresh_token(subject: uuid.UUID, role: str) -> tuple[str, datetime]:
+def create_refresh_token(
+    subject: uuid.UUID, role: str, token_version: int = DEFAULT_TOKEN_VERSION
+) -> tuple[str, datetime]:
     settings = get_settings()
-    return _create_token(subject, role, "refresh", timedelta(days=settings.refresh_token_ttl_days))
+    return _create_token(
+        subject,
+        role,
+        "refresh",
+        timedelta(days=settings.refresh_token_ttl_days),
+        token_version,
+    )
 
 
 def decode_token(token: str, expected_type: TokenType) -> TokenClaims:
@@ -103,4 +128,5 @@ def decode_token(token: str, expected_type: TokenType) -> TokenClaims:
         token_type=expected_type,
         jti=str(payload.get("jti", "")),
         expires_at=datetime.fromtimestamp(int(payload["exp"]), tz=UTC),
+        token_version=int(payload.get("tv", DEFAULT_TOKEN_VERSION)),
     )

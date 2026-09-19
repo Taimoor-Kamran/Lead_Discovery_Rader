@@ -1,0 +1,2688 @@
+{
+  "note": "Fictional businesses for local testing. Every name, phone number and domain here is invented: the numbers are in the 555 fictional range and the domains use the reserved `.invalid` suffix, which can never resolve. Nothing in this file came from a real API response.",
+  "search_job": {
+    "name": "Demo - Austin plumbers",
+    "industry": "plumber",
+    "geo": {
+      "city": "Austin",
+      "state": "TX"
+    }
+  },
+  "places": [
+    {
+      "id": "demo-a1-1",
+      "displayName": {
+        "text": "Lone Star Plumbing Co",
+        "languageCode": "en"
+      },
+      "formattedAddress": "100 Congress Ave, Austin, TX 78701, USA",
+      "location": {
+        "latitude": 30.264,
+        "longitude": -97.745
+      },
+      "types": [
+        "plumber",
+        "point_of_interest",
+        "establishment"
+      ],
+      "primaryType": "plumber",
+      "addressComponents": [
+        {
+          "longText": "100",
+          "shortText": "100",
+          "types": [
+            "street_number"
+          ]
+        },
+        {
+          "longText": "Congress Avenue",
+          "shortText": "Congress Ave",
+          "types": [
+            "route"
+          ]
+        },
+        {
+          "longText": "Austin",
+          "shortText": "Austin",
+          "types": [
+            "locality",
+            "political"
+          ]
+        },
+        {
+          "longText": "Texas",
+          "shortText": "TX",
+          "types": [
+            "administrative_area_level_1",
+            "political"
+          ]
+        },
+        {
+          "longText": "78701",
+          "shortText": "78701",
+          "types": [
+            "postal_code"
+          ]
+        },
+        {
+          "longText": "United States",
+          "shortText": "US",
+          "types": [
+            "country",
+            "political"
+          ]
+        }
+      ],
+      "nationalPhoneNumber": "(512) 555-0101",
+      "websiteUri": "https://lonestarplumbing.invalid/",
+      "businessStatus": "OPERATIONAL"
+    },
+    {
+      "id": "demo-a1-2",
+      "displayName": {
+        "text": "Lone Star Plumbing Co.",
+        "languageCode": "en"
+      },
+      "formattedAddress": "100 Congress Ave, Austin, TX 78701, USA",
+      "location": {
+        "latitude": 30.264,
+        "longitude": -97.745
+      },
+      "types": [
+        "plumber",
+        "point_of_interest",
+        "establishment"
+      ],
+      "primaryType": "plumber",
+      "addressComponents": [
+        {
+          "longText": "100",
+          "shortText": "100",
+          "types": [
+            "street_number"
+          ]
+        },
+        {
+          "longText": "Congress Avenue",
+          "shortText": "Congress Ave",
+          "types": [
+            "route"
+          ]
+        },
+        {
+          "longText": "Austin",
+          "shortText": "Austin",
+          "types": [
+            "locality",
+            "political"
+          ]
+        },
+        {
+          "longText": "Texas",
+          "shortText": "TX",
+          "types": [
+            "administrative_area_level_1",
+            "political"
+          ]
+        },
+        {
+          "longText": "78701",
+          "shortText": "78701",
+          "types": [
+            "postal_code"
+          ]
+        },
+        {
+          "longText": "United States",
+          "shortText": "US",
+          "types": [
+            "country",
+            "political"
+          ]
+        }
+      ],
+      "nationalPhoneNumber": "512.555.0101",
+      "websiteUri": "https://lonestarplumbing.invalid/",
+      "businessStatus": "OPERATIONAL"
+    },
+    {
+      "id": "demo-a2-1",
+      "displayName": {
+        "text": "Barton Creek Plumbing LLC",
+        "languageCode": "en"
+      },
+      "formattedAddress": "200 Barton Springs Rd, Austin, TX 78704, USA",
+      "location": {
+        "latitude": 30.284,
+        "longitude": -97.745
+      },
+      "types": [
+        "plumber",
+        "point_of_interest",
+        "establishment"
+      ],
+      "primaryType": "plumber",
+      "addressComponents": [
+        {
+          "longText": "200",
+          "shortText": "200",
+          "types": [
+            "street_number"
+          ]
+        },
+        {
+          "longText": "Barton Springs Road",
+          "shortText": "Barton Springs Rd",
+          "types": [
+            "route"
+          ]
+        },
+        {
+          "longText": "Austin",
+          "shortText": "Austin",
+          "types": [
+            "locality",
+            "political"
+          ]
+        },
+        {
+          "longText": "Texas",
+          "shortText": "TX",
+          "types": [
+            "administrative_area_level_1",
+            "political"
+          ]
+        },
+        {
+          "longText": "78704",
+          "shortText": "78704",
+          "types": [
+            "postal_code"
+          ]
+        },
+        {
+          "longText": "United States",
+          "shortText": "US",
+          "types": [
+            "country",
+            "political"
+          ]
+        }
+      ],
+      "nationalPhoneNumber": "(512) 555-0102",
+      "websiteUri": "https://bartoncreekplumbing.invalid/",
+      "businessStatus": "OPERATIONAL"
+    },
+    {
+      "id": "demo-a2-2",
+      "displayName": {
+        "text": "Barton Creek Plumbing, LLC",
+        "languageCode": "en"
+      },
+      "formattedAddress": "200 Barton Springs Rd, Austin, TX 78704, USA",
+      "location": {
+        "latitude": 30.284,
+        "longitude": -97.745
+      },
+      "types": [
+        "plumber",
+        "point_of_interest",
+        "establishment"
+      ],
+      "primaryType": "plumber",
+      "addressComponents": [
+        {
+          "longText": "200",
+          "shortText": "200",
+          "types": [
+            "street_number"
+          ]
+        },
+        {
+          "longText": "Barton Springs Road",
+          "shortText": "Barton Springs Rd",
+          "types": [
+            "route"
+          ]
+        },
+        {
+          "longText": "Austin",
+          "shortText": "Austin",
+          "types": [
+            "locality",
+            "political"
+          ]
+        },
+        {
+          "longText": "Texas",
+          "shortText": "TX",
+          "types": [
+            "administrative_area_level_1",
+            "political"
+          ]
+        },
+        {
+          "longText": "78704",
+          "shortText": "78704",
+          "types": [
+            "postal_code"
+          ]
+        },
+        {
+          "longText": "United States",
+          "shortText": "US",
+          "types": [
+            "country",
+            "political"
+          ]
+        }
+      ],
+      "nationalPhoneNumber": "+1 512 555 0102",
+      "websiteUri": "https://bartoncreekplumbing.invalid/",
+      "businessStatus": "OPERATIONAL"
+    },
+    {
+      "id": "demo-a3-1",
+      "displayName": {
+        "text": "Zilker Pipe Works",
+        "languageCode": "en"
+      },
+      "formattedAddress": "300 Azie Morton Rd, Austin, TX 78746, USA",
+      "location": {
+        "latitude": 30.304,
+        "longitude": -97.745
+      },
+      "types": [
+        "plumber",
+        "point_of_interest",
+        "establishment"
+      ],
+      "primaryType": "plumber",
+      "addressComponents": [
+        {
+          "longText": "300",
+          "shortText": "300",
+          "types": [
+            "street_number"
+          ]
+        },
+        {
+          "longText": "Azie Morton Road",
+          "shortText": "Azie Morton Rd",
+          "types": [
+            "route"
+          ]
+        },
+        {
+          "longText": "Austin",
+          "shortText": "Austin",
+          "types": [
+            "locality",
+            "political"
+          ]
+        },
+        {
+          "longText": "Texas",
+          "shortText": "TX",
+          "types": [
+            "administrative_area_level_1",
+            "political"
+          ]
+        },
+        {
+          "longText": "78746",
+          "shortText": "78746",
+          "types": [
+            "postal_code"
+          ]
+        },
+        {
+          "longText": "United States",
+          "shortText": "US",
+          "types": [
+            "country",
+            "political"
+          ]
+        }
+      ],
+      "nationalPhoneNumber": "(512) 555-0103",
+      "websiteUri": "https://zilkerpipeworks.invalid/",
+      "businessStatus": "OPERATIONAL"
+    },
+    {
+      "id": "demo-a3-2",
+      "displayName": {
+        "text": "Zilker Pipe Works",
+        "languageCode": "en"
+      },
+      "formattedAddress": "300 Azie Morton Rd, Austin, TX 78746, USA",
+      "location": {
+        "latitude": 30.304,
+        "longitude": -97.745
+      },
+      "types": [
+        "plumber",
+        "point_of_interest",
+        "establishment"
+      ],
+      "primaryType": "plumber",
+      "addressComponents": [
+        {
+          "longText": "300",
+          "shortText": "300",
+          "types": [
+            "street_number"
+          ]
+        },
+        {
+          "longText": "Azie Morton Road",
+          "shortText": "Azie Morton Rd",
+          "types": [
+            "route"
+          ]
+        },
+        {
+          "longText": "Austin",
+          "shortText": "Austin",
+          "types": [
+            "locality",
+            "political"
+          ]
+        },
+        {
+          "longText": "Texas",
+          "shortText": "TX",
+          "types": [
+            "administrative_area_level_1",
+            "political"
+          ]
+        },
+        {
+          "longText": "78746",
+          "shortText": "78746",
+          "types": [
+            "postal_code"
+          ]
+        },
+        {
+          "longText": "United States",
+          "shortText": "US",
+          "types": [
+            "country",
+            "political"
+          ]
+        }
+      ],
+      "nationalPhoneNumber": "512-555-0103",
+      "websiteUri": "https://zilkerpipeworks.invalid/",
+      "businessStatus": "OPERATIONAL"
+    },
+    {
+      "id": "demo-a4-1",
+      "displayName": {
+        "text": "Mueller Plumbing Services Inc",
+        "languageCode": "en"
+      },
+      "formattedAddress": "400 Berkman Dr, Austin, TX 78723, USA",
+      "location": {
+        "latitude": 30.324,
+        "longitude": -97.745
+      },
+      "types": [
+        "plumber",
+        "point_of_interest",
+        "establishment"
+      ],
+      "primaryType": "plumber",
+      "addressComponents": [
+        {
+          "longText": "400",
+          "shortText": "400",
+          "types": [
+            "street_number"
+          ]
+        },
+        {
+          "longText": "Berkman Drive",
+          "shortText": "Berkman Dr",
+          "types": [
+            "route"
+          ]
+        },
+        {
+          "longText": "Austin",
+          "shortText": "Austin",
+          "types": [
+            "locality",
+            "political"
+          ]
+        },
+        {
+          "longText": "Texas",
+          "shortText": "TX",
+          "types": [
+            "administrative_area_level_1",
+            "political"
+          ]
+        },
+        {
+          "longText": "78723",
+          "shortText": "78723",
+          "types": [
+            "postal_code"
+          ]
+        },
+        {
+          "longText": "United States",
+          "shortText": "US",
+          "types": [
+            "country",
+            "political"
+          ]
+        }
+      ],
+      "nationalPhoneNumber": "(512) 555-0104",
+      "websiteUri": "https://muellerplumbing.invalid/",
+      "businessStatus": "OPERATIONAL"
+    },
+    {
+      "id": "demo-a4-2",
+      "displayName": {
+        "text": "Mueller Plumbing Services, Inc.",
+        "languageCode": "en"
+      },
+      "formattedAddress": "400 Berkman Dr, Austin, TX 78723, USA",
+      "location": {
+        "latitude": 30.324,
+        "longitude": -97.745
+      },
+      "types": [
+        "plumber",
+        "point_of_interest",
+        "establishment"
+      ],
+      "primaryType": "plumber",
+      "addressComponents": [
+        {
+          "longText": "400",
+          "shortText": "400",
+          "types": [
+            "street_number"
+          ]
+        },
+        {
+          "longText": "Berkman Drive",
+          "shortText": "Berkman Dr",
+          "types": [
+            "route"
+          ]
+        },
+        {
+          "longText": "Austin",
+          "shortText": "Austin",
+          "types": [
+            "locality",
+            "political"
+          ]
+        },
+        {
+          "longText": "Texas",
+          "shortText": "TX",
+          "types": [
+            "administrative_area_level_1",
+            "political"
+          ]
+        },
+        {
+          "longText": "78723",
+          "shortText": "78723",
+          "types": [
+            "postal_code"
+          ]
+        },
+        {
+          "longText": "United States",
+          "shortText": "US",
+          "types": [
+            "country",
+            "political"
+          ]
+        }
+      ],
+      "nationalPhoneNumber": "5125550104",
+      "websiteUri": "https://muellerplumbing.invalid/",
+      "businessStatus": "OPERATIONAL"
+    },
+    {
+      "id": "demo-a5-1",
+      "displayName": {
+        "text": "Hyde Park Drain Experts",
+        "languageCode": "en"
+      },
+      "formattedAddress": "500 Duval St, Austin, TX 78751, USA",
+      "location": {
+        "latitude": 30.344,
+        "longitude": -97.745
+      },
+      "types": [
+        "plumber",
+        "point_of_interest",
+        "establishment"
+      ],
+      "primaryType": "plumber",
+      "addressComponents": [
+        {
+          "longText": "500",
+          "shortText": "500",
+          "types": [
+            "street_number"
+          ]
+        },
+        {
+          "longText": "Duval Street",
+          "shortText": "Duval St",
+          "types": [
+            "route"
+          ]
+        },
+        {
+          "longText": "Austin",
+          "shortText": "Austin",
+          "types": [
+            "locality",
+            "political"
+          ]
+        },
+        {
+          "longText": "Texas",
+          "shortText": "TX",
+          "types": [
+            "administrative_area_level_1",
+            "political"
+          ]
+        },
+        {
+          "longText": "78751",
+          "shortText": "78751",
+          "types": [
+            "postal_code"
+          ]
+        },
+        {
+          "longText": "United States",
+          "shortText": "US",
+          "types": [
+            "country",
+            "political"
+          ]
+        }
+      ],
+      "nationalPhoneNumber": "(512) 555-0105",
+      "websiteUri": "https://hydeparkdrain.invalid/",
+      "businessStatus": "OPERATIONAL"
+    },
+    {
+      "id": "demo-a5-2",
+      "displayName": {
+        "text": "Hyde Park Drain Experts",
+        "languageCode": "en"
+      },
+      "formattedAddress": "500 Duval St, Austin, TX 78751, USA",
+      "location": {
+        "latitude": 30.344,
+        "longitude": -97.745
+      },
+      "types": [
+        "plumber",
+        "point_of_interest",
+        "establishment"
+      ],
+      "primaryType": "plumber",
+      "addressComponents": [
+        {
+          "longText": "500",
+          "shortText": "500",
+          "types": [
+            "street_number"
+          ]
+        },
+        {
+          "longText": "Duval Street",
+          "shortText": "Duval St",
+          "types": [
+            "route"
+          ]
+        },
+        {
+          "longText": "Austin",
+          "shortText": "Austin",
+          "types": [
+            "locality",
+            "political"
+          ]
+        },
+        {
+          "longText": "Texas",
+          "shortText": "TX",
+          "types": [
+            "administrative_area_level_1",
+            "political"
+          ]
+        },
+        {
+          "longText": "78751",
+          "shortText": "78751",
+          "types": [
+            "postal_code"
+          ]
+        },
+        {
+          "longText": "United States",
+          "shortText": "US",
+          "types": [
+            "country",
+            "political"
+          ]
+        }
+      ],
+      "nationalPhoneNumber": "(512) 555 0105",
+      "websiteUri": "https://hydeparkdrain.invalid/",
+      "businessStatus": "OPERATIONAL"
+    },
+    {
+      "id": "demo-b1-1",
+      "displayName": {
+        "text": "ABC Plumbing LLC",
+        "languageCode": "en"
+      },
+      "formattedAddress": "600 W 6th St, Austin, TX 78703, USA",
+      "location": {
+        "latitude": 30.364,
+        "longitude": -97.745
+      },
+      "types": [
+        "plumber",
+        "point_of_interest",
+        "establishment"
+      ],
+      "primaryType": "plumber",
+      "addressComponents": [
+        {
+          "longText": "600",
+          "shortText": "600",
+          "types": [
+            "street_number"
+          ]
+        },
+        {
+          "longText": "West 6th Street",
+          "shortText": "W 6th St",
+          "types": [
+            "route"
+          ]
+        },
+        {
+          "longText": "Austin",
+          "shortText": "Austin",
+          "types": [
+            "locality",
+            "political"
+          ]
+        },
+        {
+          "longText": "Texas",
+          "shortText": "TX",
+          "types": [
+            "administrative_area_level_1",
+            "political"
+          ]
+        },
+        {
+          "longText": "78703",
+          "shortText": "78703",
+          "types": [
+            "postal_code"
+          ]
+        },
+        {
+          "longText": "United States",
+          "shortText": "US",
+          "types": [
+            "country",
+            "political"
+          ]
+        }
+      ],
+      "nationalPhoneNumber": "(512) 555-0201",
+      "websiteUri": "https://abcplumbing.invalid/",
+      "businessStatus": "OPERATIONAL"
+    },
+    {
+      "id": "demo-b1-2",
+      "displayName": {
+        "text": "ABC Plumbing & HVAC",
+        "languageCode": "en"
+      },
+      "formattedAddress": "610 W 6th St, Austin, TX 78703, USA",
+      "location": {
+        "latitude": 30.364900000000002,
+        "longitude": -97.745
+      },
+      "types": [
+        "plumber",
+        "point_of_interest",
+        "establishment"
+      ],
+      "primaryType": "plumber",
+      "addressComponents": [
+        {
+          "longText": "610",
+          "shortText": "610",
+          "types": [
+            "street_number"
+          ]
+        },
+        {
+          "longText": "West 6th Street",
+          "shortText": "W 6th St",
+          "types": [
+            "route"
+          ]
+        },
+        {
+          "longText": "Austin",
+          "shortText": "Austin",
+          "types": [
+            "locality",
+            "political"
+          ]
+        },
+        {
+          "longText": "Texas",
+          "shortText": "TX",
+          "types": [
+            "administrative_area_level_1",
+            "political"
+          ]
+        },
+        {
+          "longText": "78703",
+          "shortText": "78703",
+          "types": [
+            "postal_code"
+          ]
+        },
+        {
+          "longText": "United States",
+          "shortText": "US",
+          "types": [
+            "country",
+            "political"
+          ]
+        }
+      ],
+      "nationalPhoneNumber": "(512) 555-0202",
+      "businessStatus": "OPERATIONAL"
+    },
+    {
+      "id": "demo-b2-1",
+      "displayName": {
+        "text": "Travis Heights Plumbers",
+        "languageCode": "en"
+      },
+      "formattedAddress": "700 S Congress Ave, Austin, TX 78705, USA",
+      "location": {
+        "latitude": 30.384,
+        "longitude": -97.745
+      },
+      "types": [
+        "plumber",
+        "point_of_interest",
+        "establishment"
+      ],
+      "primaryType": "plumber",
+      "addressComponents": [
+        {
+          "longText": "700",
+          "shortText": "700",
+          "types": [
+            "street_number"
+          ]
+        },
+        {
+          "longText": "South Congress Avenue",
+          "shortText": "S Congress Ave",
+          "types": [
+            "route"
+          ]
+        },
+        {
+          "longText": "Austin",
+          "shortText": "Austin",
+          "types": [
+            "locality",
+            "political"
+          ]
+        },
+        {
+          "longText": "Texas",
+          "shortText": "TX",
+          "types": [
+            "administrative_area_level_1",
+            "political"
+          ]
+        },
+        {
+          "longText": "78705",
+          "shortText": "78705",
+          "types": [
+            "postal_code"
+          ]
+        },
+        {
+          "longText": "United States",
+          "shortText": "US",
+          "types": [
+            "country",
+            "political"
+          ]
+        }
+      ],
+      "nationalPhoneNumber": "(512) 555-0203",
+      "websiteUri": "https://travisheightsplumbers.invalid/",
+      "businessStatus": "OPERATIONAL"
+    },
+    {
+      "id": "demo-b2-2",
+      "displayName": {
+        "text": "Travis Heights Plumbing Company",
+        "languageCode": "en"
+      },
+      "formattedAddress": "710 S Congress Ave, Austin, TX 78705, USA",
+      "location": {
+        "latitude": 30.384900000000002,
+        "longitude": -97.745
+      },
+      "types": [
+        "plumber",
+        "point_of_interest",
+        "establishment"
+      ],
+      "primaryType": "plumber",
+      "addressComponents": [
+        {
+          "longText": "710",
+          "shortText": "710",
+          "types": [
+            "street_number"
+          ]
+        },
+        {
+          "longText": "South Congress Avenue",
+          "shortText": "S Congress Ave",
+          "types": [
+            "route"
+          ]
+        },
+        {
+          "longText": "Austin",
+          "shortText": "Austin",
+          "types": [
+            "locality",
+            "political"
+          ]
+        },
+        {
+          "longText": "Texas",
+          "shortText": "TX",
+          "types": [
+            "administrative_area_level_1",
+            "political"
+          ]
+        },
+        {
+          "longText": "78705",
+          "shortText": "78705",
+          "types": [
+            "postal_code"
+          ]
+        },
+        {
+          "longText": "United States",
+          "shortText": "US",
+          "types": [
+            "country",
+            "political"
+          ]
+        }
+      ],
+      "nationalPhoneNumber": "(512) 555-0204",
+      "businessStatus": "OPERATIONAL"
+    },
+    {
+      "id": "demo-b3-1",
+      "displayName": {
+        "text": "Crestview Pipe & Drain",
+        "languageCode": "en"
+      },
+      "formattedAddress": "800 Justin Ln, Austin, TX 78757, USA",
+      "location": {
+        "latitude": 30.404,
+        "longitude": -97.745
+      },
+      "types": [
+        "plumber",
+        "point_of_interest",
+        "establishment"
+      ],
+      "primaryType": "plumber",
+      "addressComponents": [
+        {
+          "longText": "800",
+          "shortText": "800",
+          "types": [
+            "street_number"
+          ]
+        },
+        {
+          "longText": "Justin Lane",
+          "shortText": "Justin Ln",
+          "types": [
+            "route"
+          ]
+        },
+        {
+          "longText": "Austin",
+          "shortText": "Austin",
+          "types": [
+            "locality",
+            "political"
+          ]
+        },
+        {
+          "longText": "Texas",
+          "shortText": "TX",
+          "types": [
+            "administrative_area_level_1",
+            "political"
+          ]
+        },
+        {
+          "longText": "78757",
+          "shortText": "78757",
+          "types": [
+            "postal_code"
+          ]
+        },
+        {
+          "longText": "United States",
+          "shortText": "US",
+          "types": [
+            "country",
+            "political"
+          ]
+        }
+      ],
+      "nationalPhoneNumber": "(512) 555-0205",
+      "websiteUri": "https://crestviewpipe.invalid/",
+      "businessStatus": "OPERATIONAL"
+    },
+    {
+      "id": "demo-b3-2",
+      "displayName": {
+        "text": "Crestview Pipe and Drain Co",
+        "languageCode": "en"
+      },
+      "formattedAddress": "810 Justin Ln, Austin, TX 78757, USA",
+      "location": {
+        "latitude": 30.4049,
+        "longitude": -97.745
+      },
+      "types": [
+        "plumber",
+        "point_of_interest",
+        "establishment"
+      ],
+      "primaryType": "plumber",
+      "addressComponents": [
+        {
+          "longText": "810",
+          "shortText": "810",
+          "types": [
+            "street_number"
+          ]
+        },
+        {
+          "longText": "Justin Lane",
+          "shortText": "Justin Ln",
+          "types": [
+            "route"
+          ]
+        },
+        {
+          "longText": "Austin",
+          "shortText": "Austin",
+          "types": [
+            "locality",
+            "political"
+          ]
+        },
+        {
+          "longText": "Texas",
+          "shortText": "TX",
+          "types": [
+            "administrative_area_level_1",
+            "political"
+          ]
+        },
+        {
+          "longText": "78757",
+          "shortText": "78757",
+          "types": [
+            "postal_code"
+          ]
+        },
+        {
+          "longText": "United States",
+          "shortText": "US",
+          "types": [
+            "country",
+            "political"
+          ]
+        }
+      ],
+      "nationalPhoneNumber": "(512) 555-0206",
+      "businessStatus": "OPERATIONAL"
+    },
+    {
+      "id": "demo-b4-1",
+      "displayName": {
+        "text": "Oak Hill Plumbing Group",
+        "languageCode": "en"
+      },
+      "formattedAddress": "900 Patton Ranch Rd, Austin, TX 78745, USA",
+      "location": {
+        "latitude": 30.424,
+        "longitude": -97.745
+      },
+      "types": [
+        "plumber",
+        "point_of_interest",
+        "establishment"
+      ],
+      "primaryType": "plumber",
+      "addressComponents": [
+        {
+          "longText": "900",
+          "shortText": "900",
+          "types": [
+            "street_number"
+          ]
+        },
+        {
+          "longText": "Patton Ranch Road",
+          "shortText": "Patton Ranch Rd",
+          "types": [
+            "route"
+          ]
+        },
+        {
+          "longText": "Austin",
+          "shortText": "Austin",
+          "types": [
+            "locality",
+            "political"
+          ]
+        },
+        {
+          "longText": "Texas",
+          "shortText": "TX",
+          "types": [
+            "administrative_area_level_1",
+            "political"
+          ]
+        },
+        {
+          "longText": "78745",
+          "shortText": "78745",
+          "types": [
+            "postal_code"
+          ]
+        },
+        {
+          "longText": "United States",
+          "shortText": "US",
+          "types": [
+            "country",
+            "political"
+          ]
+        }
+      ],
+      "nationalPhoneNumber": "(512) 555-0207",
+      "websiteUri": "https://oakhillplumbing.invalid/",
+      "businessStatus": "OPERATIONAL"
+    },
+    {
+      "id": "demo-b4-2",
+      "displayName": {
+        "text": "Oak Hill Plumbing",
+        "languageCode": "en"
+      },
+      "formattedAddress": "910 Patton Ranch Rd, Austin, TX 78745, USA",
+      "location": {
+        "latitude": 30.4249,
+        "longitude": -97.745
+      },
+      "types": [
+        "plumber",
+        "point_of_interest",
+        "establishment"
+      ],
+      "primaryType": "plumber",
+      "addressComponents": [
+        {
+          "longText": "910",
+          "shortText": "910",
+          "types": [
+            "street_number"
+          ]
+        },
+        {
+          "longText": "Patton Ranch Road",
+          "shortText": "Patton Ranch Rd",
+          "types": [
+            "route"
+          ]
+        },
+        {
+          "longText": "Austin",
+          "shortText": "Austin",
+          "types": [
+            "locality",
+            "political"
+          ]
+        },
+        {
+          "longText": "Texas",
+          "shortText": "TX",
+          "types": [
+            "administrative_area_level_1",
+            "political"
+          ]
+        },
+        {
+          "longText": "78745",
+          "shortText": "78745",
+          "types": [
+            "postal_code"
+          ]
+        },
+        {
+          "longText": "United States",
+          "shortText": "US",
+          "types": [
+            "country",
+            "political"
+          ]
+        }
+      ],
+      "nationalPhoneNumber": "(512) 555-0208",
+      "websiteUri": "https://www.facebook.com/oakhillplumbing",
+      "businessStatus": "OPERATIONAL"
+    },
+    {
+      "id": "demo-c1-1",
+      "displayName": {
+        "text": "Reliable Plumbing",
+        "languageCode": "en"
+      },
+      "formattedAddress": "100 E 7th St, Austin, TX 78702, USA",
+      "location": {
+        "latitude": 30.266,
+        "longitude": -97.725
+      },
+      "types": [
+        "plumber",
+        "point_of_interest",
+        "establishment"
+      ],
+      "primaryType": "plumber",
+      "addressComponents": [
+        {
+          "longText": "100",
+          "shortText": "100",
+          "types": [
+            "street_number"
+          ]
+        },
+        {
+          "longText": "East 7th Street",
+          "shortText": "E 7th St",
+          "types": [
+            "route"
+          ]
+        },
+        {
+          "longText": "Austin",
+          "shortText": "Austin",
+          "types": [
+            "locality",
+            "political"
+          ]
+        },
+        {
+          "longText": "Texas",
+          "shortText": "TX",
+          "types": [
+            "administrative_area_level_1",
+            "political"
+          ]
+        },
+        {
+          "longText": "78702",
+          "shortText": "78702",
+          "types": [
+            "postal_code"
+          ]
+        },
+        {
+          "longText": "United States",
+          "shortText": "US",
+          "types": [
+            "country",
+            "political"
+          ]
+        }
+      ],
+      "nationalPhoneNumber": "(512) 555-0301",
+      "websiteUri": "https://reliableplumbingatx.invalid/",
+      "businessStatus": "OPERATIONAL"
+    },
+    {
+      "id": "demo-c1-2",
+      "displayName": {
+        "text": "Reliable Plumbing",
+        "languageCode": "en"
+      },
+      "formattedAddress": "1 Main St, Dallas, TX 75201, USA",
+      "location": {
+        "latitude": 32.7767,
+        "longitude": -96.797
+      },
+      "types": [
+        "plumber",
+        "point_of_interest",
+        "establishment"
+      ],
+      "primaryType": "plumber",
+      "addressComponents": [
+        {
+          "longText": "1",
+          "shortText": "1",
+          "types": [
+            "street_number"
+          ]
+        },
+        {
+          "longText": "Main Street",
+          "shortText": "Main St",
+          "types": [
+            "route"
+          ]
+        },
+        {
+          "longText": "Dallas",
+          "shortText": "Dallas",
+          "types": [
+            "locality",
+            "political"
+          ]
+        },
+        {
+          "longText": "Texas",
+          "shortText": "TX",
+          "types": [
+            "administrative_area_level_1",
+            "political"
+          ]
+        },
+        {
+          "longText": "75201",
+          "shortText": "75201",
+          "types": [
+            "postal_code"
+          ]
+        },
+        {
+          "longText": "United States",
+          "shortText": "US",
+          "types": [
+            "country",
+            "political"
+          ]
+        }
+      ],
+      "nationalPhoneNumber": "(214) 555-0302",
+      "websiteUri": "https://reliableplumbingdfw.invalid/",
+      "businessStatus": "OPERATIONAL"
+    },
+    {
+      "id": "demo-c2-1",
+      "displayName": {
+        "text": "Capital Plumbing",
+        "languageCode": "en"
+      },
+      "formattedAddress": "200 Riverside Dr, Austin, TX 78741, USA",
+      "location": {
+        "latitude": 30.236,
+        "longitude": -97.725
+      },
+      "types": [
+        "plumber",
+        "point_of_interest",
+        "establishment"
+      ],
+      "primaryType": "plumber",
+      "addressComponents": [
+        {
+          "longText": "200",
+          "shortText": "200",
+          "types": [
+            "street_number"
+          ]
+        },
+        {
+          "longText": "Riverside Drive",
+          "shortText": "Riverside Dr",
+          "types": [
+            "route"
+          ]
+        },
+        {
+          "longText": "Austin",
+          "shortText": "Austin",
+          "types": [
+            "locality",
+            "political"
+          ]
+        },
+        {
+          "longText": "Texas",
+          "shortText": "TX",
+          "types": [
+            "administrative_area_level_1",
+            "political"
+          ]
+        },
+        {
+          "longText": "78741",
+          "shortText": "78741",
+          "types": [
+            "postal_code"
+          ]
+        },
+        {
+          "longText": "United States",
+          "shortText": "US",
+          "types": [
+            "country",
+            "political"
+          ]
+        }
+      ],
+      "nationalPhoneNumber": "(512) 555-0303",
+      "websiteUri": "https://capitalplumbingatx.invalid/",
+      "businessStatus": "OPERATIONAL"
+    },
+    {
+      "id": "demo-c2-2",
+      "displayName": {
+        "text": "Capital Plumbing",
+        "languageCode": "en"
+      },
+      "formattedAddress": "1 Travis St, Houston, TX 77002, USA",
+      "location": {
+        "latitude": 29.7604,
+        "longitude": -95.3698
+      },
+      "types": [
+        "plumber",
+        "point_of_interest",
+        "establishment"
+      ],
+      "primaryType": "plumber",
+      "addressComponents": [
+        {
+          "longText": "1",
+          "shortText": "1",
+          "types": [
+            "street_number"
+          ]
+        },
+        {
+          "longText": "Travis Street",
+          "shortText": "Travis St",
+          "types": [
+            "route"
+          ]
+        },
+        {
+          "longText": "Houston",
+          "shortText": "Houston",
+          "types": [
+            "locality",
+            "political"
+          ]
+        },
+        {
+          "longText": "Texas",
+          "shortText": "TX",
+          "types": [
+            "administrative_area_level_1",
+            "political"
+          ]
+        },
+        {
+          "longText": "77002",
+          "shortText": "77002",
+          "types": [
+            "postal_code"
+          ]
+        },
+        {
+          "longText": "United States",
+          "shortText": "US",
+          "types": [
+            "country",
+            "political"
+          ]
+        }
+      ],
+      "nationalPhoneNumber": "(713) 555-0304",
+      "websiteUri": "https://capitalplumbinghou.invalid/",
+      "businessStatus": "OPERATIONAL"
+    },
+    {
+      "id": "demo-c3-1",
+      "displayName": {
+        "text": "Quick Fix Plumbing",
+        "languageCode": "en"
+      },
+      "formattedAddress": "300 Rundberg Ln, Austin, TX 78753, USA",
+      "location": {
+        "latitude": 30.366,
+        "longitude": -97.705
+      },
+      "types": [
+        "plumber",
+        "point_of_interest",
+        "establishment"
+      ],
+      "primaryType": "plumber",
+      "addressComponents": [
+        {
+          "longText": "300",
+          "shortText": "300",
+          "types": [
+            "street_number"
+          ]
+        },
+        {
+          "longText": "Rundberg Lane",
+          "shortText": "Rundberg Ln",
+          "types": [
+            "route"
+          ]
+        },
+        {
+          "longText": "Austin",
+          "shortText": "Austin",
+          "types": [
+            "locality",
+            "political"
+          ]
+        },
+        {
+          "longText": "Texas",
+          "shortText": "TX",
+          "types": [
+            "administrative_area_level_1",
+            "political"
+          ]
+        },
+        {
+          "longText": "78753",
+          "shortText": "78753",
+          "types": [
+            "postal_code"
+          ]
+        },
+        {
+          "longText": "United States",
+          "shortText": "US",
+          "types": [
+            "country",
+            "political"
+          ]
+        }
+      ],
+      "nationalPhoneNumber": "(512) 555-0305",
+      "websiteUri": "https://quickfixatx.invalid/",
+      "businessStatus": "OPERATIONAL"
+    },
+    {
+      "id": "demo-c3-2",
+      "displayName": {
+        "text": "Quick Fix Plumbing",
+        "languageCode": "en"
+      },
+      "formattedAddress": "1 Commerce St, San Antonio, TX 78205, USA",
+      "location": {
+        "latitude": 29.4241,
+        "longitude": -98.4936
+      },
+      "types": [
+        "plumber",
+        "point_of_interest",
+        "establishment"
+      ],
+      "primaryType": "plumber",
+      "addressComponents": [
+        {
+          "longText": "1",
+          "shortText": "1",
+          "types": [
+            "street_number"
+          ]
+        },
+        {
+          "longText": "Commerce Street",
+          "shortText": "Commerce St",
+          "types": [
+            "route"
+          ]
+        },
+        {
+          "longText": "San Antonio",
+          "shortText": "San Antonio",
+          "types": [
+            "locality",
+            "political"
+          ]
+        },
+        {
+          "longText": "Texas",
+          "shortText": "TX",
+          "types": [
+            "administrative_area_level_1",
+            "political"
+          ]
+        },
+        {
+          "longText": "78205",
+          "shortText": "78205",
+          "types": [
+            "postal_code"
+          ]
+        },
+        {
+          "longText": "United States",
+          "shortText": "US",
+          "types": [
+            "country",
+            "political"
+          ]
+        }
+      ],
+      "nationalPhoneNumber": "(210) 555-0306",
+      "websiteUri": "https://quickfixsatx.invalid/",
+      "businessStatus": "OPERATIONAL"
+    },
+    {
+      "id": "demo-d1",
+      "displayName": {
+        "text": "Texas Trusted Plumbing North",
+        "languageCode": "en"
+      },
+      "formattedAddress": "1100 Lamar Blvd, Austin, TX 78752, USA",
+      "location": {
+        "latitude": 30.444,
+        "longitude": -97.705
+      },
+      "types": [
+        "plumber",
+        "point_of_interest",
+        "establishment"
+      ],
+      "primaryType": "plumber",
+      "addressComponents": [
+        {
+          "longText": "1100",
+          "shortText": "1100",
+          "types": [
+            "street_number"
+          ]
+        },
+        {
+          "longText": "Lamar Boulevard",
+          "shortText": "Lamar Blvd",
+          "types": [
+            "route"
+          ]
+        },
+        {
+          "longText": "Austin",
+          "shortText": "Austin",
+          "types": [
+            "locality",
+            "political"
+          ]
+        },
+        {
+          "longText": "Texas",
+          "shortText": "TX",
+          "types": [
+            "administrative_area_level_1",
+            "political"
+          ]
+        },
+        {
+          "longText": "78752",
+          "shortText": "78752",
+          "types": [
+            "postal_code"
+          ]
+        },
+        {
+          "longText": "United States",
+          "shortText": "US",
+          "types": [
+            "country",
+            "political"
+          ]
+        }
+      ],
+      "nationalPhoneNumber": "(512) 555-0401",
+      "websiteUri": "https://texastrustedplumbing.invalid/",
+      "businessStatus": "OPERATIONAL"
+    },
+    {
+      "id": "demo-d2",
+      "displayName": {
+        "text": "Texas Trusted Plumbing South",
+        "languageCode": "en"
+      },
+      "formattedAddress": "1200 Manchaca Rd, Austin, TX 78748, USA",
+      "location": {
+        "latitude": 30.464,
+        "longitude": -97.705
+      },
+      "types": [
+        "plumber",
+        "point_of_interest",
+        "establishment"
+      ],
+      "primaryType": "plumber",
+      "addressComponents": [
+        {
+          "longText": "1200",
+          "shortText": "1200",
+          "types": [
+            "street_number"
+          ]
+        },
+        {
+          "longText": "Manchaca Road",
+          "shortText": "Manchaca Rd",
+          "types": [
+            "route"
+          ]
+        },
+        {
+          "longText": "Austin",
+          "shortText": "Austin",
+          "types": [
+            "locality",
+            "political"
+          ]
+        },
+        {
+          "longText": "Texas",
+          "shortText": "TX",
+          "types": [
+            "administrative_area_level_1",
+            "political"
+          ]
+        },
+        {
+          "longText": "78748",
+          "shortText": "78748",
+          "types": [
+            "postal_code"
+          ]
+        },
+        {
+          "longText": "United States",
+          "shortText": "US",
+          "types": [
+            "country",
+            "political"
+          ]
+        }
+      ],
+      "nationalPhoneNumber": "(512) 555-0402",
+      "websiteUri": "https://texastrustedplumbing.invalid/",
+      "businessStatus": "OPERATIONAL"
+    },
+    {
+      "id": "demo-d3",
+      "displayName": {
+        "text": "Texas Trusted Plumbing Central",
+        "languageCode": "en"
+      },
+      "formattedAddress": "1300 Guadalupe St, Austin, TX 78756, USA",
+      "location": {
+        "latitude": 30.484,
+        "longitude": -97.705
+      },
+      "types": [
+        "plumber",
+        "point_of_interest",
+        "establishment"
+      ],
+      "primaryType": "plumber",
+      "addressComponents": [
+        {
+          "longText": "1300",
+          "shortText": "1300",
+          "types": [
+            "street_number"
+          ]
+        },
+        {
+          "longText": "Guadalupe Street",
+          "shortText": "Guadalupe St",
+          "types": [
+            "route"
+          ]
+        },
+        {
+          "longText": "Austin",
+          "shortText": "Austin",
+          "types": [
+            "locality",
+            "political"
+          ]
+        },
+        {
+          "longText": "Texas",
+          "shortText": "TX",
+          "types": [
+            "administrative_area_level_1",
+            "political"
+          ]
+        },
+        {
+          "longText": "78756",
+          "shortText": "78756",
+          "types": [
+            "postal_code"
+          ]
+        },
+        {
+          "longText": "United States",
+          "shortText": "US",
+          "types": [
+            "country",
+            "political"
+          ]
+        }
+      ],
+      "nationalPhoneNumber": "(512) 555-0403",
+      "websiteUri": "https://texastrustedplumbing.invalid/",
+      "businessStatus": "OPERATIONAL"
+    },
+    {
+      "id": "demo-e1",
+      "displayName": {
+        "text": "Wix Waterworks",
+        "languageCode": "en"
+      },
+      "formattedAddress": "10 Shoal Creek Blvd, Austin, TX 78758, USA",
+      "location": {
+        "latitude": 30.504,
+        "longitude": -97.705
+      },
+      "types": [
+        "plumber",
+        "point_of_interest",
+        "establishment"
+      ],
+      "primaryType": "plumber",
+      "addressComponents": [
+        {
+          "longText": "10",
+          "shortText": "10",
+          "types": [
+            "street_number"
+          ]
+        },
+        {
+          "longText": "Shoal Creek Boulevard",
+          "shortText": "Shoal Creek Blvd",
+          "types": [
+            "route"
+          ]
+        },
+        {
+          "longText": "Austin",
+          "shortText": "Austin",
+          "types": [
+            "locality",
+            "political"
+          ]
+        },
+        {
+          "longText": "Texas",
+          "shortText": "TX",
+          "types": [
+            "administrative_area_level_1",
+            "political"
+          ]
+        },
+        {
+          "longText": "78758",
+          "shortText": "78758",
+          "types": [
+            "postal_code"
+          ]
+        },
+        {
+          "longText": "United States",
+          "shortText": "US",
+          "types": [
+            "country",
+            "political"
+          ]
+        }
+      ],
+      "nationalPhoneNumber": "(512) 555-0501",
+      "websiteUri": "https://wixwaterworks.wixsite.com/home",
+      "businessStatus": "OPERATIONAL"
+    },
+    {
+      "id": "demo-e2",
+      "displayName": {
+        "text": "Square Site Sewer",
+        "languageCode": "en"
+      },
+      "formattedAddress": "20 Slaughter Ln, Austin, TX 78749, USA",
+      "location": {
+        "latitude": 30.524,
+        "longitude": -97.705
+      },
+      "types": [
+        "plumber",
+        "point_of_interest",
+        "establishment"
+      ],
+      "primaryType": "plumber",
+      "addressComponents": [
+        {
+          "longText": "20",
+          "shortText": "20",
+          "types": [
+            "street_number"
+          ]
+        },
+        {
+          "longText": "Slaughter Lane",
+          "shortText": "Slaughter Ln",
+          "types": [
+            "route"
+          ]
+        },
+        {
+          "longText": "Austin",
+          "shortText": "Austin",
+          "types": [
+            "locality",
+            "political"
+          ]
+        },
+        {
+          "longText": "Texas",
+          "shortText": "TX",
+          "types": [
+            "administrative_area_level_1",
+            "political"
+          ]
+        },
+        {
+          "longText": "78749",
+          "shortText": "78749",
+          "types": [
+            "postal_code"
+          ]
+        },
+        {
+          "longText": "United States",
+          "shortText": "US",
+          "types": [
+            "country",
+            "political"
+          ]
+        }
+      ],
+      "nationalPhoneNumber": "(512) 555-0502",
+      "websiteUri": "https://squaresitesewer.square.site/",
+      "businessStatus": "OPERATIONAL"
+    },
+    {
+      "id": "demo-e3",
+      "displayName": {
+        "text": "GoDaddy Gutters & Plumbing",
+        "languageCode": "en"
+      },
+      "formattedAddress": "30 Anderson Ln, Austin, TX 78759, USA",
+      "location": {
+        "latitude": 30.544,
+        "longitude": -97.705
+      },
+      "types": [
+        "plumber",
+        "point_of_interest",
+        "establishment"
+      ],
+      "primaryType": "plumber",
+      "addressComponents": [
+        {
+          "longText": "30",
+          "shortText": "30",
+          "types": [
+            "street_number"
+          ]
+        },
+        {
+          "longText": "Anderson Lane",
+          "shortText": "Anderson Ln",
+          "types": [
+            "route"
+          ]
+        },
+        {
+          "longText": "Austin",
+          "shortText": "Austin",
+          "types": [
+            "locality",
+            "political"
+          ]
+        },
+        {
+          "longText": "Texas",
+          "shortText": "TX",
+          "types": [
+            "administrative_area_level_1",
+            "political"
+          ]
+        },
+        {
+          "longText": "78759",
+          "shortText": "78759",
+          "types": [
+            "postal_code"
+          ]
+        },
+        {
+          "longText": "United States",
+          "shortText": "US",
+          "types": [
+            "country",
+            "political"
+          ]
+        }
+      ],
+      "nationalPhoneNumber": "(512) 555-0503",
+      "websiteUri": "https://godaddygutters.godaddysites.com/",
+      "businessStatus": "OPERATIONAL"
+    },
+    {
+      "id": "demo-e4",
+      "displayName": {
+        "text": "Nextdoor Plumbing Pros",
+        "languageCode": "en"
+      },
+      "formattedAddress": "40 Braker Ln, Austin, TX 78727, USA",
+      "location": {
+        "latitude": 30.564,
+        "longitude": -97.705
+      },
+      "types": [
+        "plumber",
+        "point_of_interest",
+        "establishment"
+      ],
+      "primaryType": "plumber",
+      "addressComponents": [
+        {
+          "longText": "40",
+          "shortText": "40",
+          "types": [
+            "street_number"
+          ]
+        },
+        {
+          "longText": "Braker Lane",
+          "shortText": "Braker Ln",
+          "types": [
+            "route"
+          ]
+        },
+        {
+          "longText": "Austin",
+          "shortText": "Austin",
+          "types": [
+            "locality",
+            "political"
+          ]
+        },
+        {
+          "longText": "Texas",
+          "shortText": "TX",
+          "types": [
+            "administrative_area_level_1",
+            "political"
+          ]
+        },
+        {
+          "longText": "78727",
+          "shortText": "78727",
+          "types": [
+            "postal_code"
+          ]
+        },
+        {
+          "longText": "United States",
+          "shortText": "US",
+          "types": [
+            "country",
+            "political"
+          ]
+        }
+      ],
+      "nationalPhoneNumber": "(512) 555-0504",
+      "websiteUri": "https://nextdoor.com/pages/nextdoor-plumbing-pros/",
+      "businessStatus": "OPERATIONAL"
+    },
+    {
+      "id": "demo-e5",
+      "displayName": {
+        "text": "Yelp Only Plumbing",
+        "languageCode": "en"
+      },
+      "formattedAddress": "50 Parmer Ln, Austin, TX 78729, USA",
+      "location": {
+        "latitude": 30.584,
+        "longitude": -97.705
+      },
+      "types": [
+        "plumber",
+        "point_of_interest",
+        "establishment"
+      ],
+      "primaryType": "plumber",
+      "addressComponents": [
+        {
+          "longText": "50",
+          "shortText": "50",
+          "types": [
+            "street_number"
+          ]
+        },
+        {
+          "longText": "Parmer Lane",
+          "shortText": "Parmer Ln",
+          "types": [
+            "route"
+          ]
+        },
+        {
+          "longText": "Austin",
+          "shortText": "Austin",
+          "types": [
+            "locality",
+            "political"
+          ]
+        },
+        {
+          "longText": "Texas",
+          "shortText": "TX",
+          "types": [
+            "administrative_area_level_1",
+            "political"
+          ]
+        },
+        {
+          "longText": "78729",
+          "shortText": "78729",
+          "types": [
+            "postal_code"
+          ]
+        },
+        {
+          "longText": "United States",
+          "shortText": "US",
+          "types": [
+            "country",
+            "political"
+          ]
+        }
+      ],
+      "nationalPhoneNumber": "(512) 555-0505",
+      "websiteUri": "https://www.yelp.com/biz/yelp-only-plumbing-austin",
+      "businessStatus": "OPERATIONAL"
+    },
+    {
+      "id": "demo-e6",
+      "displayName": {
+        "text": "No Website Plumbing",
+        "languageCode": "en"
+      },
+      "formattedAddress": "60 Howard Ln, Austin, TX 78728, USA",
+      "location": {
+        "latitude": 30.604,
+        "longitude": -97.705
+      },
+      "types": [
+        "plumber",
+        "point_of_interest",
+        "establishment"
+      ],
+      "primaryType": "plumber",
+      "addressComponents": [
+        {
+          "longText": "60",
+          "shortText": "60",
+          "types": [
+            "street_number"
+          ]
+        },
+        {
+          "longText": "Howard Lane",
+          "shortText": "Howard Ln",
+          "types": [
+            "route"
+          ]
+        },
+        {
+          "longText": "Austin",
+          "shortText": "Austin",
+          "types": [
+            "locality",
+            "political"
+          ]
+        },
+        {
+          "longText": "Texas",
+          "shortText": "TX",
+          "types": [
+            "administrative_area_level_1",
+            "political"
+          ]
+        },
+        {
+          "longText": "78728",
+          "shortText": "78728",
+          "types": [
+            "postal_code"
+          ]
+        },
+        {
+          "longText": "United States",
+          "shortText": "US",
+          "types": [
+            "country",
+            "political"
+          ]
+        }
+      ],
+      "nationalPhoneNumber": "(512) 555-0506",
+      "businessStatus": "OPERATIONAL"
+    },
+    {
+      "id": "demo-e7",
+      "displayName": {
+        "text": "Messy Format Plumbing",
+        "languageCode": "en"
+      },
+      "formattedAddress": "123 Main St Ste 4, Austin, TX 78702, USA",
+      "location": {
+        "latitude": 30.624,
+        "longitude": -97.705
+      },
+      "types": [
+        "plumber",
+        "point_of_interest",
+        "establishment"
+      ],
+      "primaryType": "plumber",
+      "addressComponents": [
+        {
+          "longText": "123",
+          "shortText": "123",
+          "types": [
+            "street_number"
+          ]
+        },
+        {
+          "longText": "Main Street",
+          "shortText": "Main St",
+          "types": [
+            "route"
+          ]
+        },
+        {
+          "longText": "4",
+          "shortText": "4",
+          "types": [
+            "subpremise"
+          ]
+        },
+        {
+          "longText": "Austin",
+          "shortText": "Austin",
+          "types": [
+            "locality",
+            "political"
+          ]
+        },
+        {
+          "longText": "Texas",
+          "shortText": "TX",
+          "types": [
+            "administrative_area_level_1",
+            "political"
+          ]
+        },
+        {
+          "longText": "78702",
+          "shortText": "78702",
+          "types": [
+            "postal_code"
+          ]
+        },
+        {
+          "longText": "United States",
+          "shortText": "US",
+          "types": [
+            "country",
+            "political"
+          ]
+        }
+      ],
+      "nationalPhoneNumber": "512.555.0507",
+      "websiteUri": "WWW.MESSYFORMAT-DEMO.COM/",
+      "businessStatus": "OPERATIONAL"
+    },
+    {
+      "id": "demo-e8",
+      "displayName": {
+        "text": "Closed Down Plumbing",
+        "languageCode": "en"
+      },
+      "formattedAddress": "70 Springdale Rd, Austin, TX 78721, USA",
+      "location": {
+        "latitude": 30.644,
+        "longitude": -97.705
+      },
+      "types": [
+        "plumber",
+        "point_of_interest",
+        "establishment"
+      ],
+      "primaryType": "plumber",
+      "addressComponents": [
+        {
+          "longText": "70",
+          "shortText": "70",
+          "types": [
+            "street_number"
+          ]
+        },
+        {
+          "longText": "Springdale Road",
+          "shortText": "Springdale Rd",
+          "types": [
+            "route"
+          ]
+        },
+        {
+          "longText": "Austin",
+          "shortText": "Austin",
+          "types": [
+            "locality",
+            "political"
+          ]
+        },
+        {
+          "longText": "Texas",
+          "shortText": "TX",
+          "types": [
+            "administrative_area_level_1",
+            "political"
+          ]
+        },
+        {
+          "longText": "78721",
+          "shortText": "78721",
+          "types": [
+            "postal_code"
+          ]
+        },
+        {
+          "longText": "United States",
+          "shortText": "US",
+          "types": [
+            "country",
+            "political"
+          ]
+        }
+      ],
+      "nationalPhoneNumber": "(512) 555-0508",
+      "websiteUri": "https://closeddownplumbing.invalid/",
+      "businessStatus": "CLOSED_PERMANENTLY"
+    },
+    {
+      "id": "demo-e9",
+      "displayName": {
+        "text": "Temporarily Shut Plumbing",
+        "languageCode": "en"
+      },
+      "formattedAddress": "80 Airport Blvd, Austin, TX 78722, USA",
+      "location": {
+        "latitude": 30.664,
+        "longitude": -97.705
+      },
+      "types": [
+        "plumber",
+        "point_of_interest",
+        "establishment"
+      ],
+      "primaryType": "plumber",
+      "addressComponents": [
+        {
+          "longText": "80",
+          "shortText": "80",
+          "types": [
+            "street_number"
+          ]
+        },
+        {
+          "longText": "Airport Boulevard",
+          "shortText": "Airport Blvd",
+          "types": [
+            "route"
+          ]
+        },
+        {
+          "longText": "Austin",
+          "shortText": "Austin",
+          "types": [
+            "locality",
+            "political"
+          ]
+        },
+        {
+          "longText": "Texas",
+          "shortText": "TX",
+          "types": [
+            "administrative_area_level_1",
+            "political"
+          ]
+        },
+        {
+          "longText": "78722",
+          "shortText": "78722",
+          "types": [
+            "postal_code"
+          ]
+        },
+        {
+          "longText": "United States",
+          "shortText": "US",
+          "types": [
+            "country",
+            "political"
+          ]
+        }
+      ],
+      "nationalPhoneNumber": "(512) 555-0509",
+      "websiteUri": "https://temporarilyshut.invalid/",
+      "businessStatus": "CLOSED_TEMPORARILY"
+    },
+    {
+      "id": "demo-e10",
+      "displayName": {
+        "text": "Unknown Status Plumbing",
+        "languageCode": "en"
+      },
+      "formattedAddress": "90 Cameron Rd, Austin, TX 78752, USA",
+      "location": {
+        "latitude": 30.684,
+        "longitude": -97.705
+      },
+      "types": [
+        "plumber",
+        "point_of_interest",
+        "establishment"
+      ],
+      "primaryType": "plumber",
+      "addressComponents": [
+        {
+          "longText": "90",
+          "shortText": "90",
+          "types": [
+            "street_number"
+          ]
+        },
+        {
+          "longText": "Cameron Road",
+          "shortText": "Cameron Rd",
+          "types": [
+            "route"
+          ]
+        },
+        {
+          "longText": "Austin",
+          "shortText": "Austin",
+          "types": [
+            "locality",
+            "political"
+          ]
+        },
+        {
+          "longText": "Texas",
+          "shortText": "TX",
+          "types": [
+            "administrative_area_level_1",
+            "political"
+          ]
+        },
+        {
+          "longText": "78752",
+          "shortText": "78752",
+          "types": [
+            "postal_code"
+          ]
+        },
+        {
+          "longText": "United States",
+          "shortText": "US",
+          "types": [
+            "country",
+            "political"
+          ]
+        }
+      ],
+      "nationalPhoneNumber": "(512) 555-0510",
+      "websiteUri": "https://unknownstatus.invalid/"
+    },
+    {
+      "id": "demo-e11",
+      "displayName": {
+        "text": "Bad Phone Plumbing",
+        "languageCode": "en"
+      },
+      "formattedAddress": "95 Manor Rd, Austin, TX 78723, USA",
+      "location": {
+        "latitude": 30.704,
+        "longitude": -97.705
+      },
+      "types": [
+        "plumber",
+        "point_of_interest",
+        "establishment"
+      ],
+      "primaryType": "plumber",
+      "addressComponents": [
+        {
+          "longText": "95",
+          "shortText": "95",
+          "types": [
+            "street_number"
+          ]
+        },
+        {
+          "longText": "Manor Road",
+          "shortText": "Manor Rd",
+          "types": [
+            "route"
+          ]
+        },
+        {
+          "longText": "Austin",
+          "shortText": "Austin",
+          "types": [
+            "locality",
+            "political"
+          ]
+        },
+        {
+          "longText": "Texas",
+          "shortText": "TX",
+          "types": [
+            "administrative_area_level_1",
+            "political"
+          ]
+        },
+        {
+          "longText": "78723",
+          "shortText": "78723",
+          "types": [
+            "postal_code"
+          ]
+        },
+        {
+          "longText": "United States",
+          "shortText": "US",
+          "types": [
+            "country",
+            "political"
+          ]
+        }
+      ],
+      "nationalPhoneNumber": "555-0511",
+      "websiteUri": "https://badphoneplumbing.invalid/",
+      "businessStatus": "OPERATIONAL"
+    },
+    {
+      "id": "demo-e12",
+      "displayName": {
+        "text": "No Components Plumbing",
+        "languageCode": "en"
+      },
+      "formattedAddress": "99 Burnet Road, Austin, TX 78757, USA",
+      "location": {
+        "latitude": 30.724,
+        "longitude": -97.705
+      },
+      "types": [
+        "plumber",
+        "point_of_interest",
+        "establishment"
+      ],
+      "primaryType": "plumber",
+      "nationalPhoneNumber": "(512) 555-0512",
+      "websiteUri": "https://nocomponents.invalid/",
+      "businessStatus": "OPERATIONAL"
+    },
+    {
+      "id": "demo-e13",
+      "displayName": {
+        "text": "Roofing Cousins Inc",
+        "languageCode": "en"
+      },
+      "formattedAddress": "105 Ben White Blvd, Austin, TX 78704, USA",
+      "location": {
+        "latitude": 30.744,
+        "longitude": -97.705
+      },
+      "types": [
+        "roofing_contractor",
+        "point_of_interest",
+        "establishment"
+      ],
+      "primaryType": "roofing_contractor",
+      "addressComponents": [
+        {
+          "longText": "105",
+          "shortText": "105",
+          "types": [
+            "street_number"
+          ]
+        },
+        {
+          "longText": "Ben White Boulevard",
+          "shortText": "Ben White Blvd",
+          "types": [
+            "route"
+          ]
+        },
+        {
+          "longText": "Austin",
+          "shortText": "Austin",
+          "types": [
+            "locality",
+            "political"
+          ]
+        },
+        {
+          "longText": "Texas",
+          "shortText": "TX",
+          "types": [
+            "administrative_area_level_1",
+            "political"
+          ]
+        },
+        {
+          "longText": "78704",
+          "shortText": "78704",
+          "types": [
+            "postal_code"
+          ]
+        },
+        {
+          "longText": "United States",
+          "shortText": "US",
+          "types": [
+            "country",
+            "political"
+          ]
+        }
+      ],
+      "nationalPhoneNumber": "(512) 555-0513",
+      "websiteUri": "https://roofingcousins.invalid/",
+      "businessStatus": "OPERATIONAL"
+    }
+  ]
+}

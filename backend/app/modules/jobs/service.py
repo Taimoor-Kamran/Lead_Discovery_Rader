@@ -27,6 +27,7 @@ logger = get_logger("app.jobs")
 
 DEMO_JOB_KIND = "demo"
 DISCOVERY_JOB_KIND = "discovery"
+RESOLUTION_JOB_KIND = "resolution"
 
 
 def get_search_job(session: Session, search_job_id: uuid.UUID) -> SearchJob:
@@ -152,6 +153,7 @@ def enqueue_run(
     actor_id: uuid.UUID | None = None,
     idempotency_key: str | None = None,
     progress_total: int = 0,
+    params: dict[str, Any] | None = None,
 ) -> JobRun:
     """Create a `queued` job run and hand it to RQ.
 
@@ -175,6 +177,7 @@ def enqueue_run(
         status=JobRunStatus.queued,
         progress_total=progress_total,
         idempotency_key=idempotency_key,
+        params=params,
     )
     session.add(run)
     try:
@@ -194,7 +197,11 @@ def enqueue_run(
         entity_type="job_run",
         entity_id=run.id,
         actor_id=actor_id,
-        after={"kind": kind, "search_job_id": str(search_job_id) if search_job_id else None},
+        after={
+            "kind": kind,
+            "search_job_id": str(search_job_id) if search_job_id else None,
+            "params": params,
+        },
     )
     session.commit()
 

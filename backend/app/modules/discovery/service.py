@@ -4,6 +4,7 @@ import hashlib
 import json
 import uuid
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -115,11 +116,27 @@ def add_sighting(
     return sighting
 
 
-def purge_expired(session: Session, *, now: datetime | None = None) -> int:
+@dataclass(frozen=True)
+class PurgeResult:
+    """What one retention pass took away. Rows and identifiers are never among it."""
+
+    records: int = 0
+    field_values: int = 0
+    businesses_recomputed: int = 0
+
+    @property
+    def total(self) -> int:
+        return self.records + self.field_values
+
+
+def purge_expired(session: Session, *, now: datetime | None = None) -> PurgeResult:
     """Drop stored provider content whose retention window has closed.
 
-    The row, its place ID and its provenance stay; only `raw_payload` goes. That is what
-    the Google Maps Platform terms allow us to keep indefinitely.
+    Two things expire together: the raw payload on `discovered_records`, and every
+    business field value derived from it. The rows, the place IDs and the provenance
+    trail all stay — only the provider's content goes, which is the line the Google Maps
+    Platform terms draw. Each affected business is then recomputed, so what it shows is
+    what it is still allowed to show.
     """
     moment = now or datetime.now(UTC)
     result = session.execute(
@@ -131,10 +148,51 @@ def purge_expired(session: Session, *, now: datetime | None = None) -> int:
         )
         .values(raw_payload=null(), purged_at=moment)
     )
-    purged = int(getattr(result, "rowcount", 0) or 0)
-    if purged:
-        logger.info("purged expired record content", extra={"records": purged})
-    return purged
+    records = int(getattr(result, "rowcount", 0) or 0)
+    field_values, businesses = _purge_field_values(session, moment)
+
+    if records or field_values:
+        logger.info(
+            "purged expired content",
+            extra={
+                "records": records,
+                "field_values": field_values,
+                "businesses_recomputed": businesses,
+            },
+        )
+    return PurgeResult(records=records, field_values=field_values, businesses_recomputed=businesses)
+
+
+def _purge_field_values(session: Session, moment: datetime) -> tuple[int, int]:
+    """Null every expired business field value, then recompute what it fed."""
+    # Imported here: the businesses module imports this one for its reads.
+    from app.modules.businesses.models import Business, BusinessFieldValue
+    from app.modules.resolution import survivorship
+
+    expired = list(
+        session.scalars(
+            select(BusinessFieldValue).where(
+                BusinessFieldValue.expires_at.is_not(None),
+                BusinessFieldValue.expires_at < moment,
+                BusinessFieldValue.purged_at.is_(None),
+            )
+        )
+    )
+    if not expired:
+        return 0, 0
+
+    affected: set[uuid.UUID] = set()
+    for value in expired:
+        value.value = None
+        value.purged_at = moment
+        affected.add(value.business_id)
+    session.flush()
+
+    for business_id in affected:
+        business = session.get(Business, business_id)
+        if business is not None:
+            survivorship.recompute(session, business, now=moment)
+    return len(expired), len(affected)
 
 
 # --- metering ---------------------------------------------------------------------

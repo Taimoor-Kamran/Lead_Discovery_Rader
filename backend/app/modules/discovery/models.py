@@ -27,6 +27,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
 from app.core.models import created_at_column, updated_at_column, uuid_pk
+from app.modules.resolution.models import ResolutionStatus, resolution_status_enum
 
 
 class DiscoveredRecord(Base):
@@ -37,6 +38,8 @@ class DiscoveredRecord(Base):
         UniqueConstraint("source_id", "source_record_id", name="uq_discovered_records_source_key"),
         Index("ix_discovered_records_content_expires_at", "content_expires_at"),
         Index("ix_discovered_records_created_at_id", "created_at", "id"),
+        Index("ix_discovered_records_resolution_status", "resolution_status"),
+        Index("ix_discovered_records_business_id", "business_id"),
     )
 
     id: Mapped[uuid.UUID] = uuid_pk()
@@ -53,8 +56,17 @@ class DiscoveredRecord(Base):
         JSONB(none_as_null=True), nullable=True
     )
     payload_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    # The FK to `businesses` arrives with entity resolution in v0.3.0.
-    business_id: Mapped[uuid.UUID | None] = mapped_column(PGUUID(as_uuid=True), nullable=True)
+    # Set by resolution when the record is linked to a business, never before.
+    business_id: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("businesses.id", ondelete="SET NULL"), nullable=True
+    )
+    resolution_status: Mapped[ResolutionStatus] = mapped_column(
+        resolution_status_enum, nullable=False, default=ResolutionStatus.pending
+    )
+    # Why normalization refused the record. Filled only when `resolution_status` is
+    # `invalid`, so nothing is ever dropped without a reason a human can read.
+    resolution_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     first_discovered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     last_discovered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

@@ -52,6 +52,13 @@ def register(adapter: SourceAdapter, *, replace: bool = False) -> SourceAdapter:
     return adapter
 
 
+def reload_builtins() -> None:
+    """Re-run built-in registration. Used after the environment changes (tests, the CLI)."""
+    global _bootstrapped
+    _bootstrapped = False
+    _ensure_builtins()
+
+
 def unregister(name: str) -> SourceAdapter | None:
     """Remove an adapter. Used by tests to install a temporary one."""
     return _ADAPTERS.pop(name, None)

@@ -3,6 +3,83 @@
 All notable changes, one section per merged spec. Newest first.
 Format: `## [vX.Y.Z] - YYYY-MM-DD` followed by Added / Changed / Fixed.
 
+## [v0.3.0] - 2026-09-19
+
+### Added
+
+- **Normalization** (`app/modules/normalization`). One `normalize(candidate, source)`
+  turns any source's record into a `NormalizedBusiness`: display and comparison names, a
+  phonetic `name_key`, E.164 phones, structured addresses with an expanded `street_key`,
+  websites split into `(website, domain, website_kind)`, an industry taxonomy, a business
+  status and a precision-7 geohash. Nothing is guessed — an unparseable phone is `null`,
+  a social profile has no domain, and a record that cannot be named is marked `invalid`
+  with the reason rather than dropped.
+- **`businesses` and `business_field_values`.** A business row is a *view*: every value
+  on it is the survivorship winner among the field values beneath it, each carrying its
+  source, the discovered record it came from, when it was observed and when it expires.
+  Recomputing is therefore always safe, which is what makes both a merge and a retention
+  purge show up correctly.
+- **Entity resolution** (`app/modules/resolution`). Blocking narrows a record to the
+  businesses sharing a domain, a phone, a postal code and name key, or a map cell with a
+  close enough name; five weighted signals (all configurable) score each pair and are
+  stored alongside the score; then the hard rules override it. A name alone never merges,
+  and a pair that disagrees about both its domain and its phone is never one business.
+- **The review gate.** `GET /match-candidates?status=pending` and
+  `POST /match-candidates/{id}/decision` (`reviewer`, `admin`). A mid-confidence pair
+  creates **no business at all** until a human decides: `merge` links the record and
+  closes its sibling candidates, `keep_apart` on the last one creates a business of its
+  own. Both write an audit entry.
+- **The `resolution` job.** A discovery run that finishes `done` queues its own
+  resolution run, keyed off the discovery run so a retry never leaves two behind.
+  `POST /jobs/{id}/resolve` (`admin`, `tech_admin`) re-runs one by hand. The run reports
+  `{processed, linked_existing, created, needs_review, invalid}`, is safe to repeat, and
+  produces one business for two records of the same new business seen in one run.
+- **Business endpoints.** `GET /businesses` filtered by `industry, city, state,
+  has_website, website_kind, business_status, q` with cursor pagination, and
+  `GET /businesses/{id}` showing every field value with its provenance and every record
+  behind it.
+- **Demo data, so none of this needs a Google key.** `make load-demo-data` stores 40
+  fictional Austin businesses (555 numbers, `.invalid` domains) laid out to hit every
+  path: exact duplicates that auto-merge, near-duplicates and chain locations that go to
+  review, and same-name businesses that stay apart. `austin_plumbers.expected.json`
+  records what they must resolve to, and an integration test asserts it. The
+  `demo_fixture` source is registered **only** under `local` or `development`.
+- **Retention now reaches derived data.** `purge-expired` nulls expired
+  `business_field_values` alongside the raw payloads, keeps the provenance rows, and
+  recomputes each affected business. A business whose name has entirely expired reads
+  `[expired] <place_id>`; re-discovery brings it back.
+
+### Fixed
+
+- **A merged business no longer mixes half of one record with half of another.**
+  Survivorship picked every field on its own, which let a Facebook page from one record
+  be shown beside a domain from another. `website`/`domain`/`website_kind` and the ten
+  address fields now each survive as one group taken whole from a single record — the web
+  group preferring a real site over a builder subdomain over a social page, the address
+  group preferring one that reaches a street.
+- **Swagger has an Authorize button.** The current-user dependency now declares an
+  `HTTPBearer` scheme, so `openapi.json` carries it and protected routes reference it.
+  `auto_error=False` keeps 401s in the project's own error envelope.
+- **A forgotten password can be reset.** `make reset-password EMAIL=...` prompts twice
+  without echoing (or reads `NEW_PASSWORD` for a scripted run), requires 12 characters,
+  exits non-zero on an unknown email, and writes a `user.password_reset` audit entry.
+  `users.token_version` is raised by the reset and carried in every token, so **every**
+  access and refresh token that user already held stops working at once. `seed-admin` now
+  warns that a generated password is shown only once.
+
+### Changed
+
+- Migration `0003_businesses` adds the three tables, `discovered_records.resolution_status
+  / resolution_error / resolved_at` and the foreign key to `businesses` that v0.2.0 left
+  open, `job_runs.params` and `users.token_version`.
+- `Candidate` gains `primary_type` and `address_components`, so normalization can use
+  structured address parts without learning which provider it is reading.
+- `domain` falls back to the whole host when the bundled public-suffix snapshot does not
+  know the suffix, instead of returning nothing. It can only under-merge, and it is what
+  the spec's own rule says `domain` is.
+- New deps: `phonenumbers`, `rapidfuzz`, `jellyfish`, `tldextract` — the last configured
+  offline, with a test that fails if it ever reaches for the suffix list.
+
 ## [v0.2.0] - 2026-09-19
 
 ### Added
