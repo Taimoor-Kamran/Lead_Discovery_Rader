@@ -7,7 +7,8 @@ what makes both a merge and a retention purge show up correctly.
 
 import uuid
 from collections.abc import Callable
-from datetime import datetime
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import select
@@ -25,6 +26,9 @@ logger = get_logger("app.resolution.survivorship")
 # Shown when every value for the name has been purged. The place ID may be kept
 # indefinitely, so the business stays identifiable and re-discovery refreshes it.
 EXPIRED_NAME_TEMPLATE = "[expired] {source_record_id}"
+
+# How many businesses one recompute pass holds in memory at a time.
+RECOMPUTE_BATCH_SIZE = 200
 
 # Fields that only mean anything together. Chosen one by one, a merged business could show
 # one record's Facebook page beside another record's own domain — a web presence no source
@@ -128,6 +132,68 @@ def write_field_values(
         written.append(row)
     session.flush()
     return written
+
+
+@dataclass(frozen=True)
+class RecomputeResult:
+    """What a sweep over every business changed. Nothing is written for an unchanged one."""
+
+    changed: int = 0
+    unchanged: int = 0
+
+    @property
+    def total(self) -> int:
+        return self.changed + self.unchanged
+
+
+def recompute_all(
+    session: Session,
+    *,
+    business_id: uuid.UUID | None = None,
+    batch_size: int = RECOMPUTE_BATCH_SIZE,
+    now: datetime | None = None,
+) -> RecomputeResult:
+    """Re-run survivorship for every business (or one), in batches.
+
+    Needed whenever the survivorship rules change on a live database: the stored values
+    were computed by the old rules, and nothing else would ever revisit them. Idempotent
+    by construction — recomputing a business that already agrees with the rules changes
+    nothing, which is what makes `changed` a meaningful number rather than a row count.
+    """
+    moment = now or datetime.now(UTC)
+    result = RecomputeResult()
+    last_id: uuid.UUID | None = None
+
+    while True:
+        stmt = select(Business).order_by(Business.id.asc()).limit(batch_size)
+        if business_id is not None:
+            stmt = stmt.where(Business.id == business_id)
+        if last_id is not None:
+            stmt = stmt.where(Business.id > last_id)
+        batch = list(session.scalars(stmt))
+        if not batch:
+            return result
+
+        for business in batch:
+            before = _snapshot(business)
+            recompute(session, business, now=moment)
+            if _snapshot(business) == before:
+                result = RecomputeResult(result.changed, result.unchanged + 1)
+            else:
+                result = RecomputeResult(result.changed + 1, result.unchanged)
+                logger.info(
+                    "business recomputed",
+                    extra={"business_id": str(business.id), "changed": True},
+                )
+            last_id = business.id
+        session.commit()
+        if business_id is not None:
+            return result
+
+
+def _snapshot(business: Business) -> tuple[object, ...]:
+    """Every displayed value, so "changed" means what a human would see change."""
+    return tuple(getattr(business, field, None) for field in PROVENANCED_FIELDS)
 
 
 def recompute(session: Session, business: Business, *, now: datetime | None = None) -> Business:

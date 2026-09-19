@@ -80,12 +80,62 @@ def purge_expired_command(argv: list[str]) -> int:
         f"Nulled {purged.field_values} expired business field value(s) and recomputed "
         f"{purged.businesses_recomputed} business(es)."
     )
+    print(
+        f"Nulled the stored page text of {purged.audit_page_texts} expired website audit(s); "
+        "their checks, findings and evidence were kept."
+    )
+    return 0
+
+
+def recompute_businesses(argv: list[str]) -> int:
+    """Re-run survivorship for every business, or for one.
+
+    Run this after the survivorship rules change: the values on existing rows were computed
+    by the old rules and nothing else would ever revisit them. Safe to repeat — a business
+    that already agrees with the rules is left alone and counted as unchanged.
+    """
+    parser = argparse.ArgumentParser(prog="python -m app.cli recompute-businesses")
+    parser.add_argument("--business-id", help="Recompute only this business")
+    args = parser.parse_args(argv)
+
+    business_id: uuid.UUID | None = None
+    if args.business_id:
+        try:
+            business_id = uuid.UUID(args.business_id)
+        except ValueError:
+            print(f"'{args.business_id}' is not a valid business id. Nothing was changed.")
+            return 2
+
+    from app.modules.resolution.survivorship import recompute_all
+
+    with session_scope() as session:
+        result = recompute_all(session, business_id=business_id)
+
+    if result.total == 0:
+        print("There are no businesses to recompute.")
+        return 0
+    print(
+        f"Recomputed {result.total} business(es): {result.changed} changed, "
+        f"{result.unchanged} unchanged."
+    )
     return 0
 
 
 def load_demo_data_command(argv: list[str]) -> int:
-    """Load the checked-in demo fixture and queue the resolution run that dedupes it."""
-    from app.demo.loader import load_demo_data
+    """Load the checked-in demo fixture and run it through resolution and the audits.
+
+    Everything it needs is checked in: the demo websites are answered from
+    `app/demo/sites`, so no request leaves the machine and no API key is involved.
+    """
+    parser = argparse.ArgumentParser(prog="python -m app.cli load-demo-data")
+    parser.add_argument(
+        "--queue-only",
+        action="store_true",
+        help="Queue the resolution run for a worker instead of running the pipeline here",
+    )
+    args = parser.parse_args(argv)
+
+    from app.demo.loader import load_demo_data, run_pipeline
 
     settings = get_settings()
     if not settings.is_development:
@@ -107,9 +157,29 @@ def load_demo_data_command(argv: list[str]) -> int:
         f"under search job {result.search_job_id}."
     )
     print(f"Discovery run:  {result.discovery_run_id}")
-    print(f"Resolution run: {result.resolution_run_id} (queued)")
-    print("Watch it with GET /api/v1/jobs/<resolution run>/status, then GET /api/v1/businesses.")
+
+    if args.queue_only:
+        print(f"Resolution run: {result.resolution_run_id} (queued)")
+        print(
+            "Watch it with GET /api/v1/jobs/<resolution run>/status, then GET /api/v1/businesses."
+        )
+        return 0
+
+    pipeline = run_pipeline(result)
+    print(f"Resolution run: {result.resolution_run_id} ({pipeline.resolution_status.value})")
+    print(f"  {_counts(pipeline.resolution_summary)}")
+    if pipeline.audit_run_id is None:
+        print("No audit run was queued. Check the worker logs.")
+        return 1
+    status = pipeline.audit_status.value if pipeline.audit_status else "unknown"
+    print(f"Audit run:      {pipeline.audit_run_id} ({status})")
+    print(f"  {_counts(pipeline.audit_summary)}")
+    print("Now try GET /api/v1/businesses?finding=no_online_booking.")
     return 0
+
+
+def _counts(summary: dict[str, object]) -> str:
+    return ", ".join(f"{key}={value}" for key, value in summary.items()) or "no counts reported"
 
 
 def reset_password(argv: list[str]) -> int:
@@ -226,6 +296,7 @@ COMMANDS: dict[str, Callable[[list[str]], int]] = {
     "seed-admin": seed_admin,
     "sync-sources": sync_sources,
     "purge-expired": purge_expired_command,
+    "recompute-businesses": recompute_businesses,
     "places-smoke": places_smoke,
     "load-demo-data": load_demo_data_command,
     "reset-password": reset_password,
