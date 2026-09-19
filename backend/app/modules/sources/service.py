@@ -51,8 +51,15 @@ def set_enabled(
     return source
 
 
+def is_service_source(source: Source) -> bool:
+    """Whether this row is an API the pipeline calls for a service, not for discovery."""
+    from app.modules.audit_web.psi import AUDIT_SERVICE_ROLE
+
+    return (source.config or {}).get("role") == AUDIT_SERVICE_ROLE
+
+
 def validate_source_ids(session: Session, source_ids: list[uuid.UUID]) -> list[Source]:
-    """Reject a job that names a source which does not exist or is switched off."""
+    """Reject a job that names a source which does not exist, is off, or cannot search."""
     if not source_ids:
         return []
     wanted = list(dict.fromkeys(source_ids))
@@ -67,5 +74,14 @@ def validate_source_ids(session: Session, source_ids: list[uuid.UUID]) -> list[S
     if disabled:
         raise ValidationFailedError(
             "One or more sources are disabled", details={"disabled_sources": disabled}
+        )
+    # PageSpeed Insights has a source row so its calls are metered, but it finds no
+    # businesses. Naming it in a search job is a mistake worth reporting, not a run that
+    # would quietly return nothing.
+    services = [found[s].name for s in wanted if is_service_source(found[s])]
+    if services:
+        raise ValidationFailedError(
+            "One or more sources cannot be searched; they are called by the pipeline itself",
+            details={"service_sources": services},
         )
     return [found[s] for s in wanted]

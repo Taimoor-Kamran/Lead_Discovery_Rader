@@ -1,0 +1,235 @@
+"""The PageSpeed client: what it reads, and how it fails without taking the audit with it."""
+
+import json
+import os
+from typing import Any
+
+import fakeredis
+import httpx
+import pytest
+import respx
+from pydantic import SecretStr
+
+from app.core.http import ApiHttpClient
+from app.modules.audit_web.psi import (
+    PSI_ENDPOINT,
+    FixturePageSpeedClient,
+    NetworkPageSpeedClient,
+    PageSpeedUnavailableError,
+    PsiResult,
+    build_psi_client,
+    pagespeed_source_config,
+    parse_psi,
+)
+from tests.conftest import FakeClock
+
+URL = "https://example.test/"
+
+
+def lighthouse(
+    score: float = 0.92,
+    *,
+    lcp: float = 2100.0,
+    cls: float = 0.05,
+    tbt: float = 180.0,
+    crux: str | None = "FAST",
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "lighthouseResult": {
+            "categories": {"performance": {"score": score}},
+            "audits": {
+                "largest-contentful-paint": {"numericValue": lcp},
+                "cumulative-layout-shift": {"numericValue": cls},
+                "total-blocking-time": {"numericValue": tbt},
+            },
+        }
+    }
+    if crux is not None:
+        payload["loadingExperience"] = {"overall_category": crux}
+    return payload
+
+
+# --- parsing ---------------------------------------------------------------------------
+
+
+def test_a_full_response_is_read_into_the_fields_we_keep() -> None:
+    result = parse_psi(lighthouse())
+
+    assert result == PsiResult(
+        performance_score=92, lcp_ms=2100, cls=0.05, tbt_ms=180, crux_category="FAST"
+    )
+
+
+def test_the_score_is_rounded_to_a_whole_number_out_of_a_hundred() -> None:
+    assert parse_psi(lighthouse(score=0.314)).performance_score == 31
+
+
+def test_missing_audits_stay_null_rather_than_zero() -> None:
+    result = parse_psi({"lighthouseResult": {"categories": {"performance": {"score": 0.5}}}})
+
+    assert result.performance_score == 50
+    assert result.lcp_ms is None
+    assert result.cls is None
+    assert result.tbt_ms is None
+    assert result.crux_category is None
+
+
+def test_a_response_without_field_data_has_no_crux_category() -> None:
+    assert parse_psi(lighthouse(crux=None)).crux_category is None
+
+
+def test_an_error_envelope_is_not_a_result() -> None:
+    with pytest.raises(PageSpeedUnavailableError) as exc:
+        parse_psi({"error": {"code": 429, "message": "Quota exceeded for quota metric"}})
+
+    assert "Quota exceeded" in exc.value.reason
+
+
+def test_a_body_that_is_not_an_object_is_not_a_result() -> None:
+    with pytest.raises(PageSpeedUnavailableError):
+        parse_psi(["not", "an", "object"])
+
+
+# --- the network client ----------------------------------------------------------------
+
+
+def client(
+    mock_http: respx.MockRouter, *, api_key: str = "", max_attempts: int = 1
+) -> NetworkPageSpeedClient:
+    clock = FakeClock()
+    return NetworkPageSpeedClient(
+        ApiHttpClient(
+            source="pagespeed_insights",
+            max_attempts=max_attempts,
+            sleeper=clock.sleep,
+            secrets=[api_key] if api_key else [],
+        ),
+        api_key=api_key,
+    )
+
+
+def test_the_client_asks_for_the_mobile_strategy(mock_http: respx.MockRouter) -> None:
+    route = mock_http.get(url__startswith=PSI_ENDPOINT).mock(
+        return_value=httpx.Response(200, json=lighthouse())
+    )
+
+    result = client(mock_http).analyse(URL)
+
+    assert result.performance_score == 92
+    request_url = str(route.calls[0].request.url)
+    assert "strategy=mobile" in request_url
+    assert "url=https%3A%2F%2Fexample.test%2F" in request_url
+
+
+def test_the_key_travels_in_the_query_and_never_in_an_error(mock_http: respx.MockRouter) -> None:
+    sentinel = "psi-key-SENTINEL-do-not-log"
+    mock_http.get(url__startswith=PSI_ENDPOINT).mock(
+        return_value=httpx.Response(400, json={"error": {"message": f"bad key {sentinel}"}})
+    )
+
+    with pytest.raises(PageSpeedUnavailableError) as exc:
+        client(mock_http, api_key=sentinel).analyse(URL)
+
+    assert sentinel not in exc.value.reason
+
+
+def test_a_quota_error_is_reported_as_unavailable_rather_than_raised(
+    mock_http: respx.MockRouter,
+) -> None:
+    mock_http.get(url__startswith=PSI_ENDPOINT).mock(
+        return_value=httpx.Response(429, json={"error": {"message": "Quota exceeded"}})
+    )
+
+    with pytest.raises(PageSpeedUnavailableError) as exc:
+        client(mock_http).analyse(URL)
+
+    assert "RateLimitedError" in exc.value.reason
+
+
+def test_a_server_error_is_reported_as_unavailable(mock_http: respx.MockRouter) -> None:
+    mock_http.get(url__startswith=PSI_ENDPOINT).mock(return_value=httpx.Response(503))
+
+    with pytest.raises(PageSpeedUnavailableError):
+        client(mock_http).analyse(URL)
+
+
+def test_a_daily_cap_that_is_already_spent_stops_the_call(mock_http: respx.MockRouter) -> None:
+    """The limiter raises before anything leaves the process; PSI is simply unavailable."""
+    route = mock_http.get(url__startswith=PSI_ENDPOINT).mock(
+        return_value=httpx.Response(200, json=lighthouse())
+    )
+    redis_client = fakeredis.FakeStrictRedis()
+    clock = FakeClock()
+    psi = build_psi_client(
+        settings=_settings(psi_daily_call_cap=0),
+        redis_client=redis_client,
+        clock=clock,
+        sleeper=clock.sleep,
+        meter=lambda call: None,
+    )
+
+    with pytest.raises(PageSpeedUnavailableError) as exc:
+        psi.analyse(URL)
+
+    assert "QuotaExceededError" in exc.value.reason
+    assert route.call_count == 0
+
+
+def _settings(**overrides: Any) -> Any:
+    from app.core.config import Settings
+
+    return Settings(jwt_secret=SecretStr("x" * 32), environment="ci", **overrides)
+
+
+# --- the fixture client ----------------------------------------------------------------
+
+
+def test_the_fixture_client_reads_a_demo_sites_psi_file(tmp_path: Any) -> None:
+    site = tmp_path / "demo.invalid"
+    site.mkdir()
+    (site / "psi.json").write_text(json.dumps(lighthouse(score=0.31)), encoding="utf-8")
+
+    result = FixturePageSpeedClient(root=str(tmp_path)).analyse("https://demo.invalid/")
+
+    assert result.performance_score == 31
+
+
+def test_the_fixture_client_reports_a_missing_file_as_unavailable(tmp_path: Any) -> None:
+    os.mkdir(os.path.join(tmp_path, "nopsi.invalid"))
+
+    with pytest.raises(PageSpeedUnavailableError) as exc:
+        FixturePageSpeedClient(root=str(tmp_path)).analyse("https://nopsi.invalid/")
+
+    assert "psi.json" in exc.value.reason
+
+
+def test_the_fixture_client_never_calls_out_for_a_reserved_host(tmp_path: Any) -> None:
+    class Forbidden:
+        def analyse(self, url: str) -> PsiResult:  # pragma: no cover - must not be reached
+            raise AssertionError("a .invalid host must never reach the network client")
+
+    with pytest.raises(PageSpeedUnavailableError):
+        FixturePageSpeedClient(fallback=Forbidden(), root=str(tmp_path)).analyse(
+            "https://missing.invalid/"
+        )
+
+
+def test_the_fixture_client_hands_an_unknown_real_host_to_the_live_client(tmp_path: Any) -> None:
+    class Answering:
+        def analyse(self, url: str) -> PsiResult:
+            return PsiResult(performance_score=77)
+
+    fixture = FixturePageSpeedClient(fallback=Answering(), root=str(tmp_path))
+
+    assert fixture.analyse("https://real.example/").performance_score == 77
+
+
+# --- the source row --------------------------------------------------------------------
+
+
+def test_the_source_config_marks_pagespeed_as_a_service() -> None:
+    config = pagespeed_source_config(_settings())
+
+    assert config["role"] == "audit_service"
+    assert config["display_name"] == "PageSpeed Insights"
+    assert config["rate_limit"]["daily_call_cap"] == 200

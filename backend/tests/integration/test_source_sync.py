@@ -19,14 +19,15 @@ def test_the_google_places_row_carries_its_terms_and_retention(db: Session) -> N
     assert places.config["commercial_use_note"]
 
 
-def test_sync_sources_creates_one_row_per_adapter(db: Session) -> None:
+def test_sync_sources_creates_one_row_per_adapter_and_service(db: Session) -> None:
     registry.register(StubAdapter())
 
     rows = registry.sync_sources(db)
     db.commit()
 
     by_name = {row.name: row for row in rows}
-    assert set(by_name) == set(registry.names())
+    service_names = {spec.name for spec in registry.service_sources()}
+    assert set(by_name) == set(registry.names()) | service_names
     stub = by_name["stub"]
     assert stub.enabled is True
     assert stub.kind is SourceKind.feed
@@ -37,6 +38,29 @@ def test_sync_sources_creates_one_row_per_adapter(db: Session) -> None:
         "burst": 2,
         "daily_call_cap": 10,
     }
+
+
+def test_the_pagespeed_row_is_marked_as_a_service_rather_than_a_searchable_source(
+    db: Session,
+) -> None:
+    """It has a row so its calls are metered, but a search job may not name it."""
+    from app.core.errors import ValidationFailedError
+    from app.modules.audit_web.psi import PAGESPEED_SOURCE_NAME
+    from app.modules.sources.service import validate_source_ids
+
+    [psi] = [s for s in registry.sync_sources(db) if s.name == PAGESPEED_SOURCE_NAME]
+    db.commit()
+
+    assert psi.kind is SourceKind.api
+    assert psi.config["role"] == "audit_service"
+    assert psi.config["rate_limit"]["daily_call_cap"] == 200
+
+    try:
+        validate_source_ids(db, [psi.id])
+    except ValidationFailedError as exc:
+        assert exc.details["service_sources"] == [PAGESPEED_SOURCE_NAME]
+    else:  # pragma: no cover - the call above must raise
+        raise AssertionError("PageSpeed must not be selectable as a search-job source")
 
 
 def test_sync_sources_is_idempotent(db: Session) -> None:
