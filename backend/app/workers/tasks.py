@@ -18,12 +18,14 @@ from app.modules.discovery.worker import run_discovery
 from app.modules.jobs.models import JobRun, JobRunStatus
 from app.modules.jobs.service import (
     AUDIT_JOB_KIND,
+    CLASSIFICATION_JOB_KIND,
     DEMO_JOB_KIND,
     DISCOVERY_JOB_KIND,
     RESOLUTION_JOB_KIND,
     get_job_run,
 )
 from app.modules.jobs.state import backoff_seconds, transition
+from app.modules.opportunities.worker import run_classification
 from app.modules.resolution.worker import run_resolution
 
 logger = get_logger("app.worker")
@@ -96,10 +98,11 @@ register_handler(DEMO_JOB_KIND, demo_handler)
 register_handler(DISCOVERY_JOB_KIND, run_discovery)
 register_handler(RESOLUTION_JOB_KIND, run_resolution)
 register_handler(AUDIT_JOB_KIND, run_audits)
+register_handler(CLASSIFICATION_JOB_KIND, run_classification)
 
 
 def follow_up(session: Session, run: JobRun) -> None:
-    """Queue whatever a finished run implies: discovery is resolved, resolution is audited.
+    """Queue whatever a finished run implies: discovery → resolution → audit → classification.
 
     Each key is derived from the run that triggered it, so a retried or re-requested run
     never leaves a second follow-up behind.
@@ -114,6 +117,12 @@ def follow_up(session: Session, run: JobRun) -> None:
         from app.modules.audit_web.service import enqueue_audits_for_run
 
         enqueue_audits_for_run(session, run.id, idempotency_key=f"audit:{run.id}")
+        return
+
+    if run.kind == AUDIT_JOB_KIND:
+        from app.modules.opportunities.service import enqueue_classification_for_run
+
+        enqueue_classification_for_run(session, run.id, idempotency_key=f"classification:{run.id}")
 
 
 def execute_job_run(

@@ -92,16 +92,18 @@ def names(*, bootstrap: bool = True) -> list[str]:
 def service_sources() -> list["ServiceSourceSpec"]:
     """Sources that are not discovery adapters: an API the pipeline calls for a service.
 
-    PageSpeed Insights is one. It gets a `sources` row so its calls are metered and rate
-    limited exactly like a discovery source's, and `validate_source_ids` refuses it for a
-    search job — asking to "search PageSpeed" is a 422, not an empty run.
+    PageSpeed Insights is one; OpenAI is another. Each gets a `sources` row so its calls
+    are metered and rate limited exactly like a discovery source's, and
+    `validate_source_ids` refuses it for a search job — asking to "search PageSpeed" is a
+    422, not an empty run.
 
     Imported here rather than at module level: the audit module imports the adapter
     contract, so a top-level import would close the loop.
     """
+    from app.modules.ai.openai_client import openai_service_source
     from app.modules.audit_web.psi import pagespeed_service_source
 
-    return [pagespeed_service_source()]
+    return [pagespeed_service_source(), openai_service_source()]
 
 
 def sync_sources(session: Session) -> list[Source]:

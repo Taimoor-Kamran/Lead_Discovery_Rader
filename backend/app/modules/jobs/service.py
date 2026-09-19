@@ -29,6 +29,7 @@ DEMO_JOB_KIND = "demo"
 DISCOVERY_JOB_KIND = "discovery"
 RESOLUTION_JOB_KIND = "resolution"
 AUDIT_JOB_KIND = "audit"
+CLASSIFICATION_JOB_KIND = "classification"
 
 
 def get_search_job(session: Session, search_job_id: uuid.UUID) -> SearchJob:
