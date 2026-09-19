@@ -40,6 +40,25 @@ LONE_STAR = "lonestarplumbing.invalid"
 LONE_STAR_URL = f"https://{LONE_STAR}/"
 
 
+# The checks whose value answers "is this on the page?". On a page that was parsed, every
+# one of them must be a captured value or `False` — never `null`.
+PRESENCE_CHECKS = (
+    "viewport_meta",
+    "title",
+    "meta_description",
+    "favicon",
+    "h1_present",
+    "tel_link",
+    "mailto_link",
+    "contact_form",
+    "booking",
+    "ecommerce",
+    "structured_data",
+    "copyright_year",
+    "js_shell_suspected",
+)
+
+
 def demo_page(host: str) -> str:
     return (pathlib.Path(demo_sites_root()) / host / "index.html").read_text(encoding="utf-8")
 
@@ -99,3 +118,47 @@ def test_an_http_page_produces_no_certificate_finding(barton_creek: Checks) -> N
 
     assert "no_https" in found
     assert "tls_invalid" not in found
+
+
+# --- 2. one answer for "it is not there" ------------------------------------------------
+
+
+@pytest.mark.parametrize("check", PRESENCE_CHECKS)
+def test_a_parsed_page_answers_every_presence_check_true_or_false(
+    barton_creek: Checks, check: str
+) -> None:
+    assert value_of(barton_creek, check) is not None, (
+        f"{check} answered null on a page that was fetched and parsed; absent is false"
+    )
+
+
+def test_what_barton_creek_is_missing_all_reads_false(barton_creek: Checks) -> None:
+    """The five that used to answer `null` here, beside the two that already said `false`."""
+    for check in (
+        "viewport_meta",
+        "meta_description",
+        "booking",
+        "ecommerce",
+        "structured_data",
+        "favicon",
+        "mailto_link",
+    ):
+        assert value_of(barton_creek, check) is False, check
+
+
+def test_a_page_that_was_never_parsed_keeps_null() -> None:
+    """The other half of the rule: `null` still means the check could not run."""
+    unparsed = FetchOutcome(
+        url=LONE_STAR_URL,
+        final_url=LONE_STAR_URL,
+        status_code=200,
+        content_type="application/pdf",
+        body=b"%PDF",
+    )
+
+    checks = fetch_checks(unparsed)
+    checks.update(analyse_html(unparsed, now=NOW)[0])
+
+    assert value_of(checks, "parsed") is False
+    for check in PRESENCE_CHECKS:
+        assert check not in checks, "a page we could not parse produces no content checks"

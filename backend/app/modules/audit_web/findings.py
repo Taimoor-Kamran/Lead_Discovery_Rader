@@ -300,8 +300,9 @@ def for_page(
 
 
 def _content_findings(checks: Checks, context: FindingContext) -> list[Finding]:
+    """Read from a page that was parsed, where every presence check answered true or false."""
     findings: list[Finding] = []
-    if value_of(checks, "viewport_meta") is None:
+    if not value_of(checks, "viewport_meta"):
         findings.append(_from_check(checks, "viewport_meta", "no_mobile_viewport"))
     if not value_of(checks, "title"):
         findings.append(_from_check(checks, "title", "missing_title"))
@@ -309,18 +310,25 @@ def _content_findings(checks: Checks, context: FindingContext) -> list[Finding]:
         findings.append(_from_check(checks, "meta_description", "missing_meta_description"))
     if value_of(checks, "h1_present") is False:
         findings.append(_from_check(checks, "h1_present", "no_h1"))
-    if value_of(checks, "structured_data") is None:
+    if not value_of(checks, "structured_data"):
         findings.append(_from_check(checks, "structured_data", "no_structured_data"))
 
     if not any(value_of(checks, key) for key in ("tel_link", "mailto_link", "contact_form")):
         findings.append(_from_check(checks, "contact_form", "no_contact_on_homepage"))
 
     industry = (context.industry or "").lower()
-    if value_of(checks, "booking") is None and industry in context.booking_industries:
+    if not value_of(checks, "booking") and industry in context.booking_industries:
         findings.append(_from_check(checks, "booking", "no_online_booking"))
 
     year = value_of(checks, "copyright_year")
-    if isinstance(year, int) and year <= context.now.year - context.stale_copyright_years:
+    # `bool` is a subclass of `int`, and "no copyright notice" is `False`: without the
+    # second half of this test an absent notice would be read as the year zero and
+    # reported as stale.
+    if (
+        isinstance(year, int)
+        and not isinstance(year, bool)
+        and (year <= context.now.year - context.stale_copyright_years)
+    ):
         findings.append(_from_check(checks, "copyright_year", "stale_copyright", year=year))
     return findings
 

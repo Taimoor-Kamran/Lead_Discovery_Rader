@@ -4,10 +4,15 @@ Every check answers one question about one page and returns three things: the va
 verbatim text it read that value from, and the URL it read it at. That triple is what
 turns a finding from an opinion into something a salesperson can point at.
 
-Two rules hold throughout:
+Three rules hold throughout:
 
 * **Nothing is guessed.** A check that cannot tell returns `None`, never a default. A page
   we were not allowed to parse produces no checks at all rather than empty ones.
+* **`null` and `false` mean different things.** On a page that was fetched and parsed, a
+  thing that is not there is `False` — the audit looked and it was absent. `None` is kept
+  for the other case: the check could not run at all (nothing was parsed, or the question
+  does not apply, such as a certificate on a page served over http). Reading an audit, a
+  person must never have to wonder which of the two a `null` meant.
 * **Nothing is harvested.** Where the spec asks for contact options, only their *presence*
   and a single example are recorded — never a list of addresses or numbers.
 """
@@ -236,20 +241,22 @@ def _meta_checks(soup: BeautifulSoup, url: str) -> Checks:
     title = title_tag.get_text(strip=True) if title_tag is not None else None
     description_text = _attr(description, "content")
 
+    # Each of these carries what the page said when the tag is there, and `False` when it
+    # is not: the page was parsed, so "absent" is an answer, not a gap in our knowledge.
     return {
         "viewport_meta": CheckResult(
-            _attr(viewport, "content") if viewport is not None else None,
+            (_attr(viewport, "content") if viewport is not None else None) or False,
             evidence_text=str(viewport) if viewport is not None else 'No <meta name="viewport">',
             evidence_url=url,
         ),
         "title": CheckResult(
-            title or None,
+            title or False,
             evidence_text=str(title_tag) if title_tag is not None else "No <title>",
             evidence_url=url,
         ),
         "title_length": CheckResult(len(title) if title else 0, evidence_url=url),
         "meta_description": CheckResult(
-            description_text or None,
+            description_text or False,
             evidence_text=(
                 str(description) if description is not None else 'No <meta name="description">'
             ),
@@ -319,7 +326,7 @@ def _booking(soup: BeautifulSoup, lowered: str, url: str) -> CheckResult:
         if match is not None:
             return CheckResult(f"link text: {label}", evidence_text=str(link), evidence_url=url)
     return CheckResult(
-        None,
+        False,
         evidence_text="No known booking widget or 'book online' link on the homepage",
         evidence_url=url,
     )
@@ -335,7 +342,7 @@ def _ecommerce(soup: BeautifulSoup, lowered: str, url: str) -> CheckResult:
             if pattern in href:
                 return CheckResult("cart link", evidence_text=str(link), evidence_url=url)
     return CheckResult(
-        None, evidence_text="No shop platform signature or cart link", evidence_url=url
+        False, evidence_text="No shop platform signature or cart link", evidence_url=url
     )
 
 
@@ -379,7 +386,7 @@ def _structured_data(soup: BeautifulSoup, url: str) -> CheckResult:
                     evidence_url=url,
                 )
     return CheckResult(
-        None, evidence_text="No LocalBusiness JSON-LD block on the homepage", evidence_url=url
+        False, evidence_text="No LocalBusiness JSON-LD block on the homepage", evidence_url=url
     )
 
 
@@ -433,7 +440,7 @@ def _copyright_year(html: str, url: str, now: datetime) -> CheckResult:
                 years.append((year, snippet_around(html, match.start(), len(match.group(0)))))
     if not years:
         return CheckResult(
-            None, evidence_text="No copyright year on the homepage", evidence_url=url
+            False, evidence_text="No copyright year on the homepage", evidence_url=url
         )
     best = max(years, key=lambda item: item[0])
     return CheckResult(best[0], evidence_text=best[1], evidence_url=url)

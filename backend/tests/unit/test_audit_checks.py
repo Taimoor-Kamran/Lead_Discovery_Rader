@@ -151,18 +151,18 @@ def test_the_viewport_title_and_description_are_captured_with_their_tags() -> No
     assert result["h1_present"].value is True
 
 
-def test_a_missing_viewport_description_and_h1_are_null_or_false() -> None:
+def test_a_missing_viewport_description_and_h1_are_false_not_null() -> None:
     result = html_checks(outcome("<html><head></head><body><p>Hi</p></body></html>"), now=NOW)
 
-    assert result["viewport_meta"].value is None
+    assert result["viewport_meta"].value is False
     assert "No " in (result["viewport_meta"].evidence_text or "")
-    assert result["title"].value is None
-    assert result["meta_description"].value is None
+    assert result["title"].value is False
+    assert result["meta_description"].value is False
     assert result["h1_present"].value is False
 
 
 def test_an_empty_title_counts_as_missing() -> None:
-    assert checks_for("<html><head><title>  </title></head><body></body></html>")["title"] is None
+    assert checks_for("<html><head><title>  </title></head><body></body></html>")["title"] is False
 
 
 def test_an_h1_with_no_text_does_not_count() -> None:
@@ -243,7 +243,7 @@ def test_a_book_online_link_counts_as_booking() -> None:
 def test_a_page_with_no_booking_says_so_without_guessing() -> None:
     result = html_checks(outcome("<html><body><a href='/about'>About</a></body></html>"), now=NOW)
 
-    assert result["booking"].value is None
+    assert result["booking"].value is False
     assert "No known booking widget" in (result["booking"].evidence_text or "")
 
 
@@ -296,13 +296,13 @@ def test_json_ld_that_is_not_a_local_business_is_not_counted() -> None:
         "</head></html>"
     )
 
-    assert checks_for(body)["structured_data"] is None
+    assert checks_for(body)["structured_data"] is False
 
 
 def test_broken_json_ld_is_ignored_rather_than_crashing() -> None:
     body = '<html><head><script type="application/ld+json">{nope}</script></head></html>'
 
-    assert checks_for(body)["structured_data"] is None
+    assert checks_for(body)["structured_data"] is False
 
 
 def test_the_tech_stack_reads_the_generator_and_the_signatures() -> None:
@@ -335,13 +335,13 @@ def test_a_page_with_no_platform_signature_reports_an_empty_stack() -> None:
         ("Copyright 2024 Lone Star", 2024),
         ("© 2018-2023 Some Firm", 2023),
         ("(c) 2019 Another", 2019),
-        ("Serving Austin since 1998", None),
-        ("© 1899 Ancient", None),
-        ("© 2099 The Future", None),
+        ("Serving Austin since 1998", False),
+        ("© 1899 Ancient", False),
+        ("© 2099 The Future", False),
     ],
 )
 def test_the_copyright_year_is_the_highest_believable_one(
-    footer: str, expected: int | None
+    footer: str, expected: int | bool
 ) -> None:
     body = f"<html><body><footer>{footer}</footer></body></html>"
 
