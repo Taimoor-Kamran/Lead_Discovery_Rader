@@ -424,7 +424,7 @@ def audit_row(
         psi={"performance_score": 71},
         page_text=page_text,
         html_sha256="a" * 64,
-        rules_version="audit-1",
+        rules_version="audit-2",
         content_expires_at=expires_at,
     )
     session.add(audit)

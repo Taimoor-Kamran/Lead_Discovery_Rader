@@ -22,7 +22,11 @@ from app.core.models import created_at_column, uuid_pk
 
 # The version of the rules an audit was produced by. Bumped whenever a check or a finding
 # changes meaning, so a stored audit can always be read the way it was written.
-RULES_VERSION = "audit-1"
+#
+# audit-2: `tls_valid` is null (not true) on a page served over http; a presence check on
+# a parsed page answers false rather than null when the thing is absent; snippet evidence
+# comes from the page's visible text instead of a window cut out of its HTML.
+RULES_VERSION = "audit-2"
 
 
 class AuditStatus(enum.StrEnum):

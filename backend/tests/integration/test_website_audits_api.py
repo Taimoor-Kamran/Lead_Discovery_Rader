@@ -189,7 +189,7 @@ def test_one_audit_carries_its_checks_findings_and_pagespeed(
     assert body["checks"]["title"]["value"] == "Wellington Plumbing"
     assert body["checks"]["title"]["evidence_url"] == "https://wellington.invalid/"
     assert body["psi"]["performance_score"] == 88
-    assert body["rules_version"] == "audit-1"
+    assert body["rules_version"] == "audit-2"
     assert {f["code"] for f in body["findings"]} == {
         "missing_meta_description",
         "no_structured_data",
@@ -374,7 +374,7 @@ def audit_with(
             }
             for code in codes
         ],
-        rules_version="audit-1",
+        rules_version="audit-2",
     )
     session.add(audit)
     session.flush()

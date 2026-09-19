@@ -258,7 +258,7 @@ def test_every_audit_records_the_rules_version_it_was_produced_by(
     db: Session, audited: DemoLoadResult
 ) -> None:
     for audit in db.scalars(select(WebsiteAudit)):
-        assert audit.rules_version == "audit-1"
+        assert audit.rules_version == "audit-2"
 
 
 def test_page_text_is_kept_only_for_a_page_that_was_read(
