@@ -83,6 +83,22 @@ Format: `## [vX.Y.Z] - YYYY-MM-DD` followed by Added / Changed / Fixed.
 
 - **`make check` no longer prints `InsecureKeyLengthWarning`.** One test signed a token
   with an 18-byte secret to prove another secret is rejected; it now uses a long one.
+- **Three things a hand-read audit said badly** (found by reading
+  `bartoncreekplumbing.invalid` by eye; `rules_version` is now `audit-2`):
+  - **`tls_valid` no longer claims a certificate verified on a page served over `http`.**
+    There is no certificate to judge, so the value is `null` and the evidence says
+    `not applicable: served over http`. An `https` page is unaffected, and a certificate
+    that does not verify is still `false` with `tls_invalid`.
+  - **A presence check now answers the same way whichever check it is.** `booking`,
+    `viewport_meta`, `meta_description`, `structured_data`, `ecommerce` and `title`
+    returned `null` for something absent while `favicon` and `mailto_link` returned
+    `false`. The rule is now written down and tested: on a page that was fetched and
+    parsed, absent is **`false`**; `null` means the check could not run.
+  - **Snippet evidence is read from the page's visible text.** `copyright_year` cited a
+    window cut out of the HTML that began and ended mid-tag
+    (`el:+1-512-555-0102">Call ... </footer`); it now cites the line a visitor reads,
+    trimmed to whole words. A signature that exists only in markup cites the whole tag it
+    sits in rather than a fragment of one.
 
 ## [v0.3.0] - 2026-09-19
 

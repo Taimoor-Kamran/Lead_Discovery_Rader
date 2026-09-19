@@ -230,6 +230,17 @@ POST /businesses/{id}/audit                                    # a fresh audit n
 POST /jobs/{resolution_run_id}/audit                           # that run's businesses
 ```
 
+Every check in `checks` is `{value, evidence_text, evidence_url}`, and `value` distinguishes
+two things a reader must never have to guess between. On a page that was fetched and
+parsed, something that is not there is **`false`** — the audit looked and it was absent.
+**`null`** means the check could not run: nothing was parsed, or the question does not
+apply, the way a certificate does not apply to a page served over plain `http`. Snippet
+evidence is taken from the page's visible text, so a copyright notice cites
+`© 2016 Barton Creek Plumbing LLC. All rights reserved.` rather than a slice of HTML; the
+few checks whose fact lives only in markup (platform and widget signatures) cite the whole
+tag it lives in. `rules_version` on each audit says which version of these rules produced
+it — `audit-2` at the time of writing.
+
 Each item in `GET /businesses` carries a `latest_audit` of `{status, finding_codes,
 audited_at}`; `null` means never audited, which is not the same as an audit that found
 nothing. `page_text` on an audit — the visible text kept as input for the v0.5.0 AI step —
