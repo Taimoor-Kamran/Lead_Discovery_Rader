@@ -16,14 +16,16 @@ def output(confidences: list[float], *, matches: bool = True) -> AIOutput:
         }
         for c in confidences
     ]
-    return AIOutput(
-        business_summary="s",
-        industry="plumbing",
-        industry_matches_listing=matches,
-        opportunities=opportunities,
-        buying_intent="none_detected",
-        unknowns=[],
-        needs_human_review=True,
+    return AIOutput.model_validate(
+        {
+            "business_summary": "s",
+            "industry": "plumbing",
+            "industry_matches_listing": matches,
+            "opportunities": opportunities,
+            "buying_intent": "none_detected",
+            "unknowns": [],
+            "needs_human_review": True,
+        }
     )
 
 
