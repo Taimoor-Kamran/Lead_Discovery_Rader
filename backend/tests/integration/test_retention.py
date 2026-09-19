@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.modules.adapters import registry
 from app.modules.adapters.base import RawDoc
 from app.modules.adapters.google_places.adapter import GooglePlacesAdapter
+from app.modules.audit_web.models import AuditStatus, WebsiteAudit
 from app.modules.auth.models import User
 from app.modules.businesses.models import Business, BusinessFieldValue
 from app.modules.discovery.models import DiscoveredRecord
@@ -390,3 +391,94 @@ def test_rediscovering_and_resolving_brings_the_business_back(db: Session) -> No
     assert refreshed.phone_e164 == "+15125550142"
     assert refreshed.display_name == "Some Plumber"
     assert resolution is not None
+
+
+# --- website audits (v0.4.0) ----------------------------------------------------------
+
+
+def audit_row(
+    session: Session,
+    *,
+    business: Business,
+    expires_at: datetime | None,
+    page_text: str = "Some plumbing copy read off the homepage.",
+) -> WebsiteAudit:
+    audit = WebsiteAudit(
+        business_id=business.id,
+        url_audited="https://example.invalid/",
+        final_url="https://example.invalid/",
+        status=AuditStatus.done,
+        http_status=200,
+        checks={"title": {"value": "Example", "evidence_text": "<title>Example</title>"}},
+        findings=[
+            {
+                "code": "no_online_booking",
+                "severity": "medium",
+                "service_category": "booking",
+                "message": "Audit found no online booking or scheduling link on the homepage.",
+                "evidence_text": "No known booking widget on the homepage",
+                "evidence_url": "https://example.invalid/",
+            }
+        ],
+        tech_stack={"generator": None, "platforms": ["WordPress"]},
+        psi={"performance_score": 71},
+        page_text=page_text,
+        html_sha256="a" * 64,
+        rules_version="audit-1",
+        content_expires_at=expires_at,
+    )
+    session.add(audit)
+    session.flush()
+    return audit
+
+
+def bare_business(session: Session, name: str = "Retention Plumbing") -> Business:
+    business = Business(display_name=name)
+    session.add(business)
+    session.flush()
+    return business
+
+
+def test_purge_nulls_the_page_text_of_an_expired_audit_and_nothing_else(db: Session) -> None:
+    business = bare_business(db)
+    expired = audit_row(db, business=business, expires_at=NOW - timedelta(days=1))
+    db.commit()
+
+    purged = purge_expired(db, now=NOW)
+    db.refresh(expired)
+
+    assert purged.audit_page_texts == 1
+    assert expired.page_text is None
+    assert expired.purged_at == NOW
+    # Everything a salesperson works from is our own observation, so it stays.
+    assert expired.checks["title"]["value"] == "Example"
+    assert expired.findings[0]["evidence_text"]
+    assert expired.psi == {"performance_score": 71}
+    assert expired.tech_stack["platforms"] == ["WordPress"]
+    assert expired.html_sha256 == "a" * 64
+    assert expired.status is AuditStatus.done
+
+
+def test_purge_leaves_an_audit_inside_its_window_alone(db: Session) -> None:
+    business = bare_business(db)
+    fresh = audit_row(db, business=business, expires_at=NOW + timedelta(days=30))
+    never = audit_row(db, business=business, expires_at=None)
+    db.commit()
+
+    purged = purge_expired(db, now=NOW)
+    db.refresh(fresh)
+    db.refresh(never)
+
+    assert purged.audit_page_texts == 0
+    assert fresh.page_text is not None
+    assert never.page_text is not None
+    assert fresh.purged_at is None
+
+
+def test_purging_twice_reports_nothing_the_second_time(db: Session) -> None:
+    business = bare_business(db)
+    audit_row(db, business=business, expires_at=NOW - timedelta(days=1))
+    db.commit()
+
+    assert purge_expired(db, now=NOW).audit_page_texts == 1
+    assert purge_expired(db, now=NOW).audit_page_texts == 0

@@ -123,20 +123,21 @@ class PurgeResult:
     records: int = 0
     field_values: int = 0
     businesses_recomputed: int = 0
+    audit_page_texts: int = 0
 
     @property
     def total(self) -> int:
-        return self.records + self.field_values
+        return self.records + self.field_values + self.audit_page_texts
 
 
 def purge_expired(session: Session, *, now: datetime | None = None) -> PurgeResult:
     """Drop stored provider content whose retention window has closed.
 
-    Two things expire together: the raw payload on `discovered_records`, and every
-    business field value derived from it. The rows, the place IDs and the provenance
-    trail all stay — only the provider's content goes, which is the line the Google Maps
-    Platform terms draw. Each affected business is then recomputed, so what it shows is
-    what it is still allowed to show.
+    Three things expire on their own clocks: the raw payload on `discovered_records`,
+    every business field value derived from it, and the page text stored on a website
+    audit. The rows, the place IDs and the provenance trail all stay — only the content
+    goes, which is the line the Google Maps Platform terms draw. Each affected business is
+    then recomputed, so what it shows is what it is still allowed to show.
     """
     moment = now or datetime.now(UTC)
     result = session.execute(
@@ -150,17 +151,27 @@ def purge_expired(session: Session, *, now: datetime | None = None) -> PurgeResu
     )
     records = int(getattr(result, "rowcount", 0) or 0)
     field_values, businesses = _purge_field_values(session, moment)
+    # Imported here: the audit module imports this one for its metering hook.
+    from app.modules.audit_web.service import purge_expired_page_text
 
-    if records or field_values:
+    audit_page_texts = purge_expired_page_text(session, now=moment)
+
+    if records or field_values or audit_page_texts:
         logger.info(
             "purged expired content",
             extra={
                 "records": records,
                 "field_values": field_values,
                 "businesses_recomputed": businesses,
+                "audit_page_texts": audit_page_texts,
             },
         )
-    return PurgeResult(records=records, field_values=field_values, businesses_recomputed=businesses)
+    return PurgeResult(
+        records=records,
+        field_values=field_values,
+        businesses_recomputed=businesses,
+        audit_page_texts=audit_page_texts,
+    )
 
 
 def _purge_field_values(session: Session, moment: datetime) -> tuple[int, int]:
