@@ -33,6 +33,8 @@ def test_the_usage_line_lists_every_command(capsys: pytest.CaptureFixture[str]) 
         "purge-expired",
         "recompute-businesses",
         "places-smoke",
+        "ai-smoke",
+        "load-demo-data",
     ):
         assert command in printed
 
@@ -99,6 +101,51 @@ def test_purge_expired_with_nothing_to_do_says_so(
 ) -> None:
     assert cli.main(["purge-expired"]) == 0
     assert "0 expired record" in capsys.readouterr().out
+
+
+# --- ai-smoke -----------------------------------------------------------------------
+
+
+def test_ai_smoke_refuses_to_run_without_a_key(
+    db: Session, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from pydantic import SecretStr
+
+    from app.core.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "openai_api_key", SecretStr(""))
+
+    assert cli.main(["ai-smoke"]) == 2
+    assert "OPENAI_API_KEY is not set" in capsys.readouterr().out
+
+
+def test_ai_smoke_refuses_to_run_without_a_model_name(
+    db: Session, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from pydantic import SecretStr
+
+    from app.core.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "openai_api_key", SecretStr("sk-test"))
+    monkeypatch.setattr(get_settings(), "ai_triage_model", "")
+
+    assert cli.main(["ai-smoke"]) == 2
+    assert "AI_TRIAGE_MODEL" in capsys.readouterr().out
+
+
+def test_ai_smoke_needs_an_audited_business(
+    db: Session, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With a key and a model but an empty database, it stops before any call is made."""
+    from pydantic import SecretStr
+
+    from app.core.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "openai_api_key", SecretStr("sk-test"))
+    monkeypatch.setattr(get_settings(), "ai_triage_model", "some-model")
+
+    assert cli.main(["ai-smoke"]) == 2
+    assert "No audited business" in capsys.readouterr().out
 
 
 # --- places-smoke -------------------------------------------------------------------

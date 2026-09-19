@@ -197,6 +197,21 @@ class Settings(BaseSettings):
             return [item.strip() for item in value.split(",") if item.strip()]
         return value
 
+    @field_validator(
+        "ai_provider",
+        "ai_triage_price_in_per_m",
+        "ai_triage_price_out_per_m",
+        "ai_escalation_price_in_per_m",
+        "ai_escalation_price_out_per_m",
+        mode="before",
+    )
+    @classmethod
+    def _empty_is_unset(cls, value: object) -> object:
+        """`.env.example` ships these blank; a blank line means "not set", not a value."""
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
     @property
     def is_development(self) -> bool:
         """Whether developer-only fixtures (the demo source) may be registered.

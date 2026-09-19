@@ -384,6 +384,68 @@ def test_classifying_again_makes_zero_ai_calls_and_no_duplicates(
     assert reused and all(r.tokens_in == 0 and r.est_cost_usd == 0 for r in reused)
 
 
+@pytest.fixture
+def classified_without_ai(db: Session, development: None) -> DemoLoadResult:
+    """The same pipeline with AI disabled: every audited business must still be scored."""
+    import os
+
+    os.environ["AI_PROVIDER"] = "disabled"
+    get_settings.cache_clear()
+    try:
+        make_user(db, Role.admin)
+        result = load_demo_data(db)
+        pipeline = run_pipeline(result)
+        assert pipeline.classification_status is JobRunStatus.done
+        db.expire_all()
+        return result
+    finally:
+        os.environ.pop("AI_PROVIDER", None)
+        get_settings.cache_clear()
+
+
+def test_with_ai_disabled_every_audited_business_still_gets_its_rule_opportunities(
+    db: Session, classified_without_ai: DemoLoadResult
+) -> None:
+    from app.modules.audit_web.models import AuditStatus
+    from app.modules.audit_web.service import latest_audit
+    from app.modules.normalization.schemas import BusinessStatus
+
+    summary = classification_run(db, classified_without_ai).result_summary or {}
+    assert summary["ai_calls"] == 0
+    assert list(db.scalars(select(ApiCall))) == []
+    rows = list(db.scalars(select(AIClassification)))
+    assert rows and {r.status.value for r in rows} == {"skipped_disabled"}
+
+    expected_rules = {
+        key: {s: spec for s, spec in case["services"].items() if spec["source"] != "ai"}
+        for key, case in EXPECTED["businesses"].items()
+    }
+    seen = 0
+    for business in db.scalars(select(Business)):
+        audit = latest_audit(db, business.id)
+        key = business_key(db, business)
+        actual = opportunities_by_service(db, business)
+        if (
+            audit is None
+            or audit.status is AuditStatus.robots_blocked
+            or business.business_status is BusinessStatus.closed_permanently
+        ):
+            assert actual == {}, key
+            continue
+        assert set(actual) == set(expected_rules[key]), key
+        for service, opportunity in actual.items():
+            assert opportunity.source.value == "rules", (key, service)
+            assert opportunity.ai_agrees is None, (key, service)
+            assert opportunity.evidence, (key, service)
+        seen += 1
+    assert seen >= 25
+
+
+def opportunities_by_service(session: Session, business: Business) -> dict[str, Opportunity]:
+    rows = session.scalars(select(Opportunity).where(Opportunity.business_id == business.id))
+    return {row.service: row for row in rows}
+
+
 def uuid_of(value: object) -> Any:
     import uuid
 

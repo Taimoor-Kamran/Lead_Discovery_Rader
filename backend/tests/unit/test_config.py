@@ -28,3 +28,41 @@ def test_booleans_parse_from_the_env_file_spelling(monkeypatch: pytest.MonkeyPat
     settings = Settings()
     assert settings.refresh_cookie_secure is False
     assert settings.job_queue_is_async is True
+
+
+def test_blank_ai_settings_mean_unset(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`.env.example` leaves the provider and the prices blank; blank is not a value."""
+    for name in (
+        "AI_PROVIDER",
+        "AI_TRIAGE_PRICE_IN_PER_M",
+        "AI_TRIAGE_PRICE_OUT_PER_M",
+        "AI_ESCALATION_PRICE_IN_PER_M",
+        "AI_ESCALATION_PRICE_OUT_PER_M",
+    ):
+        monkeypatch.setenv(name, "")
+    monkeypatch.setenv("OPENAI_API_KEY", "")
+    monkeypatch.setenv("ENVIRONMENT", "ci")
+
+    settings = Settings()
+
+    assert settings.ai_provider is None
+    assert settings.ai_triage_price_in_per_m is None
+    assert settings.resolved_ai_provider == "fake"
+
+
+def test_the_ai_provider_resolves_from_the_key_and_the_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("AI_PROVIDER", raising=False)
+    monkeypatch.setenv("OPENAI_API_KEY", "")
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    assert Settings().resolved_ai_provider == "disabled"
+
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-something")
+    assert Settings().resolved_ai_provider == "openai"
+
+    monkeypatch.setenv("AI_PROVIDER", "fake")
+    assert Settings().resolved_ai_provider == "fake", "an explicit choice always wins"
+
+    monkeypatch.setenv("AI_EXPLICIT_INTENT_PATTERNS", "need a site, hiring a designer")
+    assert Settings().ai_explicit_intent_patterns == ["need a site", "hiring a designer"]
