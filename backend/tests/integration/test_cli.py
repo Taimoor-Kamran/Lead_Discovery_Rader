@@ -12,8 +12,10 @@ from app import cli
 from app.modules.adapters.base import RawDoc
 from app.modules.adapters.google_places.adapter import GooglePlacesAdapter
 from app.modules.adapters.google_places.client import PLACES_BASE_URL, TEXT_SEARCH_PATH
+from app.modules.businesses.models import Business
 from app.modules.discovery.models import DiscoveredRecord
 from app.modules.discovery.service import store_raw
+from app.modules.normalization.schemas import BusinessStatus, NormalizedBusiness, WebsiteKind
 from app.modules.sources.models import Source
 from tests.conftest import places_fixture
 
@@ -25,7 +27,13 @@ def test_the_usage_line_lists_every_command(capsys: pytest.CaptureFixture[str]) 
     assert cli.main([]) == 2
 
     printed = capsys.readouterr().out
-    for command in ("seed-admin", "sync-sources", "purge-expired", "places-smoke"):
+    for command in (
+        "seed-admin",
+        "sync-sources",
+        "purge-expired",
+        "recompute-businesses",
+        "places-smoke",
+    ):
         assert command in printed
 
 
@@ -175,3 +183,156 @@ def test_places_smoke_refuses_to_run_without_a_key(
 
     assert exit_code == 2
     assert "GOOGLE_PLACES_API_KEY is not set" in capsys.readouterr().out
+
+
+# --- recompute-businesses (v0.4.0) ----------------------------------------------------
+
+
+def demo_source_row(session: Session) -> Source:
+    from app.modules.adapters import registry
+    from app.modules.adapters.google_places.adapter import SOURCE_NAME as GOOGLE_PLACES
+
+    registry.sync_sources(session)
+    session.flush()
+    return session.scalars(select(Source).where(Source.name == GOOGLE_PLACES)).one()
+
+
+def linked_record(session: Session, business: Business, place_id: str) -> DiscoveredRecord:
+    record = DiscoveredRecord(
+        source_id=demo_source_row(session).id,
+        source_record_id=place_id,
+        raw_payload={"id": place_id},
+        payload_hash="hash",
+        first_discovered_at=NOW,
+        last_discovered_at=NOW,
+        business_id=business.id,
+    )
+    session.add(record)
+    session.flush()
+    return record
+
+
+def normalized(
+    *, name: str, website: str | None, domain: str | None, kind: WebsiteKind
+) -> NormalizedBusiness:
+    return NormalizedBusiness(
+        source="google_places",
+        display_name=name,
+        normalized_name=name.lower(),
+        industry="plumbing",
+        website=website,
+        domain=domain,
+        website_kind=kind,
+        business_status=BusinessStatus.operational,
+    )
+
+
+def seed_oak_hill(session: Session) -> Business:
+    """The v0.3.0 bug: one record has the real site, the other only a Facebook page.
+
+    The stored row is then put back into the mixed state that survivorship used to
+    produce — a Facebook URL beside the real domain, a web presence no source reported.
+    """
+    from app.modules.resolution import survivorship
+
+    business = Business(display_name="Oak Hill Plumbing Group")
+    session.add(business)
+    session.flush()
+
+    own = linked_record(session, business, "oak-hill-own-site")
+    survivorship.write_field_values(
+        session,
+        business=business,
+        record=own,
+        normalized=normalized(
+            name="Oak Hill Plumbing Group",
+            website="https://oakhillplumbing.invalid/",
+            domain="oakhillplumbing.invalid",
+            kind=WebsiteKind.own_site,
+        ),
+        observed_at=NOW,
+    )
+    social = linked_record(session, business, "oak-hill-facebook")
+    survivorship.write_field_values(
+        session,
+        business=business,
+        record=social,
+        normalized=normalized(
+            name="Oak Hill Plumbing",
+            website="https://www.facebook.com/oakhillplumbing",
+            domain=None,
+            kind=WebsiteKind.social_profile,
+        ),
+        observed_at=NOW,
+    )
+
+    business.website = "https://www.facebook.com/oakhillplumbing"
+    business.domain = "oakhillplumbing.invalid"
+    business.website_kind = WebsiteKind.social_profile
+    session.commit()
+    return business
+
+
+def test_recompute_businesses_fixes_a_row_that_disagrees_with_survivorship(
+    db: Session, capsys: pytest.CaptureFixture[str]
+) -> None:
+    business = seed_oak_hill(db)
+
+    assert cli.main(["recompute-businesses"]) == 0
+
+    db.expire_all()
+    db.refresh(business)
+    assert business.website == "https://oakhillplumbing.invalid/"
+    assert business.domain == "oakhillplumbing.invalid"
+    assert business.website_kind is WebsiteKind.own_site
+
+    printed = capsys.readouterr().out
+    assert "1 changed" in printed
+    assert "0 unchanged" in printed
+
+
+def test_recompute_businesses_is_a_no_op_the_second_time(
+    db: Session, capsys: pytest.CaptureFixture[str]
+) -> None:
+    seed_oak_hill(db)
+    cli.main(["recompute-businesses"])
+    capsys.readouterr()
+
+    assert cli.main(["recompute-businesses"]) == 0
+
+    printed = capsys.readouterr().out
+    assert "0 changed" in printed
+    assert "1 unchanged" in printed
+
+
+def test_recompute_businesses_can_be_pointed_at_one_business(
+    db: Session, capsys: pytest.CaptureFixture[str]
+) -> None:
+    business = seed_oak_hill(db)
+    other = Business(display_name="Untouched Plumbing", website="https://stale.invalid/")
+    db.add(other)
+    db.commit()
+
+    assert cli.main(["recompute-businesses", "--business-id", str(business.id)]) == 0
+
+    db.expire_all()
+    db.refresh(business)
+    db.refresh(other)
+    assert business.website_kind is WebsiteKind.own_site
+    assert other.website == "https://stale.invalid/", "a business not named is not touched"
+    printed = capsys.readouterr().out
+    assert "Recomputed 1 business(es)" in printed
+
+
+def test_recompute_businesses_rejects_a_business_id_that_is_not_a_uuid(
+    db: Session, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert cli.main(["recompute-businesses", "--business-id", "not-a-uuid"]) == 2
+    assert "not a valid business id" in capsys.readouterr().out
+
+
+def test_recompute_businesses_says_so_when_there_is_nothing_to_do(
+    db: Session, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert cli.main(["recompute-businesses"]) == 0
+    assert "no businesses to recompute" in capsys.readouterr().out

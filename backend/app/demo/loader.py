@@ -8,11 +8,13 @@ job, the run and every record are keyed, so loading twice changes nothing.
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.core.db import session_scope
 from app.core.errors import ValidationFailedError
 from app.core.logging import get_logger, log_fields
 from app.modules.adapters import registry
@@ -39,6 +41,17 @@ class DemoLoadResult:
     resolution_run_id: uuid.UUID
     stored_new: int
     updated: int
+
+
+@dataclass(frozen=True)
+class DemoPipelineResult:
+    """What running the demo through to the end did."""
+
+    resolution_status: JobRunStatus
+    resolution_summary: dict[str, Any]
+    audit_run_id: uuid.UUID | None
+    audit_status: JobRunStatus | None
+    audit_summary: dict[str, Any]
 
 
 def load_demo_data(session: Session, *, now: datetime | None = None) -> DemoLoadResult:
@@ -113,6 +126,50 @@ def load_demo_data(session: Session, *, now: datetime | None = None) -> DemoLoad
         stored_new=summary.stored_new,
         updated=summary.updated,
     )
+
+
+def run_pipeline(result: DemoLoadResult) -> DemoPipelineResult:
+    """Run the queued resolution, then the audit run it triggers, in this process.
+
+    `make load-demo-data` is meant to leave a developer with a finished dataset — 29
+    businesses *and* their website audits — rather than two run ids to poll. The audits
+    are answered from the checked-in demo sites, so this makes no network call and needs
+    no API key.
+    """
+    from app.workers.tasks import execute_job_run
+
+    resolution_status = execute_job_run(result.resolution_run_id)
+    audit_run_id: uuid.UUID | None = None
+    audit_status: JobRunStatus | None = None
+    audit_summary: dict[str, Any] = {}
+    resolution_summary: dict[str, Any] = {}
+
+    with session_scope() as session:
+        resolution = session.get(JobRun, result.resolution_run_id)
+        resolution_summary = dict((resolution.result_summary if resolution else None) or {})
+        audit_run = session.scalars(
+            select(JobRun).where(JobRun.idempotency_key == audit_key(result.resolution_run_id))
+        ).first()
+        audit_run_id = audit_run.id if audit_run is not None else None
+
+    if audit_run_id is not None:
+        audit_status = execute_job_run(audit_run_id)
+        with session_scope() as session:
+            audit_run = session.get(JobRun, audit_run_id)
+            audit_summary = dict((audit_run.result_summary if audit_run else None) or {})
+
+    return DemoPipelineResult(
+        resolution_status=resolution_status,
+        resolution_summary=resolution_summary,
+        audit_run_id=audit_run_id,
+        audit_status=audit_status,
+        audit_summary=audit_summary,
+    )
+
+
+def audit_key(resolution_run_id: uuid.UUID) -> str:
+    """The idempotency key `follow_up` gives the audit run of one resolution run."""
+    return f"audit:{resolution_run_id}"
 
 
 def _demo_source(session: Session) -> Source:

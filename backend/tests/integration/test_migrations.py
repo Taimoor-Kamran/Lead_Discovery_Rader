@@ -19,6 +19,7 @@ EXPECTED_TABLES = {
     "businesses",
     "business_field_values",
     "match_candidates",
+    "website_audits",
 }
 EXPECTED_ENUMS = {
     "user_role",
@@ -29,6 +30,7 @@ EXPECTED_ENUMS = {
     "business_status",
     "match_candidate_status",
     "resolution_status",
+    "website_audit_status",
 }
 
 
@@ -41,6 +43,14 @@ def _fresh_database(database_url: str) -> str:
     admin.dispose()
     base, _, _ = database_url.rpartition("/")
     return f"{base}/{name}"
+
+
+def _enums(engine: object) -> set[str]:
+    with engine.connect() as connection:  # type: ignore[attr-defined]
+        return {
+            row[0]
+            for row in connection.execute(text("SELECT typname FROM pg_type WHERE typtype = 'e'"))
+        }
 
 
 def test_one_step_down_and_back_up_leaves_the_schema_as_it_was(database_url: str) -> None:
@@ -56,11 +66,39 @@ def test_one_step_down_and_back_up_leaves_the_schema_as_it_was(database_url: str
     command.downgrade(config, "-1")
     engine = create_engine(url)
     after_downgrade = set(inspect(engine).get_table_names())
+    enums_after = _enums(engine)
+    engine.dispose()
+
+    assert at_head - after_downgrade == {"website_audits"}
+    assert "website_audit_status" not in enums_after
+    assert "businesses" in after_downgrade, "only v0.4.0 comes off"
+
+    command.upgrade(config, "head")
+    engine = create_engine(url)
+    assert set(inspect(engine).get_table_names()) == at_head
+    assert "website_audit_status" in _enums(engine)
+    engine.dispose()
+
+
+def test_two_steps_down_takes_entity_resolution_with_it(database_url: str) -> None:
+    """The v0.3.0 migration owns the businesses tables and the columns it added."""
+    url = _fresh_database(database_url)
+    config = alembic_config(url)
+    command.upgrade(config, "head")
+
+    engine = create_engine(url)
+    at_head = set(inspect(engine).get_table_names())
+    engine.dispose()
+
+    command.downgrade(config, "-2")
+    engine = create_engine(url)
+    after_downgrade = set(inspect(engine).get_table_names())
     record_columns = {c["name"] for c in inspect(engine).get_columns("discovered_records")}
     user_columns = {c["name"] for c in inspect(engine).get_columns("users")}
     engine.dispose()
 
     assert at_head - after_downgrade == {
+        "website_audits",
         "businesses",
         "business_field_values",
         "match_candidates",

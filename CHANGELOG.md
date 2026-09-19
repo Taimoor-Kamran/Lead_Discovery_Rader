@@ -3,6 +3,103 @@
 All notable changes, one section per merged spec. Newest first.
 Format: `## [vX.Y.Z] - YYYY-MM-DD` followed by Added / Changed / Fixed.
 
+## [v0.4.0] - 2026-09-19
+
+### Added
+
+- **The SSRF-guarded fetcher** (`app/core/safe_fetch.py`, `app/core/fetch_backends.py`).
+  Every request to a business's own website goes through one door: `http`/`https` only,
+  ports 80 and 443 only, every resolved address checked against private, loopback,
+  link-local, multicast, reserved, unspecified and CGNAT ranges (IPv4, IPv6 and the
+  IPv4-mapped forms), at most three redirect hops with **each hop validated again**,
+  bodies streamed and cut off at 2 MB, and certificates always verified — a TLS failure is
+  a recorded result, never a retry with verification off. `robots.txt` is fetched through
+  the same guard and cached per host for 24 hours: 2xx is obeyed, 4xx means no rules, and
+  anything else means stay away (RFC 9309's conservative reading). One host is asked at
+  most once every five seconds, and the whole system keeps at most four fetches in flight.
+- **The website audit engine** (`app/modules/audit_web`). One homepage, no crawling, no
+  JavaScript: reachability and the redirect chain, HTTPS and the certificate, mobile
+  viewport, title, meta description, `h1`, LocalBusiness JSON-LD, favicon, the *presence*
+  of a phone link, email link or contact form, booking and shop signatures, linked social
+  platforms, tech stack, copyright year, a JavaScript-shell flag, and PageSpeed Insights
+  (mobile) for the score, LCP, CLS, TBT and CrUX category. Every check returns its value
+  with the verbatim text it read and the URL it read it at; unknown stays `null`.
+- **The findings catalogue**, worded as observations. Sixteen codes, each with a severity
+  and the service category it points at, and a wording rule enforced over the whole
+  catalogue by a test: a message must open with "Audit found", "Audit could not",
+  "PageSpeed" or "Listing shows", and may never contain "needs", "should", "bad",
+  "terrible" or "outdated website". Every finding carries non-empty evidence, and only
+  `no_website` may omit an evidence URL — what it cites is our own business record.
+- **`website_audits`** (migration `0004`), with a GIN index on `findings` for filtering by
+  code. The full HTML is never stored: a SHA-256 proves whether a page changed, and the
+  visible text is kept only as long as `AUDIT_CONTENT_TTL_DAYS` (90) allows.
+- **The `audit` job**, queued automatically when a resolution run finishes and keyed off it
+  so a retry never leaves two behind. It audits the businesses that run touched whose
+  newest audit is missing or older than `AUDIT_MAX_AGE_DAYS` (30), skips businesses that
+  have closed for good, and reports `{audited, skipped, robots_blocked, unreachable,
+  failed, psi_calls}`. **One bad website never costs the run**: a business whose audit
+  trips a bug in our own code is stored as a `failed` audit inside its own savepoint and
+  the run carries on. A PageSpeed failure never fails an audit either — the audit finishes
+  with `psi = null` and `checks.psi_error` saying why.
+- **Endpoints.** `POST /businesses/{id}/audit` (`admin`, `tech_admin`, `reviewer`,
+  `sales_rep`), `POST /jobs/{id}/audit` (`admin`, `tech_admin`),
+  `GET /businesses/{id}/audits`, `GET /website-audits/{id}`, and on `GET /businesses` the
+  repeatable `finding=` filter (AND, against the **newest** audit), `audit_status=` and a
+  `latest_audit` on every item. `page_text` is readable by `admin`, `reviewer` and
+  `tech_admin` only; other roles see `page_text_hidden: true`.
+- **`pagespeed_insights` as a source row** (`kind=api`, `role=audit_service`), so its calls
+  are metered in `api_calls`, rate limited and capped per day like any other. It is not a
+  searchable source: a search job naming it is a 422, not a run that finds nothing.
+- **Demo websites, so the audits need no network and no key.** Twenty-four checked-in sites
+  under `app/demo/sites/<host>/` cover a modern site with a booking widget, an http-only
+  site with a 2016 copyright, WordPress with no meta description, Wix / Square / GoDaddy
+  builder sites, a Shopify store, a `robots.txt` that disallows everything, a `robots.txt`
+  that answers 503, an http→https redirect chain, a host that cannot connect, a JavaScript
+  shell, a certificate that does not verify, and a PageSpeed quota error.
+  `expected_audits.json` records what each must produce and an integration test asserts it.
+- **`make recompute-businesses`** (`python -m app.cli recompute-businesses
+  [--business-id ID]`). Batched and idempotent, printing `changed / unchanged`. Needed
+  whenever the survivorship rules change on a live database: existing rows still show what
+  the old rules decided, and nothing else would ever revisit them.
+- **README:** "How the website audit works" and "What the bot does and doesn't do" — what
+  it reads, what it refuses to do, and how a site owner can opt out with one robots line.
+
+### Changed
+
+- **`make load-demo-data` now runs the whole pipeline.** It discovers, resolves *and*
+  audits, leaving 29 businesses and 28 audits rather than two run ids to poll.
+  `ARGS=--queue-only` keeps the old behaviour.
+- **`make purge-expired` also expires audit page text**, and reports it. The checks, the
+  findings and their evidence snippets are our own observations, so they stay.
+- **A weak JWT secret now stops the process.** Under `staging` or `production` a secret
+  shorter than 32 bytes (RFC 7518 §3.2) makes the API, the worker and the CLI refuse to
+  start, with the fix in the message and never the secret itself; under `local`,
+  `development` or `ci` it logs a warning. `.env.example` shows `openssl rand -hex 32`.
+- **Two demo listings moved from `https` to `http`** (`bartoncreekplumbing.invalid` and
+  `travisheightsplumbers.invalid`) so the demo covers `no_https` and an http→https
+  redirect. Neither changes a domain, so every v0.3.0 resolution expectation still holds.
+
+### Fixed
+
+- **`make check` no longer prints `InsecureKeyLengthWarning`.** One test signed a token
+  with an 18-byte secret to prove another secret is rejected; it now uses a long one.
+- **Three things a hand-read audit said badly** (found by reading
+  `bartoncreekplumbing.invalid` by eye; `rules_version` is now `audit-2`):
+  - **`tls_valid` no longer claims a certificate verified on a page served over `http`.**
+    There is no certificate to judge, so the value is `null` and the evidence says
+    `not applicable: served over http`. An `https` page is unaffected, and a certificate
+    that does not verify is still `false` with `tls_invalid`.
+  - **A presence check now answers the same way whichever check it is.** `booking`,
+    `viewport_meta`, `meta_description`, `structured_data`, `ecommerce` and `title`
+    returned `null` for something absent while `favicon` and `mailto_link` returned
+    `false`. The rule is now written down and tested: on a page that was fetched and
+    parsed, absent is **`false`**; `null` means the check could not run.
+  - **Snippet evidence is read from the page's visible text.** `copyright_year` cited a
+    window cut out of the HTML that began and ended mid-tag
+    (`el:+1-512-555-0102">Call ... </footer`); it now cites the line a visitor reads,
+    trimmed to whole words. A signature that exists only in markup cites the whole tag it
+    sits in rather than a fragment of one.
+
 ## [v0.3.0] - 2026-09-19
 
 ### Added

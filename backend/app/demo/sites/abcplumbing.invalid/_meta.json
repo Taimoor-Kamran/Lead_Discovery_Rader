@@ -1,0 +1,4 @@
+{
+  "note": "Every request to this host fails TLS verification, robots.txt included.",
+  "failure": "tls"
+}

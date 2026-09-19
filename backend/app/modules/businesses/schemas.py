@@ -5,6 +5,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict
 
+from app.modules.audit_web.schemas import LatestAuditRead
 from app.modules.normalization.schemas import BusinessStatus, WebsiteKind
 
 
@@ -28,6 +29,9 @@ class BusinessSummary(BaseModel):
     business_status: BusinessStatus
     created_at: datetime
     updated_at: datetime
+    # The newest website audit, when there is one. Null means "never audited", which is
+    # different from an audit that found nothing.
+    latest_audit: LatestAuditRead | None = None
 
 
 class FieldValueRead(BaseModel):

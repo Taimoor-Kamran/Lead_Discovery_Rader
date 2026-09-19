@@ -4,7 +4,7 @@ Adapters are registered by name at import time; `sources.name` is the same strin
 is how a `search_jobs.source_ids` entry finds the code that can run it.
 """
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -12,7 +12,10 @@ from sqlalchemy.orm import Session
 from app.core.logging import get_logger
 from app.modules.adapters.base import SourceAdapter
 from app.modules.adapters.errors import AdapterError
-from app.modules.sources.models import Source
+from app.modules.sources.models import Source, SourceKind
+
+if TYPE_CHECKING:
+    from app.modules.audit_web.psi import ServiceSourceSpec
 
 logger = get_logger("app.adapters")
 
@@ -86,22 +89,46 @@ def names(*, bootstrap: bool = True) -> list[str]:
     return sorted(_ADAPTERS)
 
 
+def service_sources() -> list["ServiceSourceSpec"]:
+    """Sources that are not discovery adapters: an API the pipeline calls for a service.
+
+    PageSpeed Insights is one. It gets a `sources` row so its calls are metered and rate
+    limited exactly like a discovery source's, and `validate_source_ids` refuses it for a
+    search job — asking to "search PageSpeed" is a 422, not an empty run.
+
+    Imported here rather than at module level: the audit module imports the adapter
+    contract, so a top-level import would close the loop.
+    """
+    from app.modules.audit_web.psi import pagespeed_service_source
+
+    return [pagespeed_service_source()]
+
+
 def sync_sources(session: Session) -> list[Source]:
-    """Upsert one `sources` row per registered adapter. Idempotent.
+    """Upsert one `sources` row per registered adapter and service. Idempotent.
 
     An operator's `enabled` choice is never overwritten; only the metadata is refreshed.
     """
     synced: list[Source] = []
     existing = {row.name: row for row in session.scalars(select(Source))}
-    for adapter in all():
-        config: dict[str, Any] = adapter.get_source_metadata().as_config(adapter.get_rate_limit())
-        source = existing.get(adapter.name)
+    rows: list[tuple[str, SourceKind, dict[str, Any]]] = [
+        (
+            adapter.name,
+            adapter.kind,
+            adapter.get_source_metadata().as_config(adapter.get_rate_limit()),
+        )
+        for adapter in all()
+    ]
+    rows.extend((spec.name, spec.kind, spec.config) for spec in service_sources())
+
+    for name, kind, config in rows:
+        source = existing.get(name)
         if source is None:
-            source = Source(name=adapter.name, kind=adapter.kind, config=config, enabled=True)
+            source = Source(name=name, kind=kind, config=config, enabled=True)
             session.add(source)
-            logger.info("source registered", extra={"source": adapter.name})
+            logger.info("source registered", extra={"source": name})
         else:
-            source.kind = adapter.kind
+            source.kind = kind
             source.config = config
         synced.append(source)
     session.flush()

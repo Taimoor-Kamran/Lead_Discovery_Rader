@@ -6,6 +6,7 @@ from typing import Annotated
 from fastapi import APIRouter, Query
 
 from app.core.pagination import DEFAULT_LIMIT, MAX_LIMIT, Page
+from app.modules.audit_web.models import AuditStatus
 from app.modules.auth.deps import CurrentUser, DbSession
 from app.modules.businesses import service
 from app.modules.businesses.schemas import BusinessDetail, BusinessSummary
@@ -25,6 +26,17 @@ def list_businesses(
     website_kind: Annotated[WebsiteKind | None, Query()] = None,
     business_status: Annotated[BusinessStatus | None, Query()] = None,
     q: Annotated[str | None, Query(max_length=200)] = None,
+    finding: Annotated[
+        list[str] | None,
+        Query(
+            description=(
+                "A finding code from the newest audit. Repeatable; the codes combine "
+                "with AND, so `finding=no_https&finding=no_online_booking` returns only "
+                "businesses whose latest audit found both."
+            )
+        ),
+    ] = None,
+    audit_status: Annotated[AuditStatus | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
     cursor: Annotated[str | None, Query()] = None,
 ) -> Page[BusinessSummary]:
@@ -37,6 +49,8 @@ def list_businesses(
         website_kind=website_kind,
         business_status=business_status,
         q=q,
+        finding=finding,
+        audit_status=audit_status,
         limit=limit,
         cursor=cursor,
     )

@@ -1,0 +1,261 @@
+{
+  "note": [
+    "What `make load-demo-data` must produce once the audits have run. Written from the",
+    "checked-in demo websites under `app/demo/sites/`, and asserted by",
+    "`tests/integration/test_demo_audits.py`, so a change to a check, a threshold or a",
+    "finding shows up as a failure rather than as a quietly different answer.",
+    "Nothing here reaches the network: every host is either reserved (.invalid) or a demo",
+    "builder subdomain that exists only in this fixture, and all of them are answered",
+    "from disk."
+  ],
+  "businesses_audited": 28,
+  "run_summary": {
+    "audited": 21,
+    "skipped": 3,
+    "robots_blocked": 2,
+    "unreachable": 2,
+    "failed": 0,
+    "psi_calls": 20
+  },
+  "not_audited": {
+    "demo-e8": "closed_permanently \u2014 a business that has closed for good is not a lead"
+  },
+  "by_domain": {
+    "lonestarplumbing.invalid": {
+      "case": "A modern https site with a Calendly booking link and nothing missing.",
+      "status": "done",
+      "findings": [],
+      "psi_score": 94
+    },
+    "bartoncreekplumbing.invalid": {
+      "case": "The old one: http only, no viewport, no description and a 2016 copyright.",
+      "status": "done",
+      "findings": [
+        "missing_meta_description",
+        "no_https",
+        "no_mobile_viewport",
+        "no_online_booking",
+        "no_structured_data",
+        "stale_copyright"
+      ],
+      "psi_score": 55
+    },
+    "zilkerpipeworks.invalid": {
+      "case": "WordPress, with no meta description and no structured data.",
+      "status": "done",
+      "findings": [
+        "missing_meta_description",
+        "no_online_booking",
+        "no_structured_data"
+      ],
+      "psi_score": 62,
+      "tech_stack": [
+        "WordPress"
+      ]
+    },
+    "muellerplumbing.invalid": {
+      "case": "A Shopify store that also offers to schedule a visit.",
+      "status": "done",
+      "findings": [],
+      "psi_score": 71,
+      "tech_stack": [
+        "Shopify"
+      ]
+    },
+    "hydeparkdrain.invalid": {
+      "case": "robots.txt disallows everything, so the homepage is never requested.",
+      "status": "robots_blocked",
+      "findings": [
+        "robots_blocked"
+      ]
+    },
+    "crestviewpipe.invalid": {
+      "case": "robots.txt answers 503. RFC 9309 says treat that as disallowed.",
+      "status": "robots_blocked",
+      "findings": [
+        "robots_blocked"
+      ]
+    },
+    "abcplumbing.invalid": {
+      "case": "The certificate does not verify, and is never retried without verification.",
+      "status": "unreachable",
+      "findings": [
+        "tls_invalid"
+      ]
+    },
+    "travisheightsplumbers.invalid": {
+      "case": "The listing gives http; the site redirects to https, which the audit follows.",
+      "status": "done",
+      "findings": [],
+      "psi_score": 83
+    },
+    "badphoneplumbing.invalid": {
+      "case": "No fixture at all: a reserved host that cannot connect.",
+      "status": "unreachable",
+      "findings": [
+        "unreachable"
+      ]
+    },
+    "squaresitesewer.square.site": {
+      "case": "A JavaScript shell: a handful of scripts and almost no text in the HTML.",
+      "status": "done",
+      "findings": [
+        "js_shell_suspected",
+        "missing_meta_description",
+        "no_contact_on_homepage",
+        "no_h1",
+        "no_online_booking",
+        "no_structured_data"
+      ],
+      "psi_score": 52
+    },
+    "oakhillplumbing.invalid": {
+      "case": "No way to contact it, no heading, and a 2019 copyright.",
+      "status": "done",
+      "findings": [
+        "missing_meta_description",
+        "no_contact_on_homepage",
+        "no_h1",
+        "no_online_booking",
+        "no_structured_data",
+        "slow_mobile",
+        "stale_copyright"
+      ],
+      "psi_score": 44
+    },
+    "wixwaterworks.wixsite.com": {
+      "case": "A Wix builder site that PageSpeed scores under the threshold.",
+      "status": "done",
+      "findings": [
+        "no_online_booking",
+        "no_structured_data",
+        "slow_mobile"
+      ],
+      "psi_score": 47,
+      "tech_stack": [
+        "Wix"
+      ]
+    },
+    "godaddygutters.godaddysites.com": {
+      "case": "A GoDaddy builder site, the slowest in the set.",
+      "status": "done",
+      "findings": [
+        "no_online_booking",
+        "no_structured_data",
+        "slow_mobile"
+      ],
+      "psi_score": 31,
+      "tech_stack": [
+        "GoDaddy Website Builder"
+      ]
+    },
+    "quickfixatx.invalid": {
+      "case": "PageSpeed is out of quota. The audit still finishes, with psi null.",
+      "status": "done",
+      "findings": [],
+      "psi_score": null,
+      "psi_error": true
+    },
+    "messyformat-demo.com": {
+      "case": "The messy listing (no scheme, upper case, www.) still reaches its site.",
+      "status": "done",
+      "findings": [],
+      "psi_score": 78
+    },
+    "reliableplumbingatx.invalid": {
+      "status": "done",
+      "findings": [
+        "no_online_booking"
+      ],
+      "psi_score": 74
+    },
+    "reliableplumbingdfw.invalid": {
+      "status": "done",
+      "findings": [
+        "no_online_booking"
+      ],
+      "psi_score": 69
+    },
+    "capitalplumbingatx.invalid": {
+      "status": "done",
+      "findings": [
+        "no_online_booking"
+      ],
+      "psi_score": 81
+    },
+    "capitalplumbinghou.invalid": {
+      "status": "done",
+      "findings": [
+        "no_online_booking"
+      ],
+      "psi_score": 77
+    },
+    "quickfixsatx.invalid": {
+      "status": "done",
+      "findings": [
+        "no_online_booking"
+      ],
+      "psi_score": 72
+    },
+    "texastrustedplumbing.invalid": {
+      "status": "done",
+      "findings": [
+        "no_online_booking"
+      ],
+      "psi_score": 86
+    },
+    "temporarilyshut.invalid": {
+      "case": "Closed temporarily is still audited; only closed for good is skipped.",
+      "status": "done",
+      "findings": [
+        "no_online_booking"
+      ],
+      "psi_score": 64
+    },
+    "unknownstatus.invalid": {
+      "status": "done",
+      "findings": [
+        "no_online_booking"
+      ],
+      "psi_score": 68
+    },
+    "nocomponents.invalid": {
+      "status": "done",
+      "findings": [
+        "no_online_booking"
+      ],
+      "psi_score": 73
+    },
+    "roofingcousins.invalid": {
+      "case": "A roofer: booking is expected in this trade too.",
+      "status": "done",
+      "findings": [
+        "no_online_booking"
+      ],
+      "psi_score": 79
+    }
+  },
+  "by_record": {
+    "demo-e4": {
+      "case": "Only a Nextdoor page, so no site is fetched at all.",
+      "status": "skipped",
+      "findings": [
+        "social_profile_only"
+      ]
+    },
+    "demo-e5": {
+      "case": "Only a Yelp page, so no site is fetched at all.",
+      "status": "skipped",
+      "findings": [
+        "social_profile_only"
+      ]
+    },
+    "demo-e6": {
+      "case": "No website on the listing. The finding cites our own record.",
+      "status": "skipped",
+      "findings": [
+        "no_website"
+      ]
+    }
+  }
+}

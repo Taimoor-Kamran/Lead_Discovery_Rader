@@ -10,7 +10,8 @@ PNPM := cd $(FRONTEND) && pnpm
 
 .DEFAULT_GOAL := help
 .PHONY: help env install up down logs ps migrate revision seed-admin \
-        sync-sources purge-expired places-smoke load-demo-data reset-password \
+        sync-sources purge-expired recompute-businesses places-smoke load-demo-data \
+        reset-password \
         lint format typecheck test test-unit check check-backend check-frontend \
         frontend-install frontend-lint frontend-typecheck frontend-test clean
 
@@ -56,8 +57,13 @@ sync-sources: env ## Upsert one `sources` row per registered adapter (idempotent
 purge-expired: env ## Drop stored source content past its retention window (keeps IDs)
 	$(COMPOSE) run --rm api python -m app.cli purge-expired
 
-load-demo-data: env ## Load the fictional demo businesses and resolve them (development only)
-	$(COMPOSE) run --rm api python -m app.cli load-demo-data
+# Runs the whole pipeline: discovery, resolution and the website audits. No network, no key.
+load-demo-data: env ## Load the fictional demo businesses, resolve and audit them (development only)
+	$(COMPOSE) run --rm api python -m app.cli load-demo-data $(ARGS)
+
+# Run after the survivorship rules change: existing rows were computed by the old ones.
+recompute-businesses: env ## Re-run survivorship for every business (add ARGS="--business-id ID")
+	$(COMPOSE) run --rm api python -m app.cli recompute-businesses $(ARGS)
 
 # Prompts for the password twice; it is never passed on the command line.
 reset-password: env ## Reset one user's password: make reset-password EMAIL=you@example.com
