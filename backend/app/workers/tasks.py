@@ -13,9 +13,11 @@ from app import models_registry  # noqa: F401
 from app.core.config import get_settings
 from app.core.db import session_scope
 from app.core.logging import get_logger
+from app.modules.audit_web.worker import run_audits
 from app.modules.discovery.worker import run_discovery
 from app.modules.jobs.models import JobRun, JobRunStatus
 from app.modules.jobs.service import (
+    AUDIT_JOB_KIND,
     DEMO_JOB_KIND,
     DISCOVERY_JOB_KIND,
     RESOLUTION_JOB_KIND,
@@ -93,20 +95,25 @@ def demo_handler(session: Session, run: JobRun) -> None:
 register_handler(DEMO_JOB_KIND, demo_handler)
 register_handler(DISCOVERY_JOB_KIND, run_discovery)
 register_handler(RESOLUTION_JOB_KIND, run_resolution)
+register_handler(AUDIT_JOB_KIND, run_audits)
 
 
 def follow_up(session: Session, run: JobRun) -> None:
-    """Queue whatever a finished run implies. A discovery run is resolved immediately.
+    """Queue whatever a finished run implies: discovery is resolved, resolution is audited.
 
-    The idempotency key is derived from the discovery run, so a retried or re-requested
-    discovery never leaves two resolution runs behind.
+    Each key is derived from the run that triggered it, so a retried or re-requested run
+    never leaves a second follow-up behind.
     """
-    if run.kind != DISCOVERY_JOB_KIND:
+    if run.kind == DISCOVERY_JOB_KIND:
+        from app.modules.resolution.service import enqueue_resolution
+
+        enqueue_resolution(session, run.id, idempotency_key=f"resolution:{run.id}")
         return
 
-    from app.modules.resolution.service import enqueue_resolution
+    if run.kind == RESOLUTION_JOB_KIND:
+        from app.modules.audit_web.service import enqueue_audits_for_run
 
-    enqueue_resolution(session, run.id, idempotency_key=f"resolution:{run.id}")
+        enqueue_audits_for_run(session, run.id, idempotency_key=f"audit:{run.id}")
 
 
 def execute_job_run(

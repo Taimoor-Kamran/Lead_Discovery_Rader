@@ -182,18 +182,26 @@ def fetch_checks(outcome: FetchOutcome) -> Checks:
 # --- from the HTML ---------------------------------------------------------------------
 
 
-def html_checks(outcome: FetchOutcome, *, now: datetime | None = None) -> Checks:
-    """Every check that needs the page body. Empty when there was nothing parseable."""
+def analyse_html(
+    outcome: FetchOutcome, *, now: datetime | None = None, page_text_limit: int | None = None
+) -> tuple[Checks, str | None]:
+    """Parse the page once and return its checks plus the visible text to store.
+
+    One parse, one text extraction: every check below reads the same tree, which is what
+    keeps auditing a run of a thousand businesses proportional to the pages, not to the
+    number of questions asked about each.
+    """
     if outcome.text is None:
-        return {}
+        return {}, None
     url = outcome.final_url or outcome.url
     soup = BeautifulSoup(outcome.text, "lxml")
     lowered = outcome.text.lower()
     moment = now or datetime.now(UTC)
+    text = visible_text(soup)
 
     checks: Checks = {}
     checks.update(_meta_checks(soup, url))
-    checks.update(_content_checks(soup, url))
+    checks.update(_content_checks(soup, url, text))
     checks.update(_contact_checks(soup, url))
     checks["booking"] = _booking(soup, lowered, url)
     checks["ecommerce"] = _ecommerce(soup, lowered, url)
@@ -201,8 +209,14 @@ def html_checks(outcome: FetchOutcome, *, now: datetime | None = None) -> Checks
     checks["structured_data"] = _structured_data(soup, url)
     checks["tech_stack"] = _tech_stack(soup, lowered, url)
     checks["copyright_year"] = _copyright_year(outcome.text, url, moment)
-    checks["js_shell_suspected"] = _js_shell(soup, url)
-    return checks
+    checks["js_shell_suspected"] = _js_shell(soup, url, text)
+    stored = text[:page_text_limit] or None if page_text_limit else None
+    return checks, stored
+
+
+def html_checks(outcome: FetchOutcome, *, now: datetime | None = None) -> Checks:
+    """Every check that needs the page body. Empty when there was nothing parseable."""
+    return analyse_html(outcome, now=now)[0]
 
 
 def _meta_checks(soup: BeautifulSoup, url: str) -> Checks:
@@ -244,10 +258,9 @@ def _meta_checks(soup: BeautifulSoup, url: str) -> Checks:
     }
 
 
-def _content_checks(soup: BeautifulSoup, url: str) -> Checks:
+def _content_checks(soup: BeautifulSoup, url: str, text: str) -> Checks:
     headings = [tag for tag in find_tags(soup, "h1") if tag.get_text(strip=True)]
     first = headings[0] if headings else None
-    text = visible_text(soup)
     return {
         "h1_present": CheckResult(
             bool(headings),
@@ -416,9 +429,8 @@ def _copyright_year(html: str, url: str, now: datetime) -> CheckResult:
     return CheckResult(best[0], evidence_text=best[1], evidence_url=url)
 
 
-def _js_shell(soup: BeautifulSoup, url: str) -> CheckResult:
+def _js_shell(soup: BeautifulSoup, url: str, text: str) -> CheckResult:
     """A page whose content is assembled by JavaScript we deliberately do not run."""
-    text = visible_text(soup)
     scripts = find_tags(soup, "script")
     suspected = len(text) < JS_SHELL_TEXT_CHARS and len(scripts) >= JS_SHELL_SCRIPT_TAGS
     return CheckResult(
@@ -444,11 +456,12 @@ def visible_text(soup: BeautifulSoup) -> str:
 
 
 def page_text(outcome: FetchOutcome, *, limit: int) -> str | None:
-    """The visible text an audit stores, capped. Input for the v0.5.0 AI step."""
-    if outcome.text is None:
-        return None
-    text = visible_text(BeautifulSoup(outcome.text, "lxml"))
-    return text[:limit] or None
+    """The visible text an audit stores, capped. Input for the v0.5.0 AI step.
+
+    A convenience for tests and callers that want only the text; the audit itself gets it
+    from `analyse_html`, which does the one parse it needs.
+    """
+    return analyse_html(outcome, page_text_limit=limit)[1]
 
 
 def _meta_tag(soup: BeautifulSoup, name: str) -> Tag | None:
