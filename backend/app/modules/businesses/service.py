@@ -8,6 +8,9 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import NotFoundError
 from app.core.pagination import DEFAULT_LIMIT, Page, apply_cursor, encode_cursor
+from app.modules.audit_web import service as audits_service
+from app.modules.audit_web.models import AuditStatus, WebsiteAudit
+from app.modules.audit_web.schemas import LatestAuditRead
 from app.modules.businesses.models import PROVENANCED_FIELDS, Business, BusinessFieldValue
 from app.modules.businesses.schemas import (
     BusinessDetail,
@@ -28,8 +31,15 @@ def get_business(session: Session, business_id: uuid.UUID) -> Business:
     return business
 
 
-def summarize(business: Business) -> BusinessSummary:
-    return BusinessSummary.model_validate(business)
+def summarize(business: Business, latest: WebsiteAudit | None = None) -> BusinessSummary:
+    summary = BusinessSummary.model_validate(business)
+    if latest is not None:
+        summary.latest_audit = LatestAuditRead(
+            status=latest.status,
+            finding_codes=latest.finding_codes,
+            audited_at=latest.created_at,
+        )
+    return summary
 
 
 def list_businesses(
@@ -42,6 +52,8 @@ def list_businesses(
     website_kind: WebsiteKind | None = None,
     business_status: BusinessStatus | None = None,
     q: str | None = None,
+    finding: list[str] | None = None,
+    audit_status: AuditStatus | None = None,
     limit: int = DEFAULT_LIMIT,
     cursor: str | None = None,
 ) -> Page[BusinessSummary]:
@@ -72,6 +84,12 @@ def list_businesses(
             )
         )
 
+    # What the newest audit found. Applied to the latest audit only: a business whose
+    # website was fixed since is no longer a match, which is the whole point.
+    stmt = audits_service.apply_audit_filters(
+        stmt, finding_codes=finding, audit_status=audit_status
+    )
+
     stmt = apply_cursor(stmt, Business.created_at, Business.id, cursor)
     rows = list(session.scalars(stmt))
 
@@ -79,7 +97,10 @@ def list_businesses(
     if len(rows) > limit:
         rows = rows[:limit]
         next_cursor = encode_cursor(rows[-1].created_at, rows[-1].id)
-    return Page[BusinessSummary](items=[summarize(row) for row in rows], next_cursor=next_cursor)
+    latest = audits_service.latest_audits(session, [row.id for row in rows])
+    return Page[BusinessSummary](
+        items=[summarize(row, latest.get(row.id)) for row in rows], next_cursor=next_cursor
+    )
 
 
 def detail(session: Session, business: Business) -> BusinessDetail:
@@ -104,7 +125,7 @@ def detail(session: Session, business: Business) -> BusinessDetail:
     record_sources = _source_names(session, [record.source_id for record in records])
 
     return BusinessDetail(
-        **summarize(business).model_dump(),
+        **summarize(business, audits_service.latest_audit(session, business.id)).model_dump(),
         legal_name=business.legal_name,
         name_key=business.name_key,
         address_line1=business.address_line1,

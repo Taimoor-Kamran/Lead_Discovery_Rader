@@ -16,6 +16,11 @@ from app.core.health import health_router
 from app.core.logging import configure_logging, get_logger
 from app.core.middleware import RequestIdMiddleware, get_request_id
 from app.core.security import check_jwt_secret
+from app.modules.audit_web.router import (
+    business_audits_router,
+    job_audits_router,
+    website_audits_router,
+)
 from app.modules.auth.router import auth_router, users_router
 from app.modules.businesses.router import businesses_router
 from app.modules.discovery.router import discovered_records_router, job_records_router
@@ -105,6 +110,9 @@ def create_app() -> FastAPI:
     app.include_router(businesses_router, prefix=settings.api_v1_prefix)
     app.include_router(match_candidates_router, prefix=settings.api_v1_prefix)
     app.include_router(job_resolution_router, prefix=settings.api_v1_prefix)
+    app.include_router(business_audits_router, prefix=settings.api_v1_prefix)
+    app.include_router(job_audits_router, prefix=settings.api_v1_prefix)
+    app.include_router(website_audits_router, prefix=settings.api_v1_prefix)
     return app
 
 
