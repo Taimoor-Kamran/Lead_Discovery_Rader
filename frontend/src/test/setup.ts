@@ -6,6 +6,6 @@ vi.mock("next/navigation", async () => {
   return {
     useRouter: () => utils.router,
     usePathname: () => utils.currentPathname,
-    useSearchParams: () => new URLSearchParams(),
+    useSearchParams: () => utils.currentSearchParams,
   };
 });

@@ -51,6 +51,21 @@ export type CrmLeadStatus = Schemas["CrmLeadStatus"];
 export type CrmLeadBlock = Schemas["CrmLeadStatusRead"];
 export type CrmSyncAttempt = Schemas["CrmSyncAttemptRead"];
 export type SyncAllResult = Schemas["SyncAllResult"];
+export type UserRead = Schemas["UserRead"];
+export type UserCreate = Schemas["UserCreate"];
+export type IndustryOption = Schemas["IndustryOption"];
+export type CostEstimate = Schemas["CostEstimate"];
+export type EstimateRequest = Schemas["EstimateRequest"];
+export type SearchJobCreate = Schemas["SearchJobCreate"];
+export type SearchJobRead = Schemas["SearchJobRead"];
+export type SearchJobListItem = Schemas["SearchJobListItem"];
+export type SearchJobPage = Schemas["Page_SearchJobListItem_"];
+export type JobRunRead = Schemas["JobRunRead"];
+export type PipelineRead = Schemas["PipelineRead"];
+export type PipelineStage = Schemas["PipelineStage"];
+export type SourceRead = Schemas["SourceRead"];
+export type HealthReport = Schemas["HealthReport"];
+export type AlertRead = Schemas["AlertRead"];
 export type ErrorEnvelope = {
   error: { code: string; message: string; request_id: string; details?: Record<string, unknown> };
 };
@@ -181,6 +196,10 @@ function post<T>(path: string, body?: unknown): Promise<T> {
   return request<T>(path, { method: "POST", body: body === undefined ? undefined : JSON.stringify(body) });
 }
 
+function patch<T>(path: string, body: unknown): Promise<T> {
+  return request<T>(path, { method: "PATCH", body: JSON.stringify(body) });
+}
+
 // --- auth ------------------------------------------------------------------------------
 
 export function getHealth(): Promise<Health> {
@@ -203,6 +222,96 @@ export async function logout(): Promise<void> {
   } finally {
     clearAccessToken();
   }
+}
+
+/** Replace your own password. The API retires every other session and hands back a new one. */
+export async function changePassword(
+  currentPassword: string,
+  newPassword: string,
+): Promise<TokenResponse> {
+  const body = await post<TokenResponse>("/auth/change-password", {
+    current_password: currentPassword,
+    new_password: newPassword,
+  });
+  setAccessToken(body.access_token);
+  return body;
+}
+
+// --- users (admin) -----------------------------------------------------------------------
+
+export function getUsers(cursor?: string): Promise<UserPage> {
+  return get<UserPage>("/users", { limit: 200, cursor });
+}
+
+export function createUser(body: UserCreate): Promise<UserRead> {
+  return post<UserRead>("/users", body);
+}
+
+export function updateUser(
+  userId: string,
+  body: { role?: Role; is_active?: boolean },
+): Promise<UserRead> {
+  return patch<UserRead>(`/users/${userId}`, body);
+}
+
+export function unlockUser(userId: string): Promise<UserRead> {
+  return post<UserRead>(`/users/${userId}/unlock`);
+}
+
+export function resetUserPassword(userId: string, password: string): Promise<UserRead> {
+  return post<UserRead>(`/users/${userId}/reset-password`, { password });
+}
+
+// --- searches ------------------------------------------------------------------------------
+
+export function getIndustries(): Promise<IndustryOption[]> {
+  return get<IndustryOption[]>("/search-jobs/industries");
+}
+
+export function getSources(): Promise<SourceRead[]> {
+  return get<SourceRead[]>("/sources");
+}
+
+export function estimateSearch(body: EstimateRequest): Promise<CostEstimate> {
+  return post<CostEstimate>("/search-jobs/estimate", body);
+}
+
+export function getSearchJobs(cursor?: string): Promise<SearchJobPage> {
+  return get<SearchJobPage>("/search-jobs", { limit: 100, cursor });
+}
+
+export function getSearchJob(searchJobId: string): Promise<SearchJobRead> {
+  return get<SearchJobRead>(`/search-jobs/${searchJobId}`);
+}
+
+export function createSearchJob(body: SearchJobCreate): Promise<SearchJobRead> {
+  return post<SearchJobRead>("/search-jobs", body);
+}
+
+export function getSearchJobEstimate(searchJobId: string): Promise<CostEstimate> {
+  return get<CostEstimate>(`/search-jobs/${searchJobId}/estimate`);
+}
+
+export function runSearchJob(searchJobId: string): Promise<JobRunRead> {
+  return post<JobRunRead>(`/search-jobs/${searchJobId}/run`);
+}
+
+export function getSearchPipeline(searchJobId: string, runId?: string): Promise<PipelineRead> {
+  return get<PipelineRead>(`/search-jobs/${searchJobId}/pipeline`, { run_id: runId });
+}
+
+// --- monitoring (admin, tech admin) ----------------------------------------------------------
+
+export function getAdminHealth(): Promise<HealthReport> {
+  return get<HealthReport>("/admin/health");
+}
+
+export function getAlerts(): Promise<AlertRead[]> {
+  return get<AlertRead[]>("/admin/alerts");
+}
+
+export function acknowledgeAlert(alertId: string): Promise<AlertRead> {
+  return post<AlertRead>(`/admin/alerts/${alertId}/acknowledge`);
 }
 
 // --- review ----------------------------------------------------------------------------

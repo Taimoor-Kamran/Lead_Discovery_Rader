@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 import type { Role } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -19,16 +19,24 @@ export function RequireRole({
 }) {
   const { status, user } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
+  // A user created or reset by an admin can only change their password (the API refuses
+  // everything else with 403 password_change_required), so every page sends them there.
+  const forced = Boolean(user?.must_change_password) && pathname !== "/profile";
 
   useEffect(() => {
     if (status === "anonymous") router.replace("/login");
-  }, [status, router]);
+    else if (forced) router.replace("/profile?forced=1");
+  }, [status, forced, router]);
 
   if (status === "loading") {
     return <p className="p-6 text-sm text-slate-600">Loading…</p>;
   }
   if (status === "anonymous" || !user) {
     return <p className="p-6 text-sm text-slate-600">Redirecting to sign in…</p>;
+  }
+  if (forced) {
+    return <p className="p-6 text-sm text-slate-600" data-testid="forced-change">You must change your password first…</p>;
   }
   if (!roles.includes(user.role)) {
     return (

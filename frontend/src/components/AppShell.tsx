@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { AlertBanner } from "@/components/AlertBanner";
 import { useAuth } from "@/lib/auth";
 import { navFor, ROLE_LABELS } from "@/lib/roles";
 
@@ -48,6 +49,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <span className="text-slate-200" data-testid="whoami">
                   {user.email} · {ROLE_LABELS[user.role]}
                 </span>
+                <Link href="/profile" className="text-slate-200 underline" data-testid="profile-link">
+                  Profile
+                </Link>
                 <button type="button" onClick={onSignOut} className="btn-secondary !py-1">
                   Sign out
                 </button>
@@ -56,6 +60,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
       </header>
+      <AlertBanner />
       <main className="mx-auto w-full max-w-[1600px] flex-1 px-4 py-6">{children}</main>
     </div>
   );

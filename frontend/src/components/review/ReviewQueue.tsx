@@ -1,5 +1,6 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useToast } from "@/components/Toast";
 import { DecisionDialog, type DecisionFields } from "@/components/review/DecisionDialog";
@@ -14,7 +15,11 @@ import { canDecide } from "@/lib/roles";
 export function ReviewQueue() {
   const { user } = useAuth();
   const { show } = useToast();
-  const [filters, setFilters] = useState<QueueFilterState>(EMPTY_FILTERS);
+  const params = useSearchParams();
+  const [filters, setFilters] = useState<QueueFilterState>(() => ({
+    ...EMPTY_FILTERS,
+    city: params.get("city") ?? "",
+  }));
   const [items, setItems] = useState<QueueItem[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);

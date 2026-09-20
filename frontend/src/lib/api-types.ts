@@ -4,6 +4,63 @@
  */
 
 export interface paths {
+    "/api/v1/admin/alerts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Alerts */
+        get: operations["list_alerts_api_v1_admin_alerts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/alerts/{alert_id}/acknowledge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Acknowledge Alert
+         * @description Hide the alert from the banner. Audited with the acknowledging user.
+         */
+        post: operations["acknowledge_alert_api_v1_admin_alerts__alert_id__acknowledge_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Admin Health
+         * @description Every metric from blueprint slide 45, with the alert rules re-evaluated.
+         */
+        get: operations["admin_health_api_v1_admin_health_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ai/classifications/{classification_id}": {
         parameters: {
             query?: never;
@@ -38,6 +95,26 @@ export interface paths {
         get: operations["get_usage_api_v1_ai_usage_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/change-password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Change Password
+         * @description Replace your own password. Every other session is signed out; this one continues.
+         */
+        post: operations["change_password_api_v1_auth_change_password_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -761,11 +838,54 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Search Jobs */
+        /**
+         * List Search Jobs
+         * @description Search jobs, newest first, each with its most recent discovery run.
+         */
         get: operations["list_search_jobs_api_v1_search_jobs_get"];
         put?: never;
         /** Create Search Job */
         post: operations["create_search_job_api_v1_search_jobs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/search-jobs/estimate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Estimate Search
+         * @description What a run with these settings would cost against today's caps. Calls nothing.
+         */
+        post: operations["estimate_search_api_v1_search_jobs_estimate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/search-jobs/industries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Industries
+         * @description The industry dropdown: taxonomy slugs with the text a source is asked for.
+         */
+        get: operations["list_industries_api_v1_search_jobs_industries_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -790,6 +910,46 @@ export interface paths {
         patch: operations["update_search_job_api_v1_search_jobs__search_job_id__patch"];
         trace?: never;
     };
+    "/api/v1/search-jobs/{search_job_id}/estimate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Estimate Search Job
+         * @description The cost estimate for running this job now.
+         */
+        get: operations["estimate_search_job_api_v1_search_jobs__search_job_id__estimate_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/search-jobs/{search_job_id}/pipeline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search Job Pipeline
+         * @description Discovery → resolution → audit → classification for the latest (or the given) run.
+         */
+        get: operations["search_job_pipeline_api_v1_search_jobs__search_job_id__pipeline_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/search-jobs/{search_job_id}/run": {
         parameters: {
             query?: never;
@@ -801,7 +961,8 @@ export interface paths {
         put?: never;
         /**
          * Run Search Job
-         * @description Enqueue a run. Repeating the call with the same Idempotency-Key returns the first run.
+         * @description Enqueue a run, unless today's Places cap cannot cover it (422 `daily_cap_exceeded`).
+         *     Repeating the call with the same Idempotency-Key returns the first run.
          */
         post: operations["run_search_job_api_v1_search_jobs__search_job_id__run_post"];
         delete?: never;
@@ -940,6 +1101,46 @@ export interface paths {
         patch: operations["update_user_api_v1_users__user_id__patch"];
         trace?: never;
     };
+    "/api/v1/users/{user_id}/reset-password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reset User Password
+         * @description Set a temporary password. The user must change it on their next sign-in.
+         */
+        post: operations["reset_user_password_api_v1_users__user_id__reset_password_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users/{user_id}/unlock": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Unlock User
+         * @description Lift a lockout before it expires on its own.
+         */
+        post: operations["unlock_user_api_v1_users__user_id__unlock_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/website-audits/{website_audit_id}": {
         parameters: {
             query?: never;
@@ -1045,6 +1246,29 @@ export interface components {
             /** Status */
             status: string;
         };
+        /** AIStatus */
+        AIStatus: {
+            /** Budget Ratio */
+            budget_ratio: number | null;
+            /** Budget Usd */
+            budget_usd: number;
+            /** Call Cap */
+            call_cap: number;
+            /** Calls Today */
+            calls_today: number;
+            /** Classifications Today */
+            classifications_today: number;
+            /** Prices Configured */
+            prices_configured: boolean;
+            /** Provider */
+            provider: string;
+            /** Reuse Rate */
+            reuse_rate: number | null;
+            /** Reused Today */
+            reused_today: number;
+            /** Spent Today Usd */
+            spent_today_usd: number;
+        };
         /**
          * AISummaryRead
          * @description The model's summary of the business. Always flagged; never a fact.
@@ -1124,11 +1348,87 @@ export interface components {
             /** Tokens Out */
             tokens_out: number;
         };
+        /** AlertRead */
+        AlertRead: {
+            /** Acknowledged */
+            acknowledged: boolean;
+            /** Acknowledged At */
+            acknowledged_at: string | null;
+            /** Acknowledged By */
+            acknowledged_by: string | null;
+            /** Active */
+            active: boolean;
+            /** Cleared At */
+            cleared_at: string | null;
+            /** Details */
+            details: {
+                [key: string]: unknown;
+            };
+            /**
+             * First Seen At
+             * Format: date-time
+             */
+            first_seen_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Last Seen At
+             * Format: date-time
+             */
+            last_seen_at: string;
+            /** Message */
+            message: string;
+            /** Rule */
+            rule: string;
+            /** Severity */
+            severity: string;
+        };
+        /** AuditOutcomes */
+        AuditOutcomes: {
+            /** Done */
+            done: number;
+            /** Failed */
+            failed: number;
+            /** Robots Blocked */
+            robots_blocked: number;
+            /** Skipped */
+            skipped: number;
+            /** Total */
+            total: number;
+            /** Unreachable */
+            unreachable: number;
+        };
         /**
          * AuditStatus
          * @enum {string}
          */
         AuditStatus: "done" | "skipped" | "robots_blocked" | "unreachable" | "failed";
+        /** BackupStatus */
+        BackupStatus: {
+            /** Backups Kept */
+            backups_kept: number;
+            /** Directory */
+            directory: string;
+            /** Keep */
+            keep: number;
+            /** Last Backup At */
+            last_backup_at: string | null;
+            /** Last Backup File */
+            last_backup_file: string | null;
+            /** Last Backup Size Bytes */
+            last_backup_size_bytes: number | null;
+            /** Last Verify At */
+            last_verify_at: string | null;
+            /** Last Verify Error */
+            last_verify_error: string | null;
+            /** Last Verify File */
+            last_verify_file: string | null;
+            /** Last Verify Ok */
+            last_verify_ok: boolean | null;
+        };
         /** BatchItemResult */
         BatchItemResult: {
             /**
@@ -1286,11 +1586,67 @@ export interface components {
             website: string | null;
             website_kind: components["schemas"]["WebsiteKind"];
         };
+        /** ChangePasswordRequest */
+        ChangePasswordRequest: {
+            /** Current Password */
+            current_password: string;
+            /** New Password */
+            new_password: string;
+        };
         /**
          * ClassificationStatus
          * @enum {string}
          */
         ClassificationStatus: "ok" | "schema_invalid" | "guardrail_trimmed" | "error" | "skipped_budget" | "skipped_disabled" | "reused";
+        /**
+         * CostEstimate
+         * @description What one run is expected to cost before it is started (spec v0.8.0 §6).
+         *
+         *     Every number is an upper bound from the caps, never a promise: a PageSpeed call
+         *     happens only for a reachable site, an AI call only for a site with text.
+         */
+        CostEstimate: {
+            /** Ai Budget Remaining Usd */
+            ai_budget_remaining_usd: number;
+            /** Ai Budget Usd */
+            ai_budget_usd: number;
+            /** Ai Calls */
+            ai_calls: number;
+            /** Ai Calls Used Today */
+            ai_calls_used_today: number;
+            /** Ai Daily Call Cap */
+            ai_daily_call_cap: number;
+            /** Ai Enabled */
+            ai_enabled: boolean;
+            /** Ai Provider */
+            ai_provider: string;
+            /** Ai Spent Today Usd */
+            ai_spent_today_usd: number;
+            /** Blockers */
+            blockers: string[];
+            /** Can Run */
+            can_run: boolean;
+            /** Max Results */
+            max_results: number;
+            /** Pagespeed Calls */
+            pagespeed_calls: number;
+            /** Pagespeed Daily Cap */
+            pagespeed_daily_cap: number;
+            /** Pagespeed Remaining Today */
+            pagespeed_remaining_today: number;
+            /** Pagespeed Used Today */
+            pagespeed_used_today: number;
+            /** Places Calls */
+            places_calls: number;
+            /** Places Daily Cap */
+            places_daily_cap: number;
+            /** Places Remaining Today */
+            places_remaining_today: number;
+            /** Places Used Today */
+            places_used_today: number;
+            /** Uses Places */
+            uses_places: boolean;
+        };
         /** CrmCheckRead */
         CrmCheckRead: {
             /** Detail */
@@ -1299,6 +1655,17 @@ export interface components {
             name: string;
             /** Ok */
             ok: boolean;
+        };
+        /** CrmCounts */
+        CrmCounts: {
+            /** Destination */
+            destination: string;
+            /** Held */
+            held: number;
+            /** Scheduled */
+            scheduled: number;
+            /** Synced Today */
+            synced_today: number;
         };
         /** CrmHealthRead */
         CrmHealthRead: {
@@ -1439,6 +1806,23 @@ export interface components {
          * @enum {string}
          */
         CrmSyncStatus: "ok" | "failed";
+        /** DataQuality */
+        DataQuality: {
+            /** Businesses Total */
+            businesses_total: number;
+            /** Invalid Rate */
+            invalid_rate: number | null;
+            /** Missing City */
+            missing_city: number;
+            /** Missing Phone */
+            missing_phone: number;
+            /** Missing Website */
+            missing_website: number;
+            /** Records Invalid */
+            records_invalid: number;
+            /** Records Total */
+            records_total: number;
+        };
         /**
          * DecidedOpportunity
          * @description What a decision endpoint returns: the updated opportunity and the row it wrote.
@@ -1640,6 +2024,30 @@ export interface components {
             website: string | null;
         };
         /**
+         * DuplicateRate
+         * @description Last 7 days: what resolution merged on its own, what it sent to a human, and what
+         *     humans decided.
+         */
+        DuplicateRate: {
+            /** Auto Merged */
+            auto_merged: number;
+            /** Kept Apart */
+            kept_apart: number;
+            /** Merged By Review */
+            merged_by_review: number;
+            /** Pending Review */
+            pending_review: number;
+            /** Sent To Review */
+            sent_to_review: number;
+        };
+        /** EstimateRequest */
+        EstimateRequest: {
+            /** Max Results */
+            max_results?: number | null;
+            /** Source Ids */
+            source_ids?: string[];
+        };
+        /**
          * FakeCrmRecordRead
          * @description A record in the fake destination (development and CI only).
          */
@@ -1718,6 +2126,37 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        /** HealthReport */
+        HealthReport: {
+            ai: components["schemas"]["AIStatus"];
+            /** Alerts */
+            alerts: components["schemas"]["AlertRead"][];
+            audits: components["schemas"]["AuditOutcomes"];
+            backups: components["schemas"]["BackupStatus"];
+            crm: components["schemas"]["CrmCounts"];
+            data_quality: components["schemas"]["DataQuality"];
+            /** Db */
+            db: boolean;
+            duplicates: components["schemas"]["DuplicateRate"];
+            /** Environment */
+            environment: string;
+            /** Freshness */
+            freshness: components["schemas"]["SourceFreshness"][];
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            jobs: components["schemas"]["JobSuccess"];
+            queue: components["schemas"]["QueueStatus"];
+            /** Redis */
+            redis: boolean;
+            /** Sources */
+            sources: components["schemas"]["SourceErrorRate"][];
+            thresholds: components["schemas"]["Thresholds"];
+            /** Timings */
+            timings: components["schemas"]["KindTiming"][];
+        };
         /** HealthResponse */
         HealthResponse: {
             /** Db */
@@ -1729,6 +2168,19 @@ export interface components {
              * @enum {string}
              */
             status: "ok" | "degraded";
+        };
+        /**
+         * IndustryOption
+         * @description One entry of the industry dropdown: our slug, a label, and the text the source
+         *     is asked for (`industry` on the search job).
+         */
+        IndustryOption: {
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Query */
+            query: string;
         };
         /** JobRunRead */
         JobRunRead: {
@@ -1771,6 +2223,39 @@ export interface components {
          * @enum {string}
          */
         JobRunStatus: "queued" | "running" | "done" | "failed" | "cancelled";
+        /** JobSuccess */
+        JobSuccess: {
+            /** Last 24H */
+            last_24h: components["schemas"]["KindRate"][];
+            /** Last 7D */
+            last_7d: components["schemas"]["KindRate"][];
+        };
+        /** KindRate */
+        KindRate: {
+            /** Cancelled */
+            cancelled: number;
+            /** Done */
+            done: number;
+            /** Failed */
+            failed: number;
+            /** Kind */
+            kind: string;
+            /** Success Rate */
+            success_rate: number | null;
+            /** Total */
+            total: number;
+        };
+        /** KindTiming */
+        KindTiming: {
+            /** Kind */
+            kind: string;
+            /** Median Seconds */
+            median_seconds: number | null;
+            /** P95 Seconds */
+            p95_seconds: number | null;
+            /** Runs */
+            runs: number;
+        };
         /**
          * LatestAuditRead
          * @description What a business list item says about its newest audit.
@@ -2130,10 +2615,10 @@ export interface components {
             /** Next Cursor */
             next_cursor?: string | null;
         };
-        /** Page[SearchJobRead] */
-        Page_SearchJobRead_: {
+        /** Page[SearchJobListItem] */
+        Page_SearchJobListItem_: {
             /** Items */
-            items: components["schemas"]["SearchJobRead"][];
+            items: components["schemas"]["SearchJobListItem"][];
             /** Next Cursor */
             next_cursor?: string | null;
         };
@@ -2157,6 +2642,45 @@ export interface components {
             items: components["schemas"]["WebsiteAuditSummary"][];
             /** Next Cursor */
             next_cursor?: string | null;
+        };
+        /**
+         * PasswordResetRequest
+         * @description An admin sets a new temporary password; the user must change it on next sign-in.
+         */
+        PasswordResetRequest: {
+            /** Password */
+            password: string;
+        };
+        /**
+         * PipelineRead
+         * @description One run of a search job followed through the four stages.
+         */
+        PipelineRead: {
+            /** Discovery Run Id */
+            discovery_run_id: string | null;
+            /** Review Queue Query */
+            review_queue_query: {
+                [key: string]: string;
+            };
+            /**
+             * Search Job Id
+             * Format: uuid
+             */
+            search_job_id: string;
+            /** Stages */
+            stages: components["schemas"]["PipelineStage"][];
+        };
+        /** PipelineStage */
+        PipelineStage: {
+            /** Counts */
+            counts: {
+                [key: string]: unknown;
+            };
+            /** Error */
+            error: string | null;
+            run: components["schemas"]["JobRunRead"] | null;
+            /** Stage */
+            stage: string;
         };
         /** QueueAudit */
         QueueAudit: {
@@ -2220,6 +2744,17 @@ export interface components {
             source: components["schemas"]["OpportunitySource"];
             /** Weak */
             weak: boolean;
+        };
+        /** QueueStatus */
+        QueueStatus: {
+            /** Length */
+            length: number;
+            /** Name */
+            name: string;
+            /** Schedule */
+            schedule: components["schemas"]["ScheduledJobStatus"][];
+            /** Scheduler Lock Held */
+            scheduler_lock_held: boolean;
         };
         /** RecordSightingRead */
         RecordSightingRead: {
@@ -2410,6 +2945,21 @@ export interface components {
          * @enum {string}
          */
         Role: "admin" | "sales_rep" | "reviewer" | "tech_admin" | "crm_manager";
+        /** ScheduledJobStatus */
+        ScheduledJobStatus: {
+            /** Cron */
+            cron: string;
+            /** Description */
+            description: string;
+            /** Last Fired At */
+            last_fired_at: string | null;
+            /** Last Run Finished At */
+            last_run_finished_at: string | null;
+            /** Last Run Status */
+            last_run_status: string | null;
+            /** Name */
+            name: string;
+        };
         /** ScoreComponentsRead */
         ScoreComponentsRead: {
             /** Contactability */
@@ -2426,12 +2976,54 @@ export interface components {
             geo: components["schemas"]["GeoSpec"];
             /** Industry */
             industry: string;
+            /** Max Results */
+            max_results?: number | null;
             /** Name */
             name: string;
             /** Source Ids */
             source_ids?: string[];
             /** @default draft */
             status: components["schemas"]["SearchJobStatus"];
+        };
+        /**
+         * SearchJobListItem
+         * @description A search job with its most recent discovery run, for the searches page.
+         */
+        SearchJobListItem: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Created By
+             * Format: uuid
+             */
+            created_by: string;
+            /** Geo */
+            geo: {
+                [key: string]: unknown;
+            };
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Industry */
+            industry: string;
+            last_run?: components["schemas"]["JobRunRead"] | null;
+            /** Max Results */
+            max_results?: number | null;
+            /** Name */
+            name: string;
+            /** Source Ids */
+            source_ids: string[];
+            status: components["schemas"]["SearchJobStatus"];
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
         };
         /** SearchJobRead */
         SearchJobRead: {
@@ -2456,6 +3048,8 @@ export interface components {
             id: string;
             /** Industry */
             industry: string;
+            /** Max Results */
+            max_results?: number | null;
             /** Name */
             name: string;
             /** Source Ids */
@@ -2477,11 +3071,35 @@ export interface components {
             geo?: components["schemas"]["GeoSpec"] | null;
             /** Industry */
             industry?: string | null;
+            /** Max Results */
+            max_results?: number | null;
             /** Name */
             name?: string | null;
             /** Source Ids */
             source_ids?: string[] | null;
             status?: components["schemas"]["SearchJobStatus"] | null;
+        };
+        /** SourceErrorRate */
+        SourceErrorRate: {
+            /** Calls */
+            calls: number;
+            /** Error Rate */
+            error_rate: number | null;
+            /** Errors */
+            errors: number;
+            /** Source */
+            source: string;
+        };
+        /** SourceFreshness */
+        SourceFreshness: {
+            /** Enabled */
+            enabled: boolean;
+            /** Last Discovered At */
+            last_discovered_at: string | null;
+            /** Records */
+            records: number;
+            /** Source */
+            source: string;
         };
         /**
          * SourceKind
@@ -2582,6 +3200,21 @@ export interface components {
             /** Synced */
             synced: number;
         };
+        /** Thresholds */
+        Thresholds: {
+            /** Ai Budget Ratio */
+            ai_budget_ratio: number;
+            /** Backup Max Age Hours */
+            backup_max_age_hours: number;
+            /** Job Success Rate Min */
+            job_success_rate_min: number;
+            /** Queue Length Max */
+            queue_length_max: number;
+            /** Source Error Rate Max */
+            source_error_rate_max: number;
+            /** Watchdog Stale Minutes */
+            watchdog_stale_minutes: number;
+        };
         /** TokenResponse */
         TokenResponse: {
             /** Access Token */
@@ -2618,6 +3251,11 @@ export interface components {
              * @default true
              */
             is_active: boolean;
+            /**
+             * Must Change Password
+             * @default true
+             */
+            must_change_password: boolean;
             /** Password */
             password: string;
             role: components["schemas"]["Role"];
@@ -2638,6 +3276,17 @@ export interface components {
             id: string;
             /** Is Active */
             is_active: boolean;
+            /** Last Login At */
+            last_login_at?: string | null;
+            /** Locked */
+            readonly locked: boolean;
+            /** Locked Until */
+            locked_until?: string | null;
+            /**
+             * Must Change Password
+             * @default false
+             */
+            must_change_password: boolean;
             role: components["schemas"]["Role"];
             /**
              * Updated At
@@ -2782,6 +3431,89 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    list_alerts_api_v1_admin_alerts_get: {
+        parameters: {
+            query?: {
+                include_acknowledged?: boolean;
+                active_only?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertRead"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    acknowledge_alert_api_v1_admin_alerts__alert_id__acknowledge_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alert_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_health_api_v1_admin_health_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HealthReport"];
+                };
+            };
+        };
+    };
     get_classification_api_v1_ai_classifications__classification_id__get: {
         parameters: {
             query?: never;
@@ -2831,6 +3563,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AIUsageRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    change_password_api_v1_auth_change_password_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangePasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TokenResponse"];
                 };
             };
             /** @description Validation Error */
@@ -4008,7 +4773,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Page_SearchJobRead_"];
+                    "application/json": components["schemas"]["Page_SearchJobListItem_"];
                 };
             };
             /** @description Validation Error */
@@ -4051,6 +4816,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    estimate_search_api_v1_search_jobs_estimate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EstimateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CostEstimate"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_industries_api_v1_search_jobs_industries_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IndustryOption"][];
                 };
             };
         };
@@ -4108,6 +4926,70 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SearchJobRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    estimate_search_job_api_v1_search_jobs__search_job_id__estimate_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                search_job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CostEstimate"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    search_job_pipeline_api_v1_search_jobs__search_job_id__pipeline_get: {
+        parameters: {
+            query?: {
+                run_id?: string | null;
+            };
+            header?: never;
+            path: {
+                search_job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PipelineRead"];
                 };
             };
             /** @description Validation Error */
@@ -4421,6 +5303,72 @@ export interface operations {
                 "application/json": components["schemas"]["UserUpdate"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reset_user_password_api_v1_users__user_id__reset_password_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordResetRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unlock_user_api_v1_users__user_id__unlock_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
