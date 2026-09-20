@@ -39,8 +39,8 @@ logger = get_logger("app.demo")
 
 SEARCH_JOB_NAME = "Demo - Austin plumbers"
 DISCOVERY_IDEMPOTENCY_KEY = "demo:austin-plumbers:discovery"
-# The users `make e2e` creates (`e2e-<timestamp>@example.com`, see frontend/e2e); a reset
-# removes them so repeated runs do not pile up throw-away accounts.
+# The throw-away user `make e2e` signs in as (`e2e-user@example.com`, see frontend/e2e); a
+# reset removes any `e2e-*@example.com` user so runs never pile up accounts.
 E2E_USER_EMAIL_PATTERN = "e2e-%@example.com"
 
 
@@ -210,8 +210,8 @@ class DemoResetResult:
     classification_run_id: uuid.UUID | None
     classification_status: JobRunStatus | None
     classification_summary: dict[str, Any] = field(default_factory=dict)
-    # Throw-away `e2e-*@example.com` accounts: removed, or only deactivated when a
-    # RESTRICT foreign key (a search job or a decision they made) still points at them.
+    # Throw-away `e2e-*@example.com` accounts: deleted, or only deactivated when the
+    # append-only audit log or a RESTRICT foreign key still points at them.
     e2e_users_deleted: int = 0
     e2e_users_deactivated: int = 0
 
@@ -228,7 +228,8 @@ def reset_demo_data(session: Session) -> DemoResetResult:
     are not undone: a merge rewrites businesses and is not a review decision.
 
     It also removes the `e2e-*@example.com` users the smoke test creates (deactivating one
-    that a RESTRICT foreign key still references); other users are never touched.
+    the append-only audit log or a RESTRICT foreign key still references); other users are
+    never touched.
     """
     if not get_settings().is_development:
         raise ValidationFailedError(
