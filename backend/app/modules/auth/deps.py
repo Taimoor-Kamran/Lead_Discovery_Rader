@@ -12,7 +12,10 @@ from app.core.errors import AuthenticationError, PermissionDeniedError
 from app.core.security import decode_token
 from app.modules.auth.models import Role, User
 
-DbSession = Annotated[Session, Depends(get_db)]
+# `scope="function"`: the session's commit (the exit of `get_db`) runs *before* the response
+# is sent. FastAPI's default ("request") runs it after, and a client that writes and then
+# reads straight away — the Users page, "Save and run" on a search — could read stale data.
+DbSession = Annotated[Session, Depends(get_db, scope="function")]
 
 # `auto_error=False` so a missing or malformed header raises our own error rather than
 # FastAPI's bare 403. Declaring the scheme is also what puts the **Authorize** button on

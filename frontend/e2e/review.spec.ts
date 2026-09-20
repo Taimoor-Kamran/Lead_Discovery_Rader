@@ -203,8 +203,8 @@ test("admin creates a user who must change their password; the searches page fol
     await expect(page.getByTestId("whoami")).toContainText(ADMIN_EMAIL);
     await page.getByRole("link", { name: "Users" }).click();
     await expect(page).toHaveURL(/\/admin\/users$/);
-    await page.getByLabel("Email").fill(newbie);
-    await page.getByLabel("Role").selectOption("reviewer");
+    await page.getByLabel("Email", { exact: true }).fill(newbie);
+    await page.getByRole("combobox", { name: "Role", exact: true }).selectOption("reviewer");
     await page.getByLabel("Temporary password").fill(TEMP_PASSWORD);
     await page.getByRole("button", { name: "Create user" }).click();
     await expect(page.getByTestId("created-once")).toContainText(TEMP_PASSWORD);
