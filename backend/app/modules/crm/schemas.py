@@ -2,7 +2,7 @@
 
 import uuid
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel
 
@@ -75,6 +75,15 @@ class CrmLeadStatusRead(BaseModel):
     last_synced_at: datetime | None
     due_at: datetime | None
     last_error: str | None
+
+
+class FakeCrmRecordRead(BaseModel):
+    """A record in the fake destination (development and CI only)."""
+
+    id: uuid.UUID
+    fields: dict[str, Any]
+    created_at: datetime
+    updated_at: datetime
 
 
 class SyncAllResult(BaseModel):

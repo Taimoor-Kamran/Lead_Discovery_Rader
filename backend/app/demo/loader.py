@@ -22,6 +22,7 @@ from app.modules.adapters.base import RawDoc
 from app.modules.adapters.demo_fixture import SOURCE_NAME, demo_places, load_fixture
 from app.modules.auth.models import Role, User
 from app.modules.compliance.models import Suppression
+from app.modules.crm.models import CrmLead, FakeCrmRecord
 from app.modules.discovery import service as discovery
 from app.modules.discovery.schemas import DiscoveryResultSummary
 from app.modules.jobs.models import JobRun, JobRunStatus, SearchJob, SearchJobStatus
@@ -231,6 +232,10 @@ def reset_demo_data(session: Session) -> DemoResetResult:
     decisions = _wipe(session, ReviewDecision)
     suppressions = _wipe(session, Suppression)
     opportunities = _wipe(session, Opportunity)
+    # v0.7.0: the CRM state goes with the decisions (attempts cascade from the leads), and
+    # the fake destination's records with it, so `/crm` is empty again after a reset.
+    _wipe(session, CrmLead)
+    _wipe(session, FakeCrmRecord)
     run = enqueue_classification_for_run(
         session,
         audit_run.id,

@@ -133,3 +133,22 @@ export const DECISION_LABELS: Record<string, string> = {
   not_a_fit: "Not a fit",
   do_not_contact: "Do not contact",
 };
+
+export const CRM_STATUS_LABELS: Record<string, string> = {
+  scheduled: "Scheduled",
+  syncing: "Syncing",
+  synced: "In CRM",
+  held: "Held",
+  cancelled: "Cancelled",
+  withdrawn: "Withdrawn",
+};
+
+export const CRM_ACTION_LABELS: Record<string, string> = {
+  create: "Created",
+  update: "Updated",
+  link: "Linked to existing record",
+  unchanged: "Unchanged",
+  mark_dnc: "Do not contact flag",
+  withdraw: "Withdrawn",
+  export: "Exported",
+};

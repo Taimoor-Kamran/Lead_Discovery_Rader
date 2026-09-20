@@ -2,15 +2,18 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { AiLabel } from "@/components/AiLabel";
 import { SafeLink } from "@/components/SafeLink";
+import { useToast } from "@/components/Toast";
+import { CrmBadge } from "@/components/crm/CrmBadge";
 import { EvidenceList, type Evidence } from "@/components/review/EvidenceList";
 import { FindingList, type Finding } from "@/components/review/FindingList";
 import { PsiPanel } from "@/components/review/PsiPanel";
 import { ReasonLines } from "@/components/review/ReasonLines";
-import { ApiError, getLeadDetail, type LeadDetail as LeadDetailData } from "@/lib/api";
-import { formatDateTime, formatPhone, orUnknown, percent, place, score } from "@/lib/format";
+import { ApiError, getLeadDetail, retryCrmLead, type LeadDetail as LeadDetailData } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
+import { CRM_ACTION_LABELS, formatDateTime, formatPhone, orUnknown, percent, place, score } from "@/lib/format";
 import { auditStatusLabel, serviceLabel, sourceLabel } from "@/lib/labels";
+import { canManageCrm } from "@/lib/roles";
 
 export const NOT_YOURS_MESSAGE = "This lead is not assigned to you.";
 
@@ -19,8 +22,12 @@ export const NOT_YOURS_MESSAGE = "This lead is not assigned to you.";
  * who approved it. No decisions here; those live on the review page.
  */
 export function LeadDetail({ opportunityId }: { opportunityId: string }) {
+  const { user } = useAuth();
+  const { show } = useToast();
   const [detail, setDetail] = useState<LeadDetailData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const crmManager = user ? canManageCrm(user.role) : false;
 
   useEffect(() => {
     let cancelled = false;
@@ -39,6 +46,19 @@ export function LeadDetail({ opportunityId }: { opportunityId: string }) {
     };
   }, [opportunityId]);
 
+  async function retry(crmLeadId: string) {
+    setBusy(true);
+    try {
+      const result = await retryCrmLead(crmLeadId);
+      show({ tone: "success", message: `${result.business_name}: ${result.status}.` });
+      setDetail(await getLeadDetail(opportunityId));
+    } catch (caught) {
+      show({ tone: "error", message: caught instanceof ApiError ? caught.message : "Retry failed" });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (error) {
     return (
       <p role="alert" className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800">
@@ -51,7 +71,6 @@ export function LeadDetail({ opportunityId }: { opportunityId: string }) {
   const { lead, business, audit, opportunity } = detail;
   const findings = (audit?.findings as Finding[] | undefined) ?? [];
   const approval = opportunity.history.find((d) => d.decision === "approve" && !d.undone_at);
-  const aiInvolved = opportunity.source !== "rules";
   const facts: [string, React.ReactNode][] = [
     ["Location", place(business.city, business.state)],
     ["Address", orUnknown(business.address_line1)],
@@ -80,6 +99,7 @@ export function LeadDetail({ opportunityId }: { opportunityId: string }) {
         >
           Score {score(lead.score)}
         </span>
+        <CrmBadge crm={lead.crm} canRetry={crmManager} busy={busy} onRetry={retry} />
       </header>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(18rem,1fr)_minmax(24rem,1.6fr)_minmax(20rem,1.2fr)]">
@@ -116,7 +136,6 @@ export function LeadDetail({ opportunityId }: { opportunityId: string }) {
             <span className="chip border-slate-300 bg-slate-100 text-slate-800" title={opportunity.source}>
               {sourceLabel(opportunity.source)}
             </span>
-            {aiInvolved ? <AiLabel /> : null}
           </header>
           <ReasonLines
             ruleReason={opportunity.rule_reason}
@@ -150,6 +169,27 @@ export function LeadDetail({ opportunityId }: { opportunityId: string }) {
           )}
         </section>
       </div>
+
+      <section className="rounded-lg border border-slate-200 bg-white p-4" aria-label="CRM sync history" data-testid="crm-history">
+        <h2 className="text-lg font-semibold text-navy">CRM sync history</h2>
+        {detail.crm_history.length ? (
+          <ul className="mt-2 flex flex-col gap-1 text-xs">
+            {detail.crm_history.map((attempt) => (
+              <li key={attempt.id} className="flex flex-wrap items-center gap-2" data-testid="crm-attempt">
+                <span className={attempt.status === "ok" ? "text-teal-700" : "text-amber-900"}>
+                  {attempt.status === "ok" ? "OK" : "Failed"}
+                </span>
+                <span className="font-medium">{CRM_ACTION_LABELS[attempt.action] ?? attempt.action}</span>
+                <span className="text-slate-500">{formatDateTime(attempt.created_at)}</span>
+                {attempt.http_status ? <span className="font-mono text-slate-500">HTTP {attempt.http_status}</span> : null}
+                {attempt.error ? <span className="w-full text-amber-900">{attempt.error}</span> : null}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-1 text-sm text-slate-600">No sync attempt yet.</p>
+        )}
+      </section>
     </div>
   );
 }

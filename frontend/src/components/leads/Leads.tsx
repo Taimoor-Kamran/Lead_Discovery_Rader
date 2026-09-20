@@ -3,16 +3,21 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { SafeLink } from "@/components/SafeLink";
+import { useToast } from "@/components/Toast";
+import { CrmBadge } from "@/components/crm/CrmBadge";
 import { ReasonLines } from "@/components/review/ReasonLines";
-import { ApiError, getLeads, SERVICES, type LeadRead } from "@/lib/api";
+import { ApiError, getLeads, retryCrmLead, SERVICES, type LeadRead } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { formatDateTime, formatPhone, place, score } from "@/lib/format";
 import { serviceLabel } from "@/lib/labels";
-import { canSeeAllLeads } from "@/lib/roles";
+import { canManageCrm, canSeeAllLeads } from "@/lib/roles";
 
 export function Leads() {
   const { user } = useAuth();
+  const { show } = useToast();
   const [items, setItems] = useState<LeadRead[]>([]);
+  const [busy, setBusy] = useState(false);
+  const crmManager = user ? canManageCrm(user.role) : false;
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [service, setService] = useState("");
   const [rep, setRep] = useState("");
@@ -44,6 +49,19 @@ export function Leads() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  async function retry(crmLeadId: string) {
+    setBusy(true);
+    try {
+      const result = await retryCrmLead(crmLeadId);
+      show({ tone: "success", message: `${result.business_name}: ${result.status}.` });
+      await load();
+    } catch (caught) {
+      show({ tone: "error", message: caught instanceof ApiError ? caught.message : "Retry failed" });
+    } finally {
+      setBusy(false);
+    }
+  }
 
   // The rep filter is built from what is on screen, so every role that sees all leads can
   // use it without a users endpoint.
@@ -98,6 +116,7 @@ export function Leads() {
               <th scope="col" className="px-3 py-2">Approved</th>
               <th scope="col" className="px-3 py-2">Assigned rep</th>
               <th scope="col" className="px-3 py-2">Contact</th>
+              <th scope="col" className="px-3 py-2">CRM</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -128,6 +147,9 @@ export function Leads() {
                 <td className="px-3 py-2 text-xs">
                   <div title={lead.phone_e164 ?? undefined}>{formatPhone(lead.phone_e164)}</div>
                   <div>{lead.website ? <SafeLink href={lead.website} /> : "no website"}</div>
+                </td>
+                <td className="px-3 py-2 text-xs">
+                  <CrmBadge crm={lead.crm} canRetry={crmManager} busy={busy} onRetry={retry} />
                 </td>
               </tr>
             ))}

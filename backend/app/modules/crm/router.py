@@ -6,6 +6,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 
+from app.core.errors import NotFoundError
 from app.core.pagination import DEFAULT_LIMIT, MAX_LIMIT, Page
 from app.modules.auth.deps import DbSession, require_role
 from app.modules.auth.models import Role, User
@@ -16,6 +17,7 @@ from app.modules.crm.schemas import (
     CrmStatusRead,
     CrmSyncAttemptRead,
     ExportScope,
+    FakeCrmRecordRead,
     SyncAllResult,
 )
 
@@ -83,4 +85,21 @@ def export_csv(
         body,
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@crm_router.get("/fake-records/{record_id}", response_model=FakeCrmRecordRead)
+def fake_record(record_id: uuid.UUID, actor: CrmReader, session: DbSession) -> FakeCrmRecordRead:
+    """What the fake destination holds for one record (demo and e2e only). 404 elsewhere."""
+    from app.core.config import get_settings
+    from app.modules.crm.adapter import Destination
+    from app.modules.crm.models import FakeCrmRecord
+
+    if get_settings().crm_destination != Destination.fake.value:
+        raise NotFoundError("Not found", details={"record_id": str(record_id)})
+    row = session.get(FakeCrmRecord, record_id)
+    if row is None:
+        raise NotFoundError("Fake CRM record not found", details={"record_id": str(record_id)})
+    return FakeCrmRecordRead(
+        id=row.id, fields=dict(row.fields), created_at=row.created_at, updated_at=row.updated_at
     )

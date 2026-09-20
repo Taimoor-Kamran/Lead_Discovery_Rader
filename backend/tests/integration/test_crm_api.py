@@ -3,6 +3,7 @@ send now, sync all, the CSV export (columns, BOM, quoting, injection, scope, mar
 
 import csv
 import io
+import uuid
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -19,7 +20,7 @@ from app.modules.crm import adapter as adapters
 from app.modules.crm import service
 from app.modules.crm.adapter import CrmAuthError
 from app.modules.crm.csv_adapter import BOM, COLUMNS
-from app.modules.crm.models import CrmLeadStatus, CrmSyncAction, CrmSyncAttempt
+from app.modules.crm.models import CrmLeadStatus, CrmSyncAction, CrmSyncAttempt, FakeCrmRecord
 from app.modules.opportunities.models import ReviewStatus
 from app.modules.review import service as review
 from app.modules.review.models import Decision
@@ -94,6 +95,7 @@ ENDPOINTS: list[tuple[str, str, set[str]]] = [
     ("POST", "/crm/businesses/{business}/sync-now", {"admin", "crm_manager"}),
     ("POST", "/crm/sync-all", {"admin", "crm_manager"}),
     ("GET", "/crm/export.csv", {"admin", "crm_manager"}),
+    ("GET", "/crm/fake-records/{record}", {"admin", "crm_manager", "tech_admin"}),
 ]
 
 
@@ -119,8 +121,12 @@ def test_rbac_for_every_crm_endpoint(
     if path.endswith("export.csv"):
         monkeypatch.setenv("CRM_DESTINATION", "csv")
         get_settings.cache_clear()
+    record_id = uuid.uuid4()
+    if "fake-records" in path:
+        db.add(FakeCrmRecord(id=record_id, fields={"Business name": "x"}))
+        db.commit()
     user = make_user(db, role)
-    url = API + path.format(lead=lead.id, business=business.id)
+    url = API + path.format(lead=lead.id, business=business.id, record=record_id)
     try:
         response = client.request(method, url, headers=auth_headers(client, user))
     finally:
@@ -199,6 +205,32 @@ def test_sync_now_enforces_the_gate_and_sync_all_reports_counts(
     assert result == {"considered": 0, "synced": 0, "held": 0, "scheduled": 0, "cancelled": 0}
     missing = client.post(f"{API}/crm/businesses/{business.id.hex[:8]}/sync-now", headers=headers)
     assert missing.status_code == 422
+
+
+def test_the_fake_record_can_be_read_for_the_demo_and_is_hidden_elsewhere(
+    client: TestClient,
+    db: Session,
+    reviewer: User,
+    crm_manager: User,
+    business: Business,
+    spy: Spy,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    approved_lead(db, reviewer, business)
+    headers = auth_headers(client, crm_manager)
+    sent = client.post(f"{API}/crm/businesses/{business.id}/sync-now", headers=headers).json()
+    record = client.get(f"{API}/crm/fake-records/{sent['external_id']}", headers=headers)
+    assert record.status_code == 200
+    assert record.json()["fields"]["Business name"] == "Barton Creek Plumbing"
+    assert record.json()["fields"]["Do not contact"] is False
+    missing = client.get(f"{API}/crm/fake-records/{business.id}", headers=headers)
+    assert missing.status_code == 404
+    monkeypatch.setenv("CRM_DESTINATION", "csv")
+    get_settings.cache_clear()
+    hidden = client.get(f"{API}/crm/fake-records/{sent['external_id']}", headers=headers)
+    monkeypatch.undo()
+    get_settings.cache_clear()
+    assert hidden.status_code == 404
 
 
 # --- the crm block on leads -----------------------------------------------------------------------
