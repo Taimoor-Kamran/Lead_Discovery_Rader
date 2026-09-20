@@ -148,6 +148,10 @@ class ReviewOpportunity(OpportunityDetail):
     service_name: str
     history: list[ReviewDecisionRead]
     weak: bool
+    # `reason` split for display: the rules' wording and the model's rationale, apart.
+    # Neither is reworded; a part that is not known is null.
+    rule_reason: str | None
+    ai_rationale: str | None
 
 
 class ReviewDetail(BaseModel):
@@ -188,3 +192,15 @@ class LeadRead(BaseModel):
     website: str | None
     lock_version: int
     top_evidence: dict[str, Any] | None
+    rule_reason: str | None
+    ai_rationale: str | None
+
+
+class LeadDetail(BaseModel):
+    """One approved lead, read-only: the business, the audit behind it, the claim itself
+    and who approved it. A sales rep may only open a lead assigned to them."""
+
+    lead: LeadRead
+    business: BusinessDetail
+    audit: WebsiteAuditDetail | None
+    opportunity: ReviewOpportunity

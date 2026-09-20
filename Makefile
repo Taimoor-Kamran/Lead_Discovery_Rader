@@ -11,6 +11,7 @@ PNPM := cd $(FRONTEND) && pnpm
 .DEFAULT_GOAL := help
 .PHONY: help env install up down logs ps migrate revision seed-admin seed-demo-users \
         sync-sources purge-expired recompute-businesses places-smoke ai-smoke load-demo-data \
+        reset-demo-data \
         reset-password \
         lint format typecheck test test-unit check check-backend check-frontend \
         frontend-install frontend-lint frontend-typecheck frontend-test \
@@ -65,6 +66,11 @@ purge-expired: env ## Drop stored source content past its retention window (keep
 # Runs the whole pipeline: discovery, resolution, website audits and scoring. No network, no key.
 load-demo-data: env ## Load the fictional demo businesses, resolve, audit and score them (development only)
 	$(COMPOSE) run --rm api python -m app.cli load-demo-data $(ARGS)
+
+# Development only. Removes every review decision, suppression and opportunity, then scores
+# the demo businesses again, so the queue looks exactly like a fresh `make load-demo-data`.
+reset-demo-data: env ## Put the demo review state back to freshly loaded (development only)
+	$(COMPOSE) run --rm api python -m app.cli reset-demo-data
 
 # Run after the survivorship rules change: existing rows were computed by the old ones.
 recompute-businesses: env ## Re-run survivorship for every business (add ARGS="--business-id ID")
@@ -139,8 +145,9 @@ FORCE:
 check-frontend: api-types-check frontend-lint frontend-typecheck frontend-test ## Frontend types drift + lint + types + tests
 
 # Needs the compose stack up with demo data and demo users (see README "Reviewing leads").
+# Resets the demo review state first so the run never depends on what a human clicked.
 # Playwright's Chromium is downloaded on first run. Not part of `make check`.
-e2e: env ## End-to-end smoke against http://localhost:3000 (human-run; needs the demo stack)
+e2e: env reset-demo-data ## End-to-end smoke against http://localhost:3000 (human-run; needs the demo stack)
 	$(PNPM) exec playwright install chromium
 	@cd $(FRONTEND) && set -a && . ../.env && set +a && pnpm exec playwright test
 

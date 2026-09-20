@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -21,11 +21,15 @@ from app.modules.adapters import registry
 from app.modules.adapters.base import RawDoc
 from app.modules.adapters.demo_fixture import SOURCE_NAME, demo_places, load_fixture
 from app.modules.auth.models import Role, User
+from app.modules.compliance.models import Suppression
 from app.modules.discovery import service as discovery
 from app.modules.discovery.schemas import DiscoveryResultSummary
 from app.modules.jobs.models import JobRun, JobRunStatus, SearchJob, SearchJobStatus
 from app.modules.jobs.service import DISCOVERY_JOB_KIND, enqueue_run
+from app.modules.opportunities.models import Opportunity
+from app.modules.opportunities.service import enqueue_classification_for_run
 from app.modules.resolution.service import enqueue_resolution
+from app.modules.review.models import ReviewDecision
 from app.modules.sources.models import Source
 
 logger = get_logger("app.demo")
@@ -188,6 +192,102 @@ def run_pipeline(result: DemoLoadResult) -> DemoPipelineResult:
         classification_status=classification_status,
         classification_summary=classification_summary,
     )
+
+
+@dataclass(frozen=True)
+class DemoResetResult:
+    """What `reset-demo-data` removed and what it scored again."""
+
+    decisions_deleted: int
+    suppressions_deleted: int
+    opportunities_deleted: int
+    classification_run_id: uuid.UUID | None
+    classification_status: JobRunStatus | None
+    classification_summary: dict[str, Any] = field(default_factory=dict)
+
+
+def reset_demo_data(session: Session) -> DemoResetResult:
+    """Put the demo back to "freshly loaded": no decisions, no suppressions, every opportunity
+    pending again. Development only; `make e2e` runs it so the smoke never depends on the
+    state a human left behind.
+
+    It removes every review decision, every suppression and every opportunity, then runs a
+    fresh classification of the demo audit run. Businesses, audits and AI classifications
+    stay (the fake provider answers from checked-in files, and the audit needs no network),
+    so the result is byte-for-byte what `make load-demo-data` produced. Duplicate merges
+    are not undone: a merge rewrites businesses and is not a review decision.
+    """
+    if not get_settings().is_development:
+        raise ValidationFailedError(
+            "The demo data can only be reset in development",
+            details={"environment": get_settings().environment},
+        )
+    audit_run = _demo_audit_run(session)
+    if audit_run is None:
+        raise ValidationFailedError(
+            "No finished demo audit run to classify again; run `make load-demo-data` first"
+        )
+
+    decisions = _wipe(session, ReviewDecision)
+    suppressions = _wipe(session, Suppression)
+    opportunities = _wipe(session, Opportunity)
+    run = enqueue_classification_for_run(
+        session,
+        audit_run.id,
+        idempotency_key=f"classification:{audit_run.id}:reset:{uuid.uuid4()}",
+    )
+    run_id = run.id
+    session.commit()
+    logger.info(
+        "demo review state reset",
+        extra=log_fields(
+            decisions_deleted=decisions,
+            suppressions_deleted=suppressions,
+            opportunities_deleted=opportunities,
+            classification_run_id=str(run_id),
+        ),
+    )
+
+    from app.workers.tasks import execute_job_run
+
+    status = execute_job_run(run_id)
+    with session_scope() as fresh:
+        finished = fresh.get(JobRun, run_id)
+        summary = dict((finished.result_summary if finished else None) or {})
+    return DemoResetResult(
+        decisions_deleted=decisions,
+        suppressions_deleted=suppressions,
+        opportunities_deleted=opportunities,
+        classification_run_id=run_id,
+        classification_status=status,
+        classification_summary=summary,
+    )
+
+
+def _wipe(session: Session, model: type[Any]) -> int:
+    count = int(session.scalar(select(func.count()).select_from(model)) or 0)
+    session.execute(delete(model))
+    return count
+
+
+def _demo_audit_run(session: Session) -> JobRun | None:
+    """The audit run `load-demo-data` produced, found by the keys the loader gives the runs."""
+    discovery = session.scalars(
+        select(JobRun).where(JobRun.idempotency_key == DISCOVERY_IDEMPOTENCY_KEY)
+    ).first()
+    if discovery is None:
+        return None
+    resolution = session.scalars(
+        select(JobRun).where(JobRun.idempotency_key == f"resolution:{discovery.id}")
+    ).first()
+    if resolution is None:
+        return None
+    audit = session.scalars(
+        select(JobRun).where(JobRun.idempotency_key == audit_key(resolution.id))
+    ).first()
+    if audit is None or audit.status is not JobRunStatus.done:
+        return None
+    return audit
 
 
 def audit_key(resolution_run_id: uuid.UUID) -> str:

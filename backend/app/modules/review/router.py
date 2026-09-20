@@ -15,6 +15,7 @@ from app.modules.review.schemas import (
     BatchReviewRequest,
     BatchReviewResult,
     DecidedOpportunity,
+    LeadDetail,
     LeadRead,
     QueueItem,
     ReviewDetail,
@@ -115,3 +116,9 @@ def list_leads(
         limit=limit,
         cursor=cursor,
     )
+
+
+@leads_router.get("/{opportunity_id}", response_model=LeadDetail)
+def lead_detail(opportunity_id: uuid.UUID, actor: LeadReader, session: DbSession) -> LeadDetail:
+    """One lead, read-only. A sales rep gets 403 on a lead not assigned to them."""
+    return service.lead_detail(session, opportunity_id, actor=actor)

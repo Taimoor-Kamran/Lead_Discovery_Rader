@@ -23,6 +23,7 @@ from app.modules.auth.models import Role
 from app.modules.auth.schemas import MIN_PASSWORD_LENGTH
 from app.modules.auth.service import ensure_admin, ensure_user
 from app.modules.discovery.service import purge_expired
+from app.modules.jobs.models import JobRunStatus
 from app.modules.jobs.schemas import GeoSpec
 
 logger = get_logger("app.cli")
@@ -231,6 +232,41 @@ def load_demo_data_command(argv: list[str]) -> int:
     print(f"  AI provider: {settings.resolved_ai_provider} (no network call was made)")
     print("Now try GET /api/v1/opportunities.")
     return 0
+
+
+def reset_demo_data_command(argv: list[str]) -> int:
+    """Put the demo back to freshly loaded: no decisions, no suppressions, all pending.
+
+    `make e2e` runs this first so the smoke test never depends on what a human clicked.
+    Development only; nothing here touches a network.
+    """
+    parser = argparse.ArgumentParser(prog="python -m app.cli reset-demo-data")
+    parser.parse_args(argv)
+
+    from app.demo.loader import reset_demo_data
+
+    settings = get_settings()
+    if not settings.is_development:
+        print(
+            f"APP_ENV is '{settings.environment}'. The demo data can only be reset in development."
+        )
+        return 2
+
+    with session_scope() as session:
+        try:
+            result = reset_demo_data(session)
+        except ValidationFailedError as exc:
+            print(exc.message)
+            return 2
+
+    print(
+        f"Removed {result.decisions_deleted} decision(s), {result.suppressions_deleted} "
+        f"suppression(s) and {result.opportunities_deleted} opportunit(y/ies)."
+    )
+    status = result.classification_status.value if result.classification_status else "unknown"
+    print(f"Classification: {result.classification_run_id} ({status})")
+    print(f"  {_counts(result.classification_summary)}")
+    return 0 if result.classification_status is JobRunStatus.done else 1
 
 
 def _counts(summary: dict[str, object]) -> str:
@@ -462,6 +498,7 @@ COMMANDS: dict[str, Callable[[list[str]], int]] = {
     "places-smoke": places_smoke,
     "ai-smoke": ai_smoke,
     "load-demo-data": load_demo_data_command,
+    "reset-demo-data": reset_demo_data_command,
     "reset-password": reset_password,
 }
 

@@ -36,6 +36,7 @@ def test_the_usage_line_lists_every_command(capsys: pytest.CaptureFixture[str]) 
         "places-smoke",
         "ai-smoke",
         "load-demo-data",
+        "reset-demo-data",
     ):
         assert command in printed
 

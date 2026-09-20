@@ -895,6 +895,8 @@ def test_no_contact_data_beyond_the_business_fields_reaches_a_lead(
         "website",
         "lock_version",
         "top_evidence",
+        "rule_reason",
+        "ai_rationale",
     }
 
 
@@ -950,3 +952,138 @@ def test_an_admin_lists_users_by_role_and_activity(
     ).json()
     assert [u["email"] for u in active["items"]] == [rep.email]
     assert db.scalar(select(func.count()).select_from(User)) == 4
+
+
+# --- lead detail --------------------------------------------------------------------------
+
+
+def _classification(db: Session, business: Business, *, rationale: str) -> Any:
+    from app.modules.ai.models import AIClassification, ClassificationStatus
+    from app.modules.audit_web.service import latest_audit
+
+    audit = latest_audit(db, business.id)
+    assert audit is not None
+    row = AIClassification(
+        business_id=business.id,
+        website_audit_id=audit.id,
+        model="fake-triage",
+        prompt_version="classify-1",
+        input_hash="abc",
+        status=ClassificationStatus.ok,
+        output={
+            "business_summary": "A plumber.",
+            "buying_intent": "none_detected",
+            "opportunities": [
+                {"service": "website_design", "confidence": 0.9, "rationale": rationale}
+            ],
+        },
+        raw_output="{}",
+        rejected_claims=[],
+        content_expires_at=None,
+    )
+    db.add(row)
+    db.flush()
+    return row
+
+
+def test_a_sales_rep_can_open_only_a_lead_assigned_to_them(
+    client: TestClient,
+    db: Session,
+    reviewer: User,
+    rep: User,
+    crm_manager: User,
+    tech_admin: User,
+    business: Business,
+) -> None:
+    rep2 = make_user(db, Role.sales_rep, "rep2@example.com")
+    mine = make_opportunity(db, business, "website_design")
+    theirs = make_opportunity(db, business, "seo_gbp")
+    still_pending = make_opportunity(db, business, "booking_setup")
+    db.commit()
+    assert review(client, reviewer, mine, "approve", assigned_to=str(rep.id)).status_code == 200
+    assert review(client, reviewer, theirs, "approve", assigned_to=str(rep2.id)).status_code == 200
+
+    def open_lead(user: User, opportunity: Opportunity | uuid.UUID) -> Any:
+        opportunity_id = opportunity.id if isinstance(opportunity, Opportunity) else opportunity
+        return client.get(f"/api/v1/leads/{opportunity_id}", headers=auth_headers(client, user))
+
+    ok = open_lead(rep, mine)
+    assert ok.status_code == 200, ok.text
+    body = ok.json()
+    assert body["lead"]["opportunity_id"] == str(mine.id)
+    assert body["lead"]["assigned_to_email"] == "rep1@example.com"
+    assert body["lead"]["approved_by_email"] == "reviewer@example.com"
+    assert body["business"]["display_name"] == "Wellington Plumbing"
+    assert body["business"]["phone_e164"] == "+15125550100"
+    assert body["audit"]["findings"]
+    assert body["audit"]["page_text"] is None
+    assert body["opportunity"]["review_status"] == "approved"
+    assert body["opportunity"]["evidence"][0]["finding_code"] == "no_https"
+    assert body["opportunity"]["history"][0]["decision"] == "approve"
+    assert body["opportunity"]["rule_reason"] == "Audit found something for website_design."
+    assert body["opportunity"]["ai_rationale"] is None
+
+    # Someone else's lead is a 403, not a 404: the rep is told it exists but is not theirs.
+    forbidden = open_lead(rep, theirs)
+    assert forbidden.status_code == 403
+    assert forbidden.json()["error"]["code"] == "forbidden"
+    assert open_lead(rep2, theirs).status_code == 200
+
+    # A pending opportunity is not a lead for anyone.
+    assert open_lead(rep, still_pending).status_code == 404
+    assert open_lead(reviewer, still_pending).status_code == 404
+    assert open_lead(reviewer, uuid.uuid4()).status_code == 404
+
+    # Every role that lists leads may open one; a tech admin may not.
+    assert open_lead(reviewer, theirs).status_code == 200
+    assert open_lead(crm_manager, theirs).status_code == 200
+    assert open_lead(tech_admin, theirs).status_code == 403
+
+
+def test_a_suppressed_lead_cannot_be_opened(
+    client: TestClient, db: Session, reviewer: User, rep: User, business: Business
+) -> None:
+    mine = make_opportunity(db, business, "website_design")
+    other = make_opportunity(db, business, "seo_gbp")
+    db.commit()
+    review(client, reviewer, mine, "approve", assigned_to=str(rep.id))
+    assert (
+        client.get(f"/api/v1/leads/{mine.id}", headers=auth_headers(client, rep)).status_code == 200
+    )
+    review(client, reviewer, other, "do_not_contact", note="Owner asked us to stop")
+    assert (
+        client.get(f"/api/v1/leads/{mine.id}", headers=auth_headers(client, rep)).status_code == 404
+    )
+
+
+def test_the_reason_is_split_into_the_rule_wording_and_the_ai_rationale(
+    client: TestClient, db: Session, reviewer: User, rep: User, business: Business
+) -> None:
+    rationale = "The model also read a 2016 copyright line."
+    classification = _classification(db, business, rationale=rationale)
+    both = make_opportunity(db, business, "website_design", source=OpportunitySource.rules_and_ai)
+    both.reason = f"Audit found the homepage served over http, not https. {rationale}"
+    both.ai_classification_id = classification.id
+    ai_only = make_opportunity(db, business, "seo_gbp", source=OpportunitySource.ai)
+    ai_only.reason = "The model saw no meta description."
+    ai_only.ai_classification_id = classification.id
+    rules_only = make_opportunity(db, business, "booking_setup")
+    db.commit()
+
+    detail = client.get(
+        f"/api/v1/review-queue/{business.id}", headers=auth_headers(client, reviewer)
+    ).json()
+    by_service = {item["service"]: item for item in detail["opportunities"]}
+    assert by_service["website_design"]["rule_reason"] == (
+        "Audit found the homepage served over http, not https."
+    )
+    assert by_service["website_design"]["ai_rationale"] == rationale
+    assert by_service["seo_gbp"]["rule_reason"] is None
+    assert by_service["seo_gbp"]["ai_rationale"] == "The model saw no meta description."
+    assert by_service["booking_setup"]["rule_reason"] == rules_only.reason
+    assert by_service["booking_setup"]["ai_rationale"] is None
+
+    review(client, reviewer, both, "approve", assigned_to=str(rep.id))
+    [lead] = client.get("/api/v1/leads", headers=auth_headers(client, rep)).json()["items"]
+    assert lead["rule_reason"] == "Audit found the homepage served over http, not https."
+    assert lead["ai_rationale"] == rationale

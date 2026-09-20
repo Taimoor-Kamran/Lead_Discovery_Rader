@@ -44,7 +44,7 @@ from app.modules.compliance import service as compliance
 from app.modules.compliance.models import SuppressionSource
 from app.modules.opportunities import service as opportunities
 from app.modules.opportunities.catalogue import SERVICES
-from app.modules.opportunities.models import Opportunity, ReviewStatus
+from app.modules.opportunities.models import Opportunity, OpportunitySource, ReviewStatus
 from app.modules.review.models import Decision, ReviewDecision
 from app.modules.review.schemas import (
     NOT_A_FIT_REASON_CODES,
@@ -54,6 +54,7 @@ from app.modules.review.schemas import (
     BatchReviewRequest,
     BatchReviewResult,
     DecidedOpportunity,
+    LeadDetail,
     LeadRead,
     QueueAudit,
     QueueItem,
@@ -861,27 +862,22 @@ def review_detail(
     )
     weak = Decimal(str(config.review_weak_confidence))
     active = compliance.active_suppressions_for(session, business)
+    outputs = _ai_outputs(session, rows)
     return ReviewDetail(
         business=businesses.detail(session, business),
         audit=audits.detail(latest, include_page_text=False) if latest is not None else None,
         ai=_ai_summary(session, business.id),
         opportunities=[
-            ReviewOpportunity(
-                **opportunities.detail(session, row).model_dump(),
-                service_name=service_name(row.service),
-                history=[
-                    read_decision(
-                        session,
-                        item,
-                        actor=actor,
-                        now=moment,
-                        settings=config,
-                        current=row,
-                        emails=people,
-                    )
-                    for item in history.get(row.id, [])
-                ],
-                weak=row.confidence < weak,
+            _review_opportunity(
+                session,
+                row,
+                history=history.get(row.id, []),
+                people=people,
+                outputs=outputs,
+                actor=actor,
+                now=moment,
+                settings=config,
+                weak=weak,
             )
             for row in rows
         ],
@@ -890,6 +886,82 @@ def review_detail(
         undo_window_minutes=config.review_undo_window_minutes,
         weak_confidence=float(weak),
     )
+
+
+def _review_opportunity(
+    session: Session,
+    row: Opportunity,
+    *,
+    history: list[ReviewDecision],
+    people: dict[uuid.UUID, str],
+    outputs: dict[uuid.UUID, dict[str, Any]],
+    actor: User,
+    now: datetime,
+    settings: Settings,
+    weak: Decimal,
+) -> ReviewOpportunity:
+    rule_reason, ai_rationale = split_reason(row, _output_of(row, outputs))
+    return ReviewOpportunity(
+        **opportunities.detail(session, row).model_dump(),
+        service_name=service_name(row.service),
+        history=[
+            read_decision(
+                session,
+                item,
+                actor=actor,
+                now=now,
+                settings=settings,
+                current=row,
+                emails=people,
+            )
+            for item in history
+        ],
+        weak=row.confidence < weak,
+        rule_reason=rule_reason,
+        ai_rationale=ai_rationale,
+    )
+
+
+def _ai_outputs(session: Session, rows: Sequence[Opportunity]) -> dict[uuid.UUID, dict[str, Any]]:
+    """The validated model output behind each opportunity's classification, by id."""
+    ids = {row.ai_classification_id for row in rows if row.ai_classification_id is not None}
+    if not ids:
+        return {}
+    return {
+        item.id: item.output or {}
+        for item in session.scalars(select(AIClassification).where(AIClassification.id.in_(ids)))
+    }
+
+
+def _output_of(row: Opportunity, outputs: dict[uuid.UUID, dict[str, Any]]) -> dict[str, Any] | None:
+    return outputs.get(row.ai_classification_id) if row.ai_classification_id else None
+
+
+def split_reason(
+    opportunity: Opportunity, output: dict[str, Any] | None
+) -> tuple[str | None, str | None]:
+    """`reason` taken apart for display: the rules' wording and the model's rationale.
+
+    Classification stores one string (the rule reason followed by the rationale when both
+    spoke). Nothing here rewords either part; when the rationale cannot be told apart from
+    what is stored, the whole reason stays on the rules side and the AI part is null.
+    """
+    if opportunity.source is OpportunitySource.rules:
+        return opportunity.reason, None
+    if opportunity.source is OpportunitySource.ai:
+        return None, opportunity.reason
+    rationale = _rationale_for(output, opportunity.service)
+    if rationale and opportunity.reason.endswith(rationale):
+        return opportunity.reason[: -len(rationale)].strip() or None, rationale
+    return opportunity.reason, None
+
+
+def _rationale_for(output: dict[str, Any] | None, service: str) -> str | None:
+    for item in (output or {}).get("opportunities") or []:
+        if isinstance(item, dict) and item.get("service") == service:
+            rationale = item.get("rationale")
+            return str(rationale).strip() if rationale else None
+    return None
 
 
 def _history(
@@ -977,13 +1049,73 @@ def list_leads(
         next_cursor = _encode_lead_cursor(last.decided_at, last.id)
 
     people = _emails(session, [o.decided_by for o, _ in rows] + [o.assigned_to for o, _ in rows])
+    outputs = _ai_outputs(session, [o for o, _ in rows])
     return Page[LeadRead](
-        items=[_lead(opportunity, business, people) for opportunity, business in rows],
+        items=[_lead(opportunity, business, people, outputs) for opportunity, business in rows],
         next_cursor=next_cursor,
     )
 
 
-def _lead(opportunity: Opportunity, business: Business, people: dict[uuid.UUID, str]) -> LeadRead:
+def lead_detail(
+    session: Session,
+    opportunity_id: uuid.UUID,
+    *,
+    actor: User,
+    now: datetime | None = None,
+    settings: Settings | None = None,
+) -> LeadDetail:
+    """One approved lead with the business, the audit and the claim behind it.
+
+    Only an approved, unsuppressed opportunity is a lead; anything else is not found rather
+    than half-shown. A sales rep may open only a lead assigned to them: anyone else's is a
+    403, whether or not it exists.
+    """
+    config = settings or get_settings()
+    moment = now or datetime.now(UTC)
+    row = session.get(Opportunity, opportunity_id)
+    if row is None or row.review_status is not ReviewStatus.approved:
+        raise NotFoundError("Lead not found", details={"opportunity_id": str(opportunity_id)})
+    business = businesses.get_business(session, row.business_id)
+    if compliance.is_suppressed(session, business):
+        raise NotFoundError("Lead not found", details={"opportunity_id": str(opportunity_id)})
+    if actor.role is Role.sales_rep and row.assigned_to != actor.id:
+        raise PermissionDeniedError(
+            "This lead is not assigned to you", details={"opportunity_id": str(opportunity_id)}
+        )
+    history = _history(session, [row.id])
+    people = _emails(
+        session,
+        [row.decided_by, row.assigned_to]
+        + [d.decided_by for d in history.get(row.id, [])]
+        + [d.assigned_to for d in history.get(row.id, [])],
+    )
+    outputs = _ai_outputs(session, [row])
+    latest = audits.latest_audit(session, business.id)
+    return LeadDetail(
+        lead=_lead(row, business, people, outputs),
+        business=businesses.detail(session, business),
+        audit=audits.detail(latest, include_page_text=False) if latest is not None else None,
+        opportunity=_review_opportunity(
+            session,
+            row,
+            history=history.get(row.id, []),
+            people=people,
+            outputs=outputs,
+            actor=actor,
+            now=moment,
+            settings=config,
+            weak=Decimal(str(config.review_weak_confidence)),
+        ),
+    )
+
+
+def _lead(
+    opportunity: Opportunity,
+    business: Business,
+    people: dict[uuid.UUID, str],
+    outputs: dict[uuid.UUID, dict[str, Any]],
+) -> LeadRead:
+    rule_reason, ai_rationale = split_reason(opportunity, _output_of(opportunity, outputs))
     return LeadRead(
         opportunity_id=opportunity.id,
         business_id=business.id,
@@ -1004,6 +1136,8 @@ def _lead(opportunity: Opportunity, business: Business, people: dict[uuid.UUID, 
         website=business.website,
         lock_version=opportunity.lock_version,
         top_evidence=opportunity.evidence[0] if opportunity.evidence else None,
+        rule_reason=rule_reason,
+        ai_rationale=ai_rationale,
     )
 
 
