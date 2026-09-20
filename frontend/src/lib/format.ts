@@ -13,6 +13,14 @@ export function formatDateTime(value: string | null | undefined): string {
   });
 }
 
+/** Only the clock time, for something that ends later today ("until 14:35"). */
+export function formatTime(value: string | null | undefined): string {
+  if (!value) return "unknown";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "unknown";
+  return date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+}
+
 export function percent(value: number | null | undefined): string {
   if (value === null || value === undefined || Number.isNaN(value)) return "—";
   return `${Math.round(value * 100)}%`;

@@ -14,6 +14,8 @@ function user(overrides: Record<string, unknown> = {}) {
     must_change_password: false,
     locked_until: null,
     locked: false,
+    rate_limited_until: null,
+    rate_limited: false,
     last_login_at: "2026-09-20T09:00:00Z",
     created_at: "2026-09-20T00:00:00Z",
     updated_at: "2026-09-20T00:00:00Z",
@@ -103,6 +105,47 @@ describe("Users page", () => {
     fireEvent.change(screen.getByLabelText("Role for reviewer@example.com"), { target: { value: "crm_manager" } });
     await waitFor(() => expect(calls.filter((call) => call.method === "PATCH")).toHaveLength(1));
     expect(JSON.parse(String(calls.find((call) => call.method === "PATCH")?.init?.body))).toEqual({ role: "crm_manager" });
+  });
+
+  it("shows a temporarily blocked (rate-limited) user and unlock clears it, even without a lock", async () => {
+    const until = new Date();
+    until.setMinutes(until.getMinutes() + 14);
+    const expected = until.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+    let unlocked = false;
+    const { calls } = routeFetch({
+      "GET /users": () => ({
+        status: 200,
+        body: {
+          items: [
+            unlocked
+              ? user({ id: "u-7", email: "rep2@example.com" })
+              : user({ id: "u-7", email: "rep2@example.com", rate_limited: true, rate_limited_until: until.toISOString() }),
+            user({ id: "u-8", email: "both@example.com", locked: true, locked_until: "2026-09-20T10:00:00Z", rate_limited: true, rate_limited_until: until.toISOString() }),
+          ],
+          next_cursor: null,
+        },
+      }),
+      "POST /users/u-7/unlock": () => {
+        unlocked = true;
+        return { status: 200, body: user({ id: "u-7", email: "rep2@example.com" }) };
+      },
+    });
+    renderWithProviders(<Users />, { user: ADMIN });
+
+    await waitFor(() => expect(screen.getAllByTestId("user-row")).toHaveLength(2));
+    const [blocked, both] = screen.getAllByTestId("user-row");
+    expect(blocked.textContent).toContain(`Temporarily blocked (until ${expected})`);
+    expect(blocked.textContent).not.toContain("locked until");
+    // Both states show side by side when an account is locked and its address is blocked.
+    expect(both.textContent).toContain("locked until");
+    expect(both.textContent).toContain("Temporarily blocked (until");
+    expect(screen.getAllByRole("button", { name: "Unlock" })).toHaveLength(2);
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Unlock" })[0]);
+    await waitFor(() => expect(calls.some((call) => call.method === "POST" && call.url.endsWith("/users/u-7/unlock"))).toBe(true));
+    await waitFor(() => expect(screen.getAllByTestId("user-row")[0].textContent).not.toContain("Temporarily blocked"));
+    expect(screen.getAllByTestId("user-row")[0].querySelector('[data-testid="lock-state"]')?.textContent).toBe("—");
+    expect(screen.getAllByRole("button", { name: "Unlock" })).toHaveLength(1);
   });
 
   it("generates a temporary password that meets the length rule", () => {

@@ -9,6 +9,11 @@ Login protection (spec v0.8.0 §5), in the order `authenticate` applies it:
 3. a correct password resets both counters and stamps `last_login_at`.
 
 Every failure, lock and rate-limit is an audit row.
+
+The counters live in Redis under `login:failures:<address>:<email>`; a per-email set
+`login:failure-addresses:<email>` remembers which addresses failed, so an admin can see
+that an account is temporarily blocked from *any* address and `unlock_user` can clear
+every counter for that email together with the account lock (v0.8.0 review fix).
 """
 
 import uuid
@@ -43,6 +48,7 @@ logger = get_logger("app.auth")
 INVALID_CREDENTIALS = "Email or password is incorrect"
 TOO_MANY_ATTEMPTS = "Too many failed sign-in attempts. Try again in {minutes} minutes."
 LOGIN_FAILURE_KEY = "login:failures"
+LOGIN_ADDRESSES_KEY = "login:failure-addresses"
 UNKNOWN_CLIENT = "unknown"
 
 
@@ -139,7 +145,9 @@ def list_users(
     is_active: bool | None = None,
     limit: int = DEFAULT_LIMIT,
     cursor: str | None = None,
+    with_login_state: bool = False,
 ) -> Page[UserRead]:
+    """`with_login_state` (admins only) adds the rate-limit block, which lives in Redis."""
     stmt = select(User).order_by(User.created_at.desc(), User.id.desc()).limit(limit + 1)
     if role is not None:
         stmt = stmt.where(User.role == role)
@@ -151,18 +159,30 @@ def list_users(
     if len(rows) > limit:
         rows = rows[:limit]
         next_cursor = encode_cursor(rows[-1].created_at, rows[-1].id)
-    return Page[UserRead](
-        items=[UserRead.model_validate(row) for row in rows], next_cursor=next_cursor
-    )
+    items = [UserRead.model_validate(row) for row in rows]
+    if with_login_state:
+        now = datetime.now(UTC)
+        items = [
+            item.model_copy(update={"rate_limited_until": rate_limited_until(item.email, now=now)})
+            for item in items
+        ]
+    return Page[UserRead](items=items, next_cursor=next_cursor)
 
 
 def _failure_key(email: str, client_ip: str) -> str:
     return f"{LOGIN_FAILURE_KEY}:{client_ip or UNKNOWN_CLIENT}:{email.strip().lower()}"
 
 
+def _addresses_key(email: str) -> str:
+    return f"{LOGIN_ADDRESSES_KEY}:{email.strip().lower()}"
+
+
+def _as_int(raw: object) -> int:
+    return int(raw) if isinstance(raw, bytes | str | int) else 0
+
+
 def failures_in_window(email: str, client_ip: str) -> int:
-    raw = get_redis().get(_failure_key(email, client_ip))
-    return int(raw) if isinstance(raw, bytes | str) else 0
+    return _as_int(get_redis().get(_failure_key(email, client_ip)))
 
 
 def _count_failure(email: str, client_ip: str) -> int:
@@ -170,13 +190,58 @@ def _count_failure(email: str, client_ip: str) -> int:
     key = _failure_key(email, client_ip)
     redis = get_redis()
     count = int(cast(int, redis.incr(key)))
+    window = settings.login_window_minutes * 60
     if count == 1:
-        redis.expire(key, settings.login_window_minutes * 60)
+        redis.expire(key, window)
+    # The index outlives every counter it points at: refreshed on each failure.
+    addresses = _addresses_key(email)
+    redis.sadd(addresses, client_ip or UNKNOWN_CLIENT)
+    redis.expire(addresses, window)
     return count
 
 
 def _clear_failures(email: str, client_ip: str) -> None:
-    get_redis().delete(_failure_key(email, client_ip))
+    redis = get_redis()
+    redis.delete(_failure_key(email, client_ip))
+    redis.srem(_addresses_key(email), client_ip or UNKNOWN_CLIENT)
+
+
+def _failure_addresses(email: str) -> list[str]:
+    members = cast(set[bytes | str], get_redis().smembers(_addresses_key(email)))
+    return sorted(m.decode() if isinstance(m, bytes) else str(m) for m in members)
+
+
+def rate_limited_until(email: str, *, now: datetime | None = None) -> datetime | None:
+    """When the last open rate-limit window for this email closes, from any address.
+
+    `None` when no address is currently refused. Read from the Redis counters, so it is
+    exact to the second the counter expires; nothing is guessed from the audit log.
+    """
+    settings = get_settings()
+    moment = now or datetime.now(UTC)
+    redis = get_redis()
+    until: datetime | None = None
+    for address in _failure_addresses(email):
+        key = _failure_key(email, address)
+        if _as_int(redis.get(key)) < settings.login_max_failures:
+            continue
+        ttl = _as_int(redis.ttl(key))
+        if ttl <= 0:
+            continue
+        candidate = moment + timedelta(seconds=ttl)
+        if until is None or candidate > until:
+            until = candidate
+    return until
+
+
+def clear_rate_limits(email: str) -> list[str]:
+    """Forget every failure counter for this email, whatever address it came from."""
+    redis = get_redis()
+    addresses = _failure_addresses(email)
+    for address in addresses:
+        redis.delete(_failure_key(email, address))
+    redis.delete(_addresses_key(email))
+    return addresses
 
 
 def is_locked(user: User, *, now: datetime | None = None) -> bool:
@@ -374,15 +439,19 @@ def admin_reset_password(
 
 
 def unlock_user(session: Session, user_id: uuid.UUID, *, actor_id: uuid.UUID) -> User:
-    """Lift a lockout early and forget the failures that caused it."""
+    """Lift a lockout early and forget the failures that caused it, on both sides: the
+    account lock in the database and every rate-limit counter for the email in Redis."""
     user = get_user(session, user_id)
+    blocked_until = rate_limited_until(user.email)
     before = {
         "locked_until": user.locked_until.isoformat() if user.locked_until else None,
         "failed_login_count": user.failed_login_count,
+        "rate_limited_until": blocked_until.isoformat() if blocked_until else None,
     }
     user.locked_until = None
     user.failed_login_count = 0
     session.flush()
+    addresses = clear_rate_limits(user.email)
     audit.record(
         session,
         action="user.unlocked",
@@ -390,7 +459,16 @@ def unlock_user(session: Session, user_id: uuid.UUID, *, actor_id: uuid.UUID) ->
         entity_id=user.id,
         actor_id=actor_id,
         before=before,
-        after={"locked_until": None, "failed_login_count": 0},
+        after={
+            "locked_until": None,
+            "failed_login_count": 0,
+            "rate_limited_until": None,
+            "rate_limit_addresses_cleared": len(addresses),
+        },
+    )
+    logger.info(
+        "user unlocked",
+        extra={"user_id": str(user.id), "rate_limit_addresses_cleared": len(addresses)},
     )
     return user
 

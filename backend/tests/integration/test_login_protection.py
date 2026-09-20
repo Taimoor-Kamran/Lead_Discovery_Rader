@@ -175,6 +175,95 @@ def test_an_admin_can_unlock_from_the_api(
     assert login.status_code == 200
 
 
+def test_an_admin_sees_a_rate_limited_user_and_unlock_clears_every_counter(
+    app_client: TestClient, client: TestClient, db: Session, admin_user: User, sales_user: User
+) -> None:
+    """v0.8.0 review fix: five failures block the email from that address for 15 minutes
+    without locking the account. The Users page shows that state ("temporarily blocked
+    until …") and *Unlock* clears the counters of every address, not only the account lock."""
+    for _ in range(5):
+        assert _login(app_client, sales_user.email, "wrong-password") == 401
+    # A second address fails too, but stays under its own limit: 8 failures in all, so the
+    # account itself is not locked — only the first address is refused.
+    with _client_from(db, "198.51.100.7") as elsewhere:
+        for _ in range(3):
+            assert _login(elsewhere, sales_user.email, "wrong-password") == 401
+    assert _login(app_client, sales_user.email, TEST_PASSWORD) == 429
+
+    db.expire_all()
+    assert sales_user.locked_until is None
+    assert sales_user.failed_login_count == 8
+
+    headers = auth_headers(client, admin_user)
+    row = next(
+        item
+        for item in client.get(f"{API}/users", headers=headers).json()["items"]
+        if item["id"] == str(sales_user.id)
+    )
+    assert row["rate_limited"] is True
+    until = datetime.fromisoformat(row["rate_limited_until"])
+    remaining = until - datetime.now(UTC)
+    assert timedelta(minutes=14) < remaining <= timedelta(minutes=15)
+
+    response = client.post(f"{API}/users/{sales_user.id}/unlock", headers=headers)
+    assert response.status_code == 200, response.text
+    assert response.json()["rate_limited"] is False
+    assert response.json()["rate_limited_until"] is None
+    assert response.json()["locked"] is False
+
+    row = next(
+        item
+        for item in client.get(f"{API}/users", headers=headers).json()["items"]
+        if item["id"] == str(sales_user.id)
+    )
+    assert row["rate_limited"] is False and row["rate_limited_until"] is None
+
+    # Both addresses may try again at once, with the right password.
+    assert _login(app_client, sales_user.email, TEST_PASSWORD) == 200
+    with _client_from(db, "198.51.100.7") as elsewhere:
+        assert _login(elsewhere, sales_user.email, TEST_PASSWORD) == 200
+
+    unlocked = db.scalars(
+        select(AuditLog).where(AuditLog.action == "user.unlocked").order_by(AuditLog.id.desc())
+    ).first()
+    assert unlocked is not None
+    assert unlocked.actor_id == admin_user.id
+    assert unlocked.after is not None
+    assert unlocked.after["rate_limit_addresses_cleared"] == 2
+    assert unlocked.after["rate_limited_until"] is None
+    assert unlocked.before is not None
+    assert unlocked.before["rate_limited_until"] is not None
+
+
+def test_a_rate_limited_user_is_not_shown_as_blocked_below_the_threshold(
+    app_client: TestClient, client: TestClient, db: Session, admin_user: User, sales_user: User
+) -> None:
+    for _ in range(4):
+        _login(app_client, sales_user.email, "wrong-password")
+    row = next(
+        item
+        for item in client.get(f"{API}/users", headers=auth_headers(client, admin_user)).json()[
+            "items"
+        ]
+        if item["id"] == str(sales_user.id)
+    )
+    assert row["rate_limited"] is False and row["rate_limited_until"] is None
+    assert service.rate_limited_until(sales_user.email) is None
+
+
+def test_a_reviewer_listing_reps_never_sees_login_state(
+    app_client: TestClient, client: TestClient, db: Session, sales_user: User
+) -> None:
+    for _ in range(5):
+        _login(app_client, sales_user.email, "wrong-password")
+    reviewer = make_user(db, Role.reviewer)
+    listed = client.get(
+        f"{API}/users", params={"role": "sales_rep"}, headers=auth_headers(client, reviewer)
+    ).json()["items"]
+    row = next(item for item in listed if item["id"] == str(sales_user.id))
+    assert row["rate_limited"] is False and row["rate_limited_until"] is None
+
+
 def test_only_admins_unlock(client: TestClient, db: Session, sales_user: User) -> None:
     reviewer = make_user(db, Role.reviewer)
     response = client.post(

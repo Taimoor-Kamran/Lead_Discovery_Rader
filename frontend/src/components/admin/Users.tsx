@@ -13,7 +13,7 @@ import {
   type UserRead,
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { formatDateTime } from "@/lib/format";
+import { formatDateTime, formatTime } from "@/lib/format";
 import { ROLE_LABELS } from "@/lib/roles";
 
 const ROLES: Role[] = ["admin", "reviewer", "sales_rep", "crm_manager", "tech_admin"];
@@ -131,7 +131,8 @@ export function Users() {
         <h1 className="text-2xl font-semibold text-navy">Users</h1>
         <p className="text-sm text-slate-600">
           Create accounts with a temporary password (they must change it on first sign-in),
-          change roles, deactivate, unlock and reset. Every action is audited.
+          change roles, deactivate, unlock and reset. Every action is audited. <em>Unlock</em> lifts
+          both the 15-minute account lock and a temporary block after too many failed attempts.
         </p>
       </header>
 
@@ -206,7 +207,7 @@ export function Users() {
               <th scope="col" className="px-3 py-2">Role</th>
               <th scope="col" className="px-3 py-2">Active</th>
               <th scope="col" className="px-3 py-2">Last sign-in</th>
-              <th scope="col" className="px-3 py-2">Locked</th>
+              <th scope="col" className="px-3 py-2">Locked / blocked</th>
               <th scope="col" className="px-3 py-2">Password</th>
               <th scope="col" className="px-3 py-2" />
             </tr>
@@ -232,12 +233,38 @@ export function Users() {
                   </td>
                   <td className="px-3 py-2">{item.is_active ? "active" : "deactivated"}</td>
                   <td className="px-3 py-2 text-xs text-slate-600">{item.last_login_at ? formatDateTime(item.last_login_at) : "never"}</td>
-                  <td className="px-3 py-2">{item.locked ? <span className="chip border-red-300 bg-red-50 text-red-800">locked until {formatDateTime(item.locked_until)}</span> : "—"}</td>
+                  <td className="px-3 py-2" data-testid="lock-state">
+                    {item.locked || item.rate_limited ? (
+                      <div className="flex flex-wrap gap-1">
+                        {item.locked ? (
+                          <span className="chip border-red-300 bg-red-50 text-red-800">locked until {formatDateTime(item.locked_until)}</span>
+                        ) : null}
+                        {item.rate_limited ? (
+                          <span
+                            className="chip border-amber-300 bg-amber-50 text-amber-900"
+                            title="Too many failed sign-ins from one address in 15 minutes. Unlock clears it."
+                          >
+                            Temporarily blocked (until {formatTime(item.rate_limited_until)})
+                          </span>
+                        ) : null}
+                      </div>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
                   <td className="px-3 py-2 text-xs">{item.must_change_password ? "must change" : "set"}</td>
                   <td className="px-3 py-2 text-right">
                     <div className="flex flex-wrap justify-end gap-1">
-                      {item.locked ? (
-                        <button type="button" className="btn-secondary !py-0.5" disabled={busy} onClick={() => run(`${item.email} unlocked.`, () => unlockUser(item.id))}>Unlock</button>
+                      {item.locked || item.rate_limited ? (
+                        <button
+                          type="button"
+                          className="btn-secondary !py-0.5"
+                          disabled={busy}
+                          title="Clears the account lock and every failed-attempt counter for this email"
+                          onClick={() => run(`${item.email} unlocked.`, () => unlockUser(item.id))}
+                        >
+                          Unlock
+                        </button>
                       ) : null}
                       <button type="button" className="btn-secondary !py-0.5" disabled={busy} onClick={() => { setResetting(item); setResetPassword(""); }}>Reset password</button>
                       {item.is_active ? (

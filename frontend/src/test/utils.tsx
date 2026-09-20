@@ -53,6 +53,8 @@ export function me(
     must_change_password: false,
     locked_until: null,
     locked: false,
+    rate_limited_until: null,
+    rate_limited: false,
     last_login_at: "2026-09-20T09:00:00Z",
     created_at: "2026-09-20T00:00:00Z",
     updated_at: "2026-09-20T00:00:00Z",

@@ -1132,7 +1132,8 @@ export interface paths {
         put?: never;
         /**
          * Unlock User
-         * @description Lift a lockout before it expires on its own.
+         * @description Lift a lockout before it expires on its own. Clears the account lock and every
+         *     rate-limit counter for the email, from any address.
          */
         post: operations["unlock_user_api_v1_users__user_id__unlock_post"];
         delete?: never;
@@ -3287,6 +3288,10 @@ export interface components {
              * @default false
              */
             must_change_password: boolean;
+            /** Rate Limited */
+            readonly rate_limited: boolean;
+            /** Rate Limited Until */
+            rate_limited_until?: string | null;
             role: components["schemas"]["Role"];
             /**
              * Updated At

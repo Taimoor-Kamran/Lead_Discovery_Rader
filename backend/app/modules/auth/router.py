@@ -154,7 +154,14 @@ def list_users(
                 details={"required": ["admin", "reviewer"]},
             )
         is_active = True
-    return service.list_users(session, role=role, is_active=is_active, limit=limit, cursor=cursor)
+    return service.list_users(
+        session,
+        role=role,
+        is_active=is_active,
+        limit=limit,
+        cursor=cursor,
+        with_login_state=actor.role is Role.admin,
+    )
 
 
 @users_router.patch("/{user_id}", response_model=UserRead)
@@ -167,7 +174,8 @@ def update_user(
 
 @users_router.post("/{user_id}/unlock", response_model=UserRead)
 def unlock_user(user_id: uuid.UUID, actor: AdminUser, session: DbSession) -> UserRead:
-    """Lift a lockout before it expires on its own."""
+    """Lift a lockout before it expires on its own. Clears the account lock and every
+    rate-limit counter for the email, from any address."""
     return UserRead.model_validate(service.unlock_user(session, user_id, actor_id=actor.id))
 
 

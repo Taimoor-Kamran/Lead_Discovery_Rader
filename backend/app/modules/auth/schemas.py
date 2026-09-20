@@ -31,6 +31,9 @@ class UserRead(BaseModel):
     # v0.8.0: the forced-change flag, the lock, and when they last signed in.
     must_change_password: bool = False
     locked_until: datetime | None = None
+    # Set only on the admin listing: when the login rate limit (any address) lets the
+    # email try again. `None` means not currently blocked, or not looked up.
+    rate_limited_until: datetime | None = None
     last_login_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
@@ -39,6 +42,11 @@ class UserRead(BaseModel):
     @property
     def locked(self) -> bool:
         return self.locked_until is not None and self.locked_until > datetime.now(UTC)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def rate_limited(self) -> bool:
+        return self.rate_limited_until is not None and self.rate_limited_until > datetime.now(UTC)
 
 
 class UserCreate(BaseModel):
