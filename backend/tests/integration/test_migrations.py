@@ -28,6 +28,14 @@ EXPECTED_TABLES = {
     "crm_lead_opportunities",
     "crm_sync_attempts",
     "crm_fake_records",
+    "alerts",
+}
+HARDENING_TABLES = {"alerts"}
+HARDENING_USER_COLUMNS = {
+    "must_change_password",
+    "failed_login_count",
+    "locked_until",
+    "last_login_at",
 }
 CRM_TABLES = {"crm_leads", "crm_lead_opportunities", "crm_sync_attempts", "crm_fake_records"}
 CRM_ENUMS = {"crm_lead_status", "crm_sync_action", "crm_sync_status"}
@@ -72,7 +80,7 @@ def _enums(engine: object) -> set[str]:
 
 
 def test_one_step_down_and_back_up_leaves_the_schema_as_it_was(database_url: str) -> None:
-    """`downgrade -1` must undo exactly the newest migration (v0.7.0 CRM) and nothing else."""
+    """`downgrade -1` must undo exactly the newest migration (v0.8.0) and nothing else."""
     url = _fresh_database(database_url)
     config = alembic_config(url)
     command.upgrade(config, "head")
@@ -84,23 +92,25 @@ def test_one_step_down_and_back_up_leaves_the_schema_as_it_was(database_url: str
     command.downgrade(config, "-1")
     engine = create_engine(url)
     after_downgrade = set(inspect(engine).get_table_names())
-    enums_after = _enums(engine)
+    user_columns = {c["name"] for c in inspect(engine).get_columns("users")}
+    job_columns = {c["name"] for c in inspect(engine).get_columns("search_jobs")}
     engine.dispose()
 
-    assert at_head - after_downgrade == CRM_TABLES
-    assert CRM_ENUMS & enums_after == set()
-    assert {"review_decisions", "suppressions"} <= after_downgrade, "only v0.7.0 comes off"
-    assert {"review_decision", "suppression_source", "review_status"} <= enums_after
+    assert at_head - after_downgrade == HARDENING_TABLES
+    assert HARDENING_USER_COLUMNS & user_columns == set()
+    assert "max_results" not in job_columns
+    assert after_downgrade >= CRM_TABLES, "only v0.8.0 comes off"
 
     command.upgrade(config, "head")
     engine = create_engine(url)
     assert set(inspect(engine).get_table_names()) == at_head
-    assert _enums(engine) >= CRM_ENUMS
+    assert {c["name"] for c in inspect(engine).get_columns("users")} >= HARDENING_USER_COLUMNS
+    assert "max_results" in {c["name"] for c in inspect(engine).get_columns("search_jobs")}
     engine.dispose()
 
 
-def test_two_steps_down_takes_review_with_it(database_url: str) -> None:
-    """`downgrade -2` removes the CRM and the review tables and the review columns."""
+def test_two_steps_down_takes_the_crm_with_it(database_url: str) -> None:
+    """`downgrade -2` removes v0.8.0 and the v0.7.0 CRM tables, nothing else."""
     url = _fresh_database(database_url)
     config = alembic_config(url)
     command.upgrade(config, "head")
@@ -113,10 +123,41 @@ def test_two_steps_down_takes_review_with_it(database_url: str) -> None:
     engine = create_engine(url)
     after_downgrade = set(inspect(engine).get_table_names())
     enums_after = _enums(engine)
+    engine.dispose()
+
+    assert at_head - after_downgrade == CRM_TABLES | HARDENING_TABLES
+    assert CRM_ENUMS & enums_after == set()
+    assert {"review_decisions", "suppressions"} <= after_downgrade, "only v0.7.0+ comes off"
+    assert {"review_decision", "suppression_source", "review_status"} <= enums_after
+
+    command.upgrade(config, "head")
+    engine = create_engine(url)
+    assert set(inspect(engine).get_table_names()) == at_head
+    assert _enums(engine) >= CRM_ENUMS
+    engine.dispose()
+
+
+def test_three_steps_down_takes_review_with_it(database_url: str) -> None:
+    """`downgrade -3` removes the CRM and the review tables and the review columns."""
+    url = _fresh_database(database_url)
+    config = alembic_config(url)
+    command.upgrade(config, "head")
+
+    engine = create_engine(url)
+    at_head = set(inspect(engine).get_table_names())
+    engine.dispose()
+
+    command.downgrade(config, "-3")
+    engine = create_engine(url)
+    after_downgrade = set(inspect(engine).get_table_names())
+    enums_after = _enums(engine)
     opportunity_columns = {c["name"] for c in inspect(engine).get_columns("opportunities")}
     engine.dispose()
 
-    assert at_head - after_downgrade == CRM_TABLES | {"review_decisions", "suppressions"}
+    assert at_head - after_downgrade == CRM_TABLES | HARDENING_TABLES | {
+        "review_decisions",
+        "suppressions",
+    }
     assert ({"review_decision", "suppression_source"} | CRM_ENUMS) & enums_after == set()
     assert "review_status" in enums_after, "the status enum belongs to v0.5.0"
     assert {"decided_at", "decided_by", "lock_version"} & opportunity_columns == set()
@@ -131,7 +172,7 @@ def test_two_steps_down_takes_review_with_it(database_url: str) -> None:
     engine.dispose()
 
 
-def test_five_steps_down_takes_entity_resolution_with_it(database_url: str) -> None:
+def test_six_steps_down_takes_entity_resolution_with_it(database_url: str) -> None:
     """The v0.3.0 migration owns the businesses tables and the columns it added."""
     url = _fresh_database(database_url)
     config = alembic_config(url)
@@ -141,14 +182,14 @@ def test_five_steps_down_takes_entity_resolution_with_it(database_url: str) -> N
     at_head = set(inspect(engine).get_table_names())
     engine.dispose()
 
-    command.downgrade(config, "-5")
+    command.downgrade(config, "-6")
     engine = create_engine(url)
     after_downgrade = set(inspect(engine).get_table_names())
     record_columns = {c["name"] for c in inspect(engine).get_columns("discovered_records")}
     user_columns = {c["name"] for c in inspect(engine).get_columns("users")}
     engine.dispose()
 
-    assert at_head - after_downgrade == CRM_TABLES | {
+    assert at_head - after_downgrade == CRM_TABLES | HARDENING_TABLES | {
         "review_decisions",
         "suppressions",
         "opportunities",

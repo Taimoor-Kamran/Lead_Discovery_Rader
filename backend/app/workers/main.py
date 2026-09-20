@@ -6,13 +6,13 @@ from app import models_registry  # noqa: F401
 from app.core.config import get_settings
 from app.core.logging import configure_logging, get_logger
 from app.core.redis import get_redis
-from app.core.security import check_jwt_secret
+from app.core.startup import check_startup
 
 
 def main() -> None:
     configure_logging()
     settings = get_settings()
-    check_jwt_secret(settings)
+    check_startup(settings)
     logger = get_logger("app.worker")
     logger.info("worker starting", extra={"queue": settings.job_queue_name})
     if settings.crm_auto_sync:

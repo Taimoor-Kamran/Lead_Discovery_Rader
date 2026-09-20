@@ -27,7 +27,7 @@ def _set_refresh_cookie(response: Response, user: User) -> None:
         key=settings.refresh_cookie_name,
         value=token,
         httponly=True,
-        secure=settings.refresh_cookie_secure,
+        secure=settings.resolved_refresh_cookie_secure,
         samesite=settings.refresh_cookie_samesite,
         max_age=settings.refresh_token_ttl_days * 24 * 3600,
         path=settings.api_v1_prefix + "/auth",
@@ -84,7 +84,7 @@ def logout(request: Request, response: Response, session: DbSession) -> Response
         key=settings.refresh_cookie_name,
         path=settings.api_v1_prefix + "/auth",
         httponly=True,
-        secure=settings.refresh_cookie_secure,
+        secure=settings.resolved_refresh_cookie_secure,
         samesite=settings.refresh_cookie_samesite,
     )
     return response

@@ -1,6 +1,7 @@
 """Search-job CRUD, run enqueueing, cancellation and status reads."""
 
 import uuid
+from collections.abc import Callable
 from typing import Any
 
 from sqlalchemy import select
@@ -30,6 +31,9 @@ DISCOVERY_JOB_KIND = "discovery"
 RESOLUTION_JOB_KIND = "resolution"
 AUDIT_JOB_KIND = "audit"
 CLASSIFICATION_JOB_KIND = "classification"
+# Operator-run twins of the scheduled backup jobs (`make backup`, `make backup-verify`).
+BACKUP_JOB_KIND = "backup"
+BACKUP_VERIFY_JOB_KIND = "backup-verify"
 
 
 def get_search_job(session: Session, search_job_id: uuid.UUID) -> SearchJob:
@@ -213,6 +217,51 @@ def enqueue_run(
 
     get_queue().enqueue(execute_job_run, str(run.id), job_id=str(run.id))
     logger.info("job run enqueued", extra={"job_run_id": str(run.id), "kind": kind})
+    return run
+
+
+def run_inline(
+    session: Session,
+    *,
+    kind: str,
+    work: Callable[[JobRun], dict[str, Any] | None],
+    actor_id: uuid.UUID | None = None,
+    params: dict[str, Any] | None = None,
+) -> JobRun:
+    """Create a job run and execute `work` in this process, right now.
+
+    For operator commands (`make backup`, `make backup-verify`) that must be visible on
+    the health page like their scheduled twins but have no worker in the loop. The run
+    ends `done` with `work`'s return value as its summary, or `failed` with the error
+    message; a failure is recorded, never raised past here.
+    """
+    run = JobRun(kind=kind, status=JobRunStatus.queued, params=params)
+    session.add(run)
+    session.flush()
+    audit.record(
+        session,
+        action="job_run.enqueued",
+        entity_type="job_run",
+        entity_id=run.id,
+        actor_id=actor_id,
+        after={"kind": kind, "search_job_id": None, "params": params, "inline": True},
+    )
+    transition(session, run, JobRunStatus.running, actor_id=actor_id)
+    session.commit()
+    try:
+        run.result_summary = work(run)
+    except Exception as exc:  # the failure is the result
+        transition(
+            session,
+            run,
+            JobRunStatus.failed,
+            actor_id=actor_id,
+            error=f"{type(exc).__name__}: {exc}",
+        )
+        logger.error("inline job run failed", extra={"job_run_id": str(run.id), "kind": kind})
+    else:
+        transition(session, run, JobRunStatus.done, actor_id=actor_id)
+    session.commit()
     return run
 
 

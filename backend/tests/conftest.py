@@ -152,8 +152,8 @@ def db(migrated_database: str) -> Iterator[Session]:
     session = get_session_factory()()
     session.execute(
         text(
-            "TRUNCATE crm_sync_attempts, crm_lead_opportunities, crm_leads, crm_fake_records, "
-            "review_decisions, suppressions, opportunities, ai_classifications, "
+            "TRUNCATE alerts, crm_sync_attempts, crm_lead_opportunities, crm_leads, "
+            "crm_fake_records, review_decisions, suppressions, opportunities, ai_classifications, "
             "website_audits, api_calls, "
             "match_candidates, business_field_values, businesses, record_sightings, "
             "discovered_records, audit_logs, job_runs, search_jobs, sources, users "

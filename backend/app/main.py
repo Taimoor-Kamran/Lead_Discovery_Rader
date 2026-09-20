@@ -15,7 +15,7 @@ from app.core.errors import AppError, ErrorBody, ErrorEnvelope
 from app.core.health import health_router
 from app.core.logging import configure_logging, get_logger
 from app.core.middleware import RequestIdMiddleware, get_request_id
-from app.core.security import check_jwt_secret
+from app.core.startup import check_startup
 from app.modules.ai.router import ai_router
 from app.modules.audit_web.router import (
     business_audits_router,
@@ -70,7 +70,7 @@ def _envelope(
 def create_app() -> FastAPI:
     configure_logging()
     settings = get_settings()
-    check_jwt_secret(settings)
+    check_startup(settings)
 
     app = FastAPI(
         title="Lead Discovery Radar API",
