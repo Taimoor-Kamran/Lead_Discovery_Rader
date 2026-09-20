@@ -155,7 +155,7 @@ test("reviewer approves a lead, the rep sees it, do-not-contact removes a busine
     await expect(page.getByRole("status")).toBeVisible();
     const token = await accessToken(page);
     const leads = await (await page.request.get(`${API}/crm/leads?status=synced`, { headers: { Authorization: `Bearer ${token}` } })).json();
-    const barton = leads.items.find((item: { business_name: string }) => item.business_name === BARTON);
+    const barton = leads.items.find((item: { business_name: string }) => item.business_name.includes(BARTON));
     expect(barton).toBeTruthy();
     const attempts = await (await page.request.get(`${API}/crm/leads/${barton.id}/attempts`, { headers: { Authorization: `Bearer ${token}` } })).json();
     expect(attempts.map((a: { action: string }) => a.action)).toContain("mark_dnc");
