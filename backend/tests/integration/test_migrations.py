@@ -95,7 +95,7 @@ def test_one_step_down_and_back_up_leaves_the_schema_as_it_was(database_url: str
     command.upgrade(config, "head")
     engine = create_engine(url)
     assert set(inspect(engine).get_table_names()) == at_head
-    assert CRM_ENUMS <= _enums(engine)
+    assert _enums(engine) >= CRM_ENUMS
     engine.dispose()
 
 

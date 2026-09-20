@@ -100,13 +100,21 @@ def eligibility(
     now: datetime,
     settings: Settings,
     ignore_delay: bool = False,
+    carried: set[uuid.UUID] | None = None,
 ) -> Eligibility:
+    """`carried` are the approvals the CRM record already holds (sent early with Send now):
+    they stay in step with the database whatever the delay says."""
     approved = approved_opportunities(session, business.id)
     if ignore_delay:
         ready, waiting = list(approved), []
     else:
         cutoff = now - timedelta(minutes=settings.resolved_crm_sync_delay_minutes)
-        ready = [o for o in approved if o.decided_at is not None and o.decided_at <= cutoff]
+        already = carried or set()
+        ready = [
+            o
+            for o in approved
+            if o.id in already or (o.decided_at is not None and o.decided_at <= cutoff)
+        ]
         waiting = [o for o in approved if o not in ready]
     next_ready = min((o.decided_at for o in waiting if o.decided_at is not None), default=None)
     return Eligibility(
@@ -252,7 +260,14 @@ def sync_lead(
         _set_status(lead, CrmLeadStatus.cancelled, due_at=None)
         session.flush()
         return lead
-    state = eligibility(session, business, now=moment, settings=config, ignore_delay=ignore_delay)
+    state = eligibility(
+        session,
+        business,
+        now=moment,
+        settings=config,
+        ignore_delay=ignore_delay,
+        carried=_carried(session, lead),
+    )
     crm = (
         adapter
         if adapter is not None
@@ -415,6 +430,16 @@ def _withdrawn(session: Session, lead: CrmLead) -> None:
 def _mark_dnc_done(lead: CrmLead, flag: bool) -> None:
     lead.do_not_contact_sent = flag
     lead.export_batch_id = None
+
+
+def _carried(session: Session, lead: CrmLead) -> set[uuid.UUID]:
+    return set(
+        session.scalars(
+            select(CrmLeadOpportunity.opportunity_id).where(
+                CrmLeadOpportunity.crm_lead_id == lead.id
+            )
+        )
+    )
 
 
 def _carry(session: Session, lead: CrmLead, rows: Sequence[Opportunity]) -> None:
@@ -829,12 +854,16 @@ def _unscheduled_eligible(session: Session, *, destination: str) -> list[CrmLead
 
 
 def on_suppression_changed(
-    session: Session, business_id: uuid.UUID | None, *, actor_id: uuid.UUID | None
+    session: Session,
+    business_id: uuid.UUID | None,
+    *,
+    actor_id: uuid.UUID | None,
+    now: datetime | None = None,
 ) -> None:
     """A suppression was added or lifted: schedule the flag (or its removal) for the record."""
     if business_id is None:
         return
-    on_business_changed(session, business_id, actor_id=actor_id)
+    on_business_changed(session, business_id, actor_id=actor_id, now=now)
 
 
 # --- reads --------------------------------------------------------------------------------------

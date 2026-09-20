@@ -219,6 +219,47 @@ def test_an_unclear_answer_is_escalated_exactly_once(db: Session) -> None:
     assert outcome.ai.reasons == ("unclear_confidence",)
 
 
+def test_a_reused_escalation_answer_counts_no_escalation(db: Session) -> None:
+    """v0.7.0 carry-over: the second business gets the escalation answer from the cache,
+    so no call was made and nothing is counted as an escalation — in the outcome, in the
+    run summary and in `/ai/usage`."""
+    from app.modules.ai.router import usage_for
+    from app.modules.opportunities.schemas import ClassificationResultSummary
+    from app.modules.opportunities.worker import _count
+
+    business = make_business(db)
+    make_audit(db, business)
+    unclear = answer(("booking_setup", 0.5, BOOKING_MESSAGE, "no_online_booking"))
+    tools = make_tools(unclear, unclear)
+
+    outcome_one = service.classify(db, business, tools=tools)
+    assert outcome_one.ai is not None and outcome_one.ai.escalated is True
+    assert len(tools.llm.requests) == 2  # type: ignore[union-attr]
+
+    # Same input, same models: both tiers are reused and nothing is called.
+    outcome_two = service.classify(db, business, tools=tools)
+
+    assert len(tools.llm.requests) == 2  # type: ignore[union-attr]
+    assert outcome_two.ai is not None
+    assert outcome_two.ai.calls == 0 and outcome_two.ai.reused == 2
+    assert outcome_two.ai.escalated is False, "a reused answer made no call"
+    rows = classifications_of(db, business)
+    assert [(r.status.value, r.escalated) for r in rows] == [
+        ("ok", False),
+        ("ok", True),
+        ("reused", False),
+        ("reused", True),
+    ]
+
+    summary = ClassificationResultSummary()
+    _count(summary, outcome_one)
+    _count(summary, outcome_two)
+    assert summary.ai_escalations == 1 and summary.ai_reused == 2 and summary.ai_calls == 2
+
+    usage = usage_for(db, datetime.now(UTC).date())
+    assert usage.calls == 2 and usage.escalations == 1 and usage.reused == 2
+
+
 def test_a_clear_answer_is_never_escalated(db: Session) -> None:
     business = make_business(db)
     make_audit(db, business)

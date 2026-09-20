@@ -99,7 +99,7 @@ def suppress_business(
         "business suppressed",
         extra={"business_id": str(business.id), "source": source.value},
     )
-    _notify_crm(session, business.id, actor_id=actor_id)
+    _notify_crm(session, business.id, actor_id=actor_id, now=now)
     return row
 
 
@@ -177,11 +177,17 @@ def _lift(session: Session, row: Suppression, *, actor_id: uuid.UUID) -> None:
     _notify_crm(session, row.business_id, actor_id=actor_id)
 
 
-def _notify_crm(session: Session, business_id: uuid.UUID | None, *, actor_id: uuid.UUID) -> None:
+def _notify_crm(
+    session: Session,
+    business_id: uuid.UUID | None,
+    *,
+    actor_id: uuid.UUID,
+    now: datetime | None = None,
+) -> None:
     """A do-not-contact must reach a record already in the CRM; a lift must clear it."""
     from app.modules.crm import service as crm
 
-    crm.on_suppression_changed(session, business_id, actor_id=actor_id)
+    crm.on_suppression_changed(session, business_id, actor_id=actor_id, now=now)
 
 
 def lift_review_suppressions(

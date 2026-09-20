@@ -170,6 +170,17 @@ def db(migrated_database: str) -> Iterator[Session]:
 
 
 @pytest.fixture(autouse=True)
+def _settings_cache() -> Iterator[None]:
+    """A test that changes the environment must not leave its settings cached for the next.
+
+    Autouse fixtures are set up first and torn down last, so this runs after `monkeypatch`
+    has put the environment back.
+    """
+    yield
+    get_settings.cache_clear()
+
+
+@pytest.fixture(autouse=True)
 def fake_redis() -> Iterator[fakeredis.FakeStrictRedis]:
     """Swap Redis for an in-process fake. Jobs are queued but never auto-executed."""
     client = fakeredis.FakeStrictRedis()

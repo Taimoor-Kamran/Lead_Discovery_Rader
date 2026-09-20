@@ -1,0 +1,7 @@
+{
+  "id": "tblLeads0000000001",
+  "name": "Leads",
+  "primaryFieldId": "fldRadarBusinessId",
+  "fields": [{"id": "fldRadarBusinessId", "name": "Radar Business ID", "type": "singleLineText"}],
+  "views": [{"id": "viwGrid0000000001", "name": "Grid view", "type": "grid"}]
+}
