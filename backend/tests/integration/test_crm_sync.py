@@ -111,6 +111,16 @@ class Spy:
         )
 
 
+@pytest.fixture(autouse=True)
+def _fake_destination(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """These tests run against the fake destination; the rest of the suite keeps the default."""
+    monkeypatch.setenv("CRM_DESTINATION", "fake")
+    get_settings.cache_clear()
+    yield
+    monkeypatch.undo()
+    get_settings.cache_clear()
+
+
 @pytest.fixture
 def spy() -> Iterator[Spy]:
     saved = adapters.snapshot()

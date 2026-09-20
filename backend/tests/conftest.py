@@ -125,7 +125,6 @@ def _base_environment() -> Iterator[None]:
             "REVIEW_UNDO_WINDOW_MINUTES": "30",
             "REVIEW_COOLDOWN_DAYS": "90",
             "REVIEW_WEAK_CONFIDENCE": "0.4",
-            "CRM_DESTINATION": "fake",
             "CRM_AUTO_SYNC": "true",
             "APP_BASE_URL": "http://localhost:3000",
         }
