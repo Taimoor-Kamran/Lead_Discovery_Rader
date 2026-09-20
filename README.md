@@ -386,6 +386,93 @@ network**. `make ai-smoke` is the one live call, for a human: it classifies one 
 business with the real key, prints the validated output, tokens and estimated cost, and
 stores nothing.
 
+## Reviewing leads
+
+Nothing the pipeline produces is a lead until a person says so. The review screens are the
+first real UI: sign in at `http://localhost:3000`, and a reviewer lands on the **Review
+queue** — one row per business with open opportunities, strongest first, with the city and
+state next to the name, the service chips (score · confidence), the latest audit status and
+its worst findings. Weak signals (confidence below `REVIEW_WEAK_CONFIDENCE`, 0.4) are hidden
+until **Show weak signals** is on; the row says how many it is hiding. Tabs switch between
+*Pending* and *Needs enrichment*.
+
+Opening a business shows everything in one screen: the facts with their field provenance on
+the left, the audit (findings with evidence and a link to the page, PageSpeed, tech stack)
+in the middle, and the opportunities on the right — reason, evidence, the four score bars,
+a source badge (`rules` / `ai` / `rules+ai`) and the AI summary in a box labelled
+**"AI-generated — verify before use"**. Every AI-touched field carries that label. Page
+text, evidence and model output are rendered as plain text, and only `http(s)` URLs become
+links (a `javascript:` URL from a page is shown as text).
+
+Local setup for the manual run-through:
+
+```bash
+docker compose down -v && make up && make migrate && make seed-admin
+make seed-demo-users        # reviewer@, rep1@, rep2@, crm@example.com — DEMO_USERS_PASSWORD in .env
+make load-demo-data
+```
+
+### The decisions
+
+| Decision | Result | What it asks for | Effect |
+|---|---|---|---|
+| **Approve** | `approved` | optional note, optional sales rep | becomes a **qualified lead**; shows up in My leads |
+| **Reject** | `rejected` | reason: `evidence_wrong`, `business_closed`, `wrong_industry`, `ai_mistake`, `other` (+ note) | leaves the queue; not re-created by classification for `REVIEW_COOLDOWN_DAYS` |
+| **Needs enrichment** | `needs_enrichment` | note | stays under its own tab; re-classification refreshes its evidence in place |
+| **Duplicate** | `duplicate` | the other opportunity (same service) | leaves the queue; cool-down applies |
+| **Not a fit** | `not_a_fit` | reason: `too_small`, `too_large`, `outside_area`, `already_client`, `other` (+ note) | leaves the queue; cool-down applies |
+| **Do not contact** | `do_not_contact` on **every** opportunity of the business | note + confirmation | the business, its domain and its phone go on the suppression list; no new opportunity, ever; hidden from the queue and from leads |
+
+Every decision writes a `review_decisions` row and an `audit_logs` row. Each request carries
+the opportunity's `lock_version`; when two reviewers race, the second gets a **409** and the
+UI says *"Another reviewer already decided this"*. After a decision a toast offers **Undo**
+for `REVIEW_UNDO_WINDOW_MINUTES` (30) — for the person who decided, or any admin. Undoing a
+do-not-contact lifts the suppression it created. An approved opportunity is never
+overwritten by re-classification.
+
+**Batch**: selecting rows in the queue enables *Reject selected* and *Not a fit selected*
+only, for at most 50 at a time. Approvals and do-not-contact are always one at a time — a
+human signs off each lead.
+
+**Keyboard**: on a business, `j` / `k` move to the next / previous business, `a` approves
+the focused opportunity, `r` rejects it (asks for the reason), `?` lists the shortcuts.
+They never fire while you are typing.
+
+**Duplicates** (`/duplicates`) shows the pending match candidates from entity resolution side
+by side — *Merge* or *Keep apart*. **Suppressions** (`/admin/suppressions`, admin only) lists
+the do-not-contact rows and lets an admin add one by domain or phone, or lift one.
+
+The same operations over the API:
+
+```
+GET  /review-queue?status=pending&include_weak=false&service=&city=&min_score=&q=
+GET  /review-queue/{business_id}                       # facts + provenance, audit, AI, opportunities, history
+POST /opportunities/{id}/review                        # {decision, lock_version, reason_code?, note?, duplicate_of?, assigned_to?}
+POST /opportunities/review-batch                       # {ids ≤ 50, decision: reject|not_a_fit, reason_code, note?}
+POST /review-decisions/{id}/undo
+GET  /leads?service=&assigned_to=&city=                # a sales rep only ever gets their own
+GET  /users?role=sales_rep                             # the assignment picker (admin, reviewer)
+GET  /suppressions · POST /suppressions · POST /suppressions/{id}/lift
+```
+
+`make e2e` runs the Playwright smoke against the running stack (reviewer approves Barton
+Creek for rep1 → rep1 sees it → a do-not-contact removes a business from the queue). It
+downloads Chromium on first run and is deliberately **not** part of `make check`.
+
+## Roles and what each can do
+
+| Role | Review queue | Decide | Duplicates | My leads | Undo | Suppressions |
+|---|---|---|---|---|---|---|
+| `admin` | ✅ | ✅ | ✅ | all leads | any decision | add, lift |
+| `reviewer` | ✅ | ✅ | ✅ | all leads (read) | own decisions | read |
+| `sales_rep` | ❌ (403) | ❌ | ❌ | leads **assigned to them** | ❌ | ❌ |
+| `crm_manager` | read-only | ❌ | ❌ | all leads (read) | ❌ | read |
+| `tech_admin` | read-only | ❌ | ❌ | ❌ | ❌ | read |
+
+The API enforces every cell (a sales rep gets a 403 on the review endpoints); the UI hides
+what a role cannot do but never relies on hiding. Create real people with `POST /users` as
+the admin, or `make seed-demo-users` locally for the four demo accounts.
+
 ## Resetting a password
 
 ```bash

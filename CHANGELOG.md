@@ -3,6 +3,69 @@
 All notable changes, one section per merged spec. Newest first.
 Format: `## [vX.Y.Z] - YYYY-MM-DD` followed by Added / Changed / Fixed.
 
+## [v0.6.0] - 2026-09-20
+
+### Added
+
+- **Human review** (`app/modules/review`, migration `0006`). Six decisions per opportunity —
+  approve, reject, needs enrichment, duplicate, not a fit, do not contact — each with the
+  fields the blueprint requires (reason codes for reject / not-a-fit, a note for
+  needs-enrichment / do-not-contact / "other", a same-service `duplicate_of`, an active
+  `sales_rep` for `assigned_to`). Only a `pending` or `needs_enrichment` row can be decided.
+  Every request echoes the row's `lock_version`; a stale one is a **409**
+  (`stale_lock_version`, "Another reviewer already decided this"). Every decision writes a
+  `review_decisions` row and an `audit_logs` row in the same transaction.
+- **Undo** (`POST /review-decisions/{id}/undo`) within `REVIEW_UNDO_WINDOW_MINUTES` (30)
+  by the person who decided or any admin: the previous status is restored, the history row
+  is marked `undone_at`, and a do-not-contact undo lifts the suppression it created and
+  restores every row it closed.
+- **Batch** (`POST /opportunities/review-batch`): reject and not-a-fit only, at most 50
+  ids, a per-id result (`ok` / `conflict` / `not_allowed`). Approvals and do-not-contact
+  are never batched.
+- **Suppressions** (`app/modules/compliance`): do-not-contact adds an active row for the
+  business, its domain and its phone; admins add by domain / phone / business and lift
+  rows over `/suppressions`. Checked in the review queue, the leads list **and**
+  classification, which skips a suppressed business entirely.
+- **Classification respects decisions**: an approved opportunity is never overwritten and
+  no second row is opened beside it; a service rejected, marked not-a-fit or duplicate
+  within `REVIEW_COOLDOWN_DAYS` (90) is not re-created as pending; a `needs_enrichment`
+  row is refreshed in place.
+- **Endpoints**: `GET /review-queue` (grouped by business, strongest first, weak signals
+  under `REVIEW_WEAK_CONFIDENCE` hidden unless `include_weak=true`, with a hidden count;
+  filters `service`, `city`, `state`, `industry`, `min_score`, `q`, `status`), `GET
+  /review-queue/{business_id}` (facts with field provenance, latest audit, AI summary
+  flagged `ai_generated: true`, every opportunity with evidence, score components, AI
+  provenance and decision history), `GET /leads` (approved and unsuppressed; a sales rep
+  sees only `assigned_to = me`), `GET /users?role=sales_rep` for reviewers.
+- **`make seed-demo-users`** (development only): `reviewer@`, `rep1@`, `rep2@`,
+  `crm@example.com` with `DEMO_USERS_PASSWORD` from `.env`.
+- **Frontend**: typed API client generated from `openapi.json` with `openapi-typescript`
+  (`make api-types`; `make check` fails on drift), one `api.ts` wrapper that attaches the
+  in-memory access token, refreshes **once** on 401 and sends the browser to `/login` when
+  that fails; role-aware shell and navigation; pages `/login`, `/review` (filters, weak
+  toggle, status tabs, batch reject / not-a-fit), `/review/[businessId]` (facts, audit,
+  AI summary box, opportunity cards with score bars, decision dialogs, do-not-contact with
+  confirmation, history with Undo, toast with Undo, next/previous, `j` `k` `a` `r` `?`
+  shortcuts that never fire in a field), `/duplicates`, `/leads`, `/admin/suppressions`.
+- **Safety in the UI, tested**: page text, evidence and AI output are only ever rendered as
+  text (a repo-wide test forbids `dangerouslySetInnerHTML`); only `http(s)` URLs become
+  links, with `target="_blank" rel="noopener noreferrer"`; every AI-touched field carries
+  "AI-generated — verify before use"; leads show business-level public phone and website
+  only.
+- **Tests**: 52 backend tests (decisions and required fields, RBAC matrix, 409 on a stale
+  lock, batch limits, undo window and who may undo, suppression effects on queue / leads /
+  classification, cool-down, assignee validation, demo users) and 56 frontend tests
+  (Vitest + Testing Library). `make e2e` runs the Playwright smoke against the demo stack.
+
+### Changed
+
+- `opportunities` gained `decided_at`, `decided_by` and `lock_version`; `OpportunitySummary`
+  exposes `lock_version`, the detail `decided_at` / `decided_by`.
+- Re-classification updates `needs_enrichment` rows in place (previously only `pending`).
+- `GET /users` accepts `role` and `is_active` filters; a reviewer may call it with
+  `role=sales_rep` only.
+- API version `0.6.0`.
+
 ## [v0.5.0] - 2026-09-20
 
 ### Added

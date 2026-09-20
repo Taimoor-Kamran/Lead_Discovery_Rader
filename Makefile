@@ -140,9 +140,9 @@ check-frontend: api-types-check frontend-lint frontend-typecheck frontend-test #
 
 # Needs the compose stack up with demo data and demo users (see README "Reviewing leads").
 # Playwright's Chromium is downloaded on first run. Not part of `make check`.
-e2e: ## End-to-end smoke against http://localhost:3000 (human-run; needs the demo stack)
+e2e: env ## End-to-end smoke against http://localhost:3000 (human-run; needs the demo stack)
 	$(PNPM) exec playwright install chromium
-	$(PNPM) exec playwright test
+	@cd $(FRONTEND) && set -a && . ../.env && set +a && pnpm exec playwright test
 
 check: check-backend check-frontend ## Everything CI runs
 

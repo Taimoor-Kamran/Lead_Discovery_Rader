@@ -3,5 +3,32 @@
 @tailwind utilities;
 
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
+}
+
+/* Visible focus everywhere: keyboard users drive this tool. */
+:focus-visible {
+  outline: 2px solid #0d9488;
+  outline-offset: 2px;
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center gap-1 rounded border px-3 py-1.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply btn border-teal-600 bg-teal-600 text-white hover:bg-teal-700;
+  }
+  .btn-secondary {
+    @apply btn border-slate-300 bg-white text-slate-800 hover:bg-slate-50;
+  }
+  .btn-danger {
+    @apply btn border-red-300 bg-white text-red-700 hover:bg-red-50;
+  }
+  .field {
+    @apply rounded border border-slate-300 bg-white px-2 py-1.5 text-sm;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs;
+  }
 }
