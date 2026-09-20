@@ -101,9 +101,18 @@ def update_user(
 
 
 def list_users(
-    session: Session, *, limit: int = DEFAULT_LIMIT, cursor: str | None = None
+    session: Session,
+    *,
+    role: Role | None = None,
+    is_active: bool | None = None,
+    limit: int = DEFAULT_LIMIT,
+    cursor: str | None = None,
 ) -> Page[UserRead]:
     stmt = select(User).order_by(User.created_at.desc(), User.id.desc()).limit(limit + 1)
+    if role is not None:
+        stmt = stmt.where(User.role == role)
+    if is_active is not None:
+        stmt = stmt.where(User.is_active == is_active)
     stmt = apply_cursor(stmt, User.created_at, User.id, cursor)
     rows = list(session.scalars(stmt))
     next_cursor = None
@@ -213,6 +222,34 @@ def reset_password(session: Session, email: str, new_password: str) -> User:
     )
     logger.info("password reset", extra={"user_id": str(user.id), "via": "cli"})
     return user
+
+
+def ensure_user(session: Session, email: str, password: str, role: Role) -> tuple[User, bool]:
+    """Create a user with this role, or give an existing one the role. Used by demo seeding.
+
+    An existing user keeps its password: seeding is repeatable and never resets anyone.
+    """
+    existing = get_user_by_email(session, email)
+    if existing is not None:
+        changed = existing.role is not role or not existing.is_active
+        if changed:
+            before = {"role": existing.role.value, "is_active": existing.is_active}
+            existing.role = role
+            existing.is_active = True
+            session.flush()
+            audit.record(
+                session,
+                action="user.updated",
+                entity_type="user",
+                entity_id=existing.id,
+                before=before,
+                after={"role": role.value, "is_active": True, "reason": "seed-demo-users"},
+            )
+        return existing, False
+    user = create_user(
+        session, UserCreate(email=email, password=password, role=role, is_active=True)
+    )
+    return user, True
 
 
 def ensure_admin(session: Session, email: str, password: str) -> tuple[User, bool]:

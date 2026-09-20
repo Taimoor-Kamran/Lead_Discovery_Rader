@@ -6,7 +6,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query, Request, Response, status
 
 from app.core.config import get_settings
-from app.core.errors import AuthenticationError
+from app.core.errors import AuthenticationError, PermissionDeniedError
 from app.core.pagination import DEFAULT_LIMIT, MAX_LIMIT, Page
 from app.core.security import create_access_token, create_refresh_token, decode_token
 from app.modules.auth import service
@@ -103,12 +103,22 @@ def create_user(payload: UserCreate, actor: AdminUser, session: DbSession) -> Us
 
 @users_router.get("", response_model=Page[UserRead])
 def list_users(
-    actor: AdminUser,
+    actor: CurrentUser,
     session: DbSession,
+    role: Annotated[Role | None, Query()] = None,
+    is_active: Annotated[bool | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
     cursor: Annotated[str | None, Query()] = None,
 ) -> Page[UserRead]:
-    return service.list_users(session, limit=limit, cursor=cursor)
+    """Admins list anyone. A reviewer may list active sales reps, for the assignment picker."""
+    if actor.role is not Role.admin:
+        if actor.role is not Role.reviewer or role is not Role.sales_rep:
+            raise PermissionDeniedError(
+                "Your role may only list active sales reps (role=sales_rep)",
+                details={"required": ["admin", "reviewer"]},
+            )
+        is_active = True
+    return service.list_users(session, role=role, is_active=is_active, limit=limit, cursor=cursor)
 
 
 @users_router.patch("/{user_id}", response_model=UserRead)

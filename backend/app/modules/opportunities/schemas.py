@@ -45,6 +45,8 @@ class OpportunitySummary(BaseModel):
     score_components: ScoreComponentsRead
     scoring_version: str
     review_status: ReviewStatus
+    # Echoed back with every decision; a stale value is a 409 (v0.6.0).
+    lock_version: int
     top_evidence: dict[str, Any] | None
     created_at: datetime
     updated_at: datetime
@@ -59,6 +61,8 @@ class OpportunityDetail(OpportunitySummary):
     ai_classification_id: uuid.UUID | None
     ai: AIProvenanceRead | None
     assigned_to: uuid.UUID | None
+    decided_at: datetime | None
+    decided_by: uuid.UUID | None
 
 
 class ClassificationResultSummary(BaseModel):

@@ -8,10 +8,14 @@ The order inside `classify` is the order of trust:
 3. **merge** — the AI may add to what the rules found or raise a confidence a little with
    valid evidence. It can never remove a rule opportunity;
 4. **score** — four components, always stored;
-5. **upsert** — one pending opportunity per business and service, updated in place.
+5. **upsert** — one open opportunity per business and service, updated in place.
 
 An AI failure of any kind leaves the rule opportunities standing. Nothing here approves,
 contacts or exports anything.
+
+What a human decided outranks all of it (v0.6.0): a suppressed business gets nothing at
+all, an approved opportunity is never overwritten, and a service a reviewer rejected,
+marked not-a-fit or duplicate is not re-created as pending until the cool-down has passed.
 """
 
 import uuid
@@ -44,6 +48,7 @@ from app.modules.ai.schema import (
 from app.modules.audit_web.models import AuditStatus, WebsiteAudit
 from app.modules.audit_web.service import latest_audit
 from app.modules.businesses.models import Business
+from app.modules.compliance.service import is_suppressed
 from app.modules.jobs.models import JobRun as JobRunType
 from app.modules.normalization.schemas import BusinessStatus
 from app.modules.opportunities.catalogue import (
@@ -199,6 +204,13 @@ def classify(
     audit = latest_audit(session, business.id)
     if audit is None:
         return ClassificationOutcome(business_id=business.id, website_audit_id=None)
+    if is_suppressed(session, business):
+        # Do-not-contact (or an admin suppression) means no new pending opportunity, ever,
+        # and no model call either: nothing about this business is work for anyone.
+        logger.info(
+            "business is suppressed; not classified", extra={"business_id": str(business.id)}
+        )
+        return ClassificationOutcome(business_id=business.id, website_audit_id=audit.id)
 
     rules = rule_opportunities(business, audit)
     outcome = ClassificationOutcome(business_id=business.id, website_audit_id=audit.id)
@@ -221,6 +233,7 @@ def classify(
         classification=ai_run.classification if ai_run is not None else None,
         intent_explicit=intent_explicit,
         settings=tools.settings,
+        now=now,
     )
     logger.info(
         "business classified",
@@ -674,14 +687,58 @@ def _ai_evidence(suggestion: Any) -> list[dict[str, Any]]:
 # --- storing ------------------------------------------------------------------------------
 
 
+# The statuses a reviewer may still act on. Re-classification refreshes these rows in
+# place; a `needs_enrichment` row is exactly the one waiting for fresh evidence.
+OPEN_STATUSES = (ReviewStatus.pending, ReviewStatus.needs_enrichment)
+# Decisions that put a business+service into the cool-down: "not now" verdicts.
+COOLDOWN_STATUSES = (ReviewStatus.rejected, ReviewStatus.not_a_fit, ReviewStatus.duplicate)
+
+
 def pending_opportunities(session: Session, business_id: uuid.UUID) -> dict[str, Opportunity]:
+    """The open (pending or needs_enrichment) opportunity per service, if any."""
     rows = session.scalars(
-        select(Opportunity).where(
+        select(Opportunity)
+        .where(
             Opportunity.business_id == business_id,
-            Opportunity.review_status == ReviewStatus.pending,
+            Opportunity.review_status.in_(OPEN_STATUSES),
         )
+        .order_by(Opportunity.created_at.desc(), Opportunity.id.desc())
     )
-    return {row.service: row for row in rows}
+    found: dict[str, Opportunity] = {}
+    for row in rows:
+        found.setdefault(row.service, row)
+    return found
+
+
+def blocked_services(
+    session: Session,
+    business_id: uuid.UUID,
+    *,
+    settings: Settings | None = None,
+    now: datetime | None = None,
+) -> dict[str, str]:
+    """Services classification must not (re)create for this business, and why.
+
+    `approved`: a human said yes; that row is theirs and is never overwritten, and no
+    second pending row is opened beside it. `cooldown`: a human said no (rejected,
+    not-a-fit, duplicate) within `REVIEW_COOLDOWN_DAYS`; asking again would be nagging.
+    """
+    config = settings or get_settings()
+    moment = now or datetime.now(UTC)
+    since = moment - timedelta(days=config.review_cooldown_days)
+    blocked: dict[str, str] = {}
+    rows = session.execute(
+        select(Opportunity.service, Opportunity.review_status, Opportunity.decided_at).where(
+            Opportunity.business_id == business_id,
+            Opportunity.review_status.in_((ReviewStatus.approved, *COOLDOWN_STATUSES)),
+        )
+    ).all()
+    for service_key, status, decided_at in rows:
+        if status is ReviewStatus.approved:
+            blocked[service_key] = "approved"
+        elif decided_at is not None and decided_at >= since and service_key not in blocked:
+            blocked[service_key] = "cooldown"
+    return blocked
 
 
 def upsert_opportunities(
@@ -693,13 +750,29 @@ def upsert_opportunities(
     classification: AIClassification | None,
     intent_explicit: bool,
     settings: Settings | None = None,
+    now: datetime | None = None,
 ) -> tuple[list[Opportunity], int, int]:
-    """One pending row per service: update it if it exists, create it if not."""
+    """One open row per service: update it if it exists, create it if not.
+
+    A service a human already approved, or turned down within the cool-down, is skipped:
+    the decided row is left exactly as the reviewer left it.
+    """
     weights = Weights.from_settings(settings)
     existing = pending_opportunities(session, business.id)
+    blocked = blocked_services(session, business.id, settings=settings, now=now)
     rows: list[Opportunity] = []
     created = updated = 0
     for item in merged:
+        if item.service in blocked and item.service not in existing:
+            logger.info(
+                "service skipped by a review decision",
+                extra={
+                    "business_id": str(business.id),
+                    "service": item.service,
+                    "reason": blocked[item.service],
+                },
+            )
+            continue
         computed = score(
             business,
             audit,
@@ -926,6 +999,7 @@ def summarize(opportunity: Opportunity, business: Business) -> OpportunitySummar
         ),
         scoring_version=opportunity.scoring_version,
         review_status=opportunity.review_status,
+        lock_version=opportunity.lock_version,
         top_evidence=opportunity.evidence[0] if opportunity.evidence else None,
         created_at=opportunity.created_at,
         updated_at=opportunity.updated_at,
@@ -957,6 +1031,8 @@ def detail(session: Session, opportunity: Opportunity) -> OpportunityDetail:
         ai_classification_id=opportunity.ai_classification_id,
         ai=provenance,
         assigned_to=opportunity.assigned_to,
+        decided_at=opportunity.decided_at,
+        decided_by=opportunity.decided_by,
     )
 
 
