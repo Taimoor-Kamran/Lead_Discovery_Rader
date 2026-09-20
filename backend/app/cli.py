@@ -50,7 +50,7 @@ def seed_admin(argv: list[str]) -> int:
         generated = True
 
     with session_scope() as session:
-        user, created = ensure_admin(session, email, password)
+        user, created = ensure_admin(session, email, password, must_change_password=generated)
         user_id = str(user.id)
 
     action = "created" if created else "promoted to admin"

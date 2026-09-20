@@ -63,3 +63,8 @@ class PermissionDeniedError(AppError):
 
 class InvalidStateTransitionError(ConflictError):
     code = "invalid_state_transition"
+
+
+class TooManyRequestsError(AppError):
+    status_code = 429
+    code = "rate_limited"

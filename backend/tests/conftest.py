@@ -258,7 +258,14 @@ def client(db: Session) -> Iterator[TestClient]:
 def make_user(session: Session, role: Role, email: str | None = None) -> User:
     address = email or f"{role.value}-{uuid.uuid4().hex[:8]}@example.com"
     user = create_user(
-        session, UserCreate(email=address, password=TEST_PASSWORD, role=role, is_active=True)
+        session,
+        UserCreate(
+            email=address,
+            password=TEST_PASSWORD,
+            role=role,
+            is_active=True,
+            must_change_password=False,
+        ),
     )
     session.commit()
     return user
