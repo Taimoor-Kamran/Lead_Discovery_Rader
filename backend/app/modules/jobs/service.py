@@ -224,7 +224,7 @@ def run_inline(
     session: Session,
     *,
     kind: str,
-    work: Callable[[JobRun], dict[str, Any] | None],
+    work: Callable[[Session, JobRun], dict[str, Any] | None],
     actor_id: uuid.UUID | None = None,
     params: dict[str, Any] | None = None,
 ) -> JobRun:
@@ -249,7 +249,7 @@ def run_inline(
     transition(session, run, JobRunStatus.running, actor_id=actor_id)
     session.commit()
     try:
-        run.result_summary = work(run)
+        run.result_summary = work(session, run)
     except Exception as exc:  # the failure is the result
         transition(
             session,

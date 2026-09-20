@@ -2,6 +2,8 @@
 
 import json
 import logging
+import logging.handlers
+import os
 import re
 import sys
 from contextvars import ContextVar
@@ -137,8 +139,28 @@ class RequestIdFilter(logging.Filter):
         return True
 
 
+def file_handler(directory: str, filename: str, keep_days: int) -> logging.Handler:
+    """A daily-rotating JSON log file: `<dir>/<file>`, `<file>.YYYY-MM-DD` for older days.
+
+    Rotation happens at midnight of the process's local time; `keep_days` old files are
+    kept. The formatter scrubs secrets exactly as the stdout handler does.
+    """
+    os.makedirs(directory, exist_ok=True)
+    handler = logging.handlers.TimedRotatingFileHandler(
+        os.path.join(directory, filename),
+        when="midnight",
+        backupCount=max(int(keep_days), 1),
+        encoding="utf-8",
+        utc=True,
+    )
+    handler.setFormatter(JsonFormatter())
+    handler.addFilter(RequestIdFilter())
+    return handler
+
+
 def configure_logging() -> None:
-    """Install the JSON handler on the root logger. Safe to call more than once."""
+    """Install the JSON handler on the root logger (and the rotating file when LOG_DIR is
+    set). Safe to call more than once."""
     settings = get_settings()
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(JsonFormatter())
@@ -147,7 +169,13 @@ def configure_logging() -> None:
     root = logging.getLogger()
     for existing in list(root.handlers):
         root.removeHandler(existing)
+        if isinstance(existing, logging.FileHandler):
+            existing.close()
     root.addHandler(handler)
+    if settings.log_dir.strip():
+        root.addHandler(
+            file_handler(settings.log_dir.strip(), settings.log_file, settings.log_keep_days)
+        )
     root.setLevel(settings.log_level.upper())
 
     for noisy in ("uvicorn", "uvicorn.access", "uvicorn.error"):

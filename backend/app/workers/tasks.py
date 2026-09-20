@@ -100,6 +100,12 @@ register_handler(RESOLUTION_JOB_KIND, run_resolution)
 register_handler(AUDIT_JOB_KIND, run_audits)
 register_handler(CLASSIFICATION_JOB_KIND, run_classification)
 
+# The scheduler's jobs (v0.8.0) run through exactly the same machinery.
+from app.workers.scheduled import HANDLERS as _SCHEDULED_HANDLERS  # noqa: E402
+
+for _kind, _handler in _SCHEDULED_HANDLERS.items():
+    register_handler(_kind, _handler)
+
 
 def follow_up(session: Session, run: JobRun) -> None:
     """Queue whatever a finished run implies: discovery → resolution → audit → classification.

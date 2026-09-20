@@ -9,6 +9,8 @@ import uuid
 from collections.abc import Callable
 from typing import Any
 
+from sqlalchemy.orm import Session
+
 from app import models_registry  # noqa: F401
 from app.core.backup import BackupResult
 from app.core.config import get_settings
@@ -553,7 +555,7 @@ def backup_command(argv: list[str]) -> int:
 
     outcome: dict[str, object] = {}
 
-    def work(run: JobRun) -> dict[str, Any]:
+    def work(session: Session, run: JobRun) -> dict[str, Any]:
         result = create_backup()
         outcome["result"] = result
         return result.summary()
@@ -611,10 +613,19 @@ def backup_verify_command(argv: list[str]) -> int:
 
     outcome: dict[str, object] = {}
 
-    def work(run: JobRun) -> dict[str, Any]:
+    def work(session: Session, run: JobRun) -> dict[str, Any]:
         result = verify_backup(file=args.file)
         outcome["result"] = result
         if not result.ok:
+            from app.modules.alerts import service as alerts
+
+            alerts.raise_alert(
+                session,
+                alerts.RULE_BACKUP_VERIFY_FAILED,
+                f"Backup verify failed: {result.error}",
+                severity="critical",
+                details=result.summary(),
+            )
             raise RuntimeError(result.error or "verify failed")
         return result.summary()
 

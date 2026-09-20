@@ -15,10 +15,12 @@ def main() -> None:
     check_startup(settings)
     logger = get_logger("app.worker")
     logger.info("worker starting", extra={"queue": settings.job_queue_name})
-    if settings.crm_auto_sync:
-        from app.modules.crm.worker import start_sync_thread
+    if settings.scheduler_enabled:
+        # One scheduler for everything periodic (CRM sync, purge, backups, verify,
+        # watchdog). A Redis lock keeps a second worker from running a second one.
+        from app.workers.scheduler import start_scheduler_thread
 
-        start_sync_thread()
+        start_scheduler_thread(get_redis())
     worker = Worker([settings.job_queue_name], connection=get_redis())
     worker.work(with_scheduler=False)
 

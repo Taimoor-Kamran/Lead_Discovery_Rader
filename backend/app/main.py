@@ -28,6 +28,7 @@ from app.modules.compliance.router import suppressions_router
 from app.modules.crm.router import crm_router
 from app.modules.discovery.router import discovered_records_router, job_records_router
 from app.modules.jobs.router import jobs_router, search_jobs_router
+from app.modules.monitoring.router import admin_router
 from app.modules.opportunities.router import (
     business_opportunities_router,
     job_classification_router,
@@ -74,7 +75,7 @@ def create_app() -> FastAPI:
 
     app = FastAPI(
         title="Lead Discovery Radar API",
-        version="0.7.0",
+        version="0.8.0",
         docs_url="/docs",
         openapi_url="/openapi.json",
     )
@@ -137,6 +138,7 @@ def create_app() -> FastAPI:
     app.include_router(leads_router, prefix=settings.api_v1_prefix)
     app.include_router(suppressions_router, prefix=settings.api_v1_prefix)
     app.include_router(crm_router, prefix=settings.api_v1_prefix)
+    app.include_router(admin_router, prefix=settings.api_v1_prefix)
     return app
 
 

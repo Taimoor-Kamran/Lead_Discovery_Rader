@@ -1,10 +1,11 @@
-"""The CRM sync loop: what sends due leads when nobody is clicking.
+"""CRM sync entrypoints for the worker.
 
-Design choice (spec left it open): a plain loop in a daemon thread of the RQ worker
-process, not the RQ scheduler. It needs no extra process, no scheduler flag, and nothing
-in Redis; if the worker is running, due leads are sent within `CRM_SYNC_INTERVAL_SECONDS`.
-One tick = one `sync_due()`, each lead committed on its own so a failure never holds back
-the next one. `sync_crm_lead` stays an RQ-able entrypoint for a one-off enqueue.
+Since v0.8.0 the minute-by-minute `sync_due()` is one of the scheduler's jobs
+(`scheduled:crm-sync`, see `app/workers/scheduler.py`), so every tick is a visible job
+run. `run_sync_loop` / `start_sync_thread` are the v0.7.0 stand-alone loop, kept for a
+worker started with `SCHEDULER_ENABLED=false`; `sync_crm_lead` stays an RQ-able entrypoint
+for a one-off enqueue. One tick = one `sync_due()`, each lead committed on its own so a
+failure never holds back the next one.
 """
 
 import threading

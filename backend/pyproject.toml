@@ -25,6 +25,7 @@ dependencies = [
     "jellyfish>=1.1,<2.0",
     "tldextract>=5.1,<6.0",
     "openai>=1.60,<3.0",
+    "croniter>=6.0,<7.0",
 ]
 
 [dependency-groups]
@@ -37,6 +38,9 @@ dev = [
     "fakeredis>=2.26,<3.0",
     "testcontainers[postgres]>=4.9,<5.0",
     "types-beautifulsoup4>=4.12,<5.0",
+    "types-croniter>=6.0,<7.0",
+    "pytest-xdist>=3.6,<4.0",
+    "pip-audit>=2.7,<3.0",
 ]
 
 [build-system]

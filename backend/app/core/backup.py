@@ -317,6 +317,7 @@ def verify_backup(
                     # Table names come from CORE_TABLES above, never from input.
                     table: int(
                         connection.execute(text(f'SELECT count(*) FROM "{table}"')).scalar()  # noqa: S608
+                        or 0
                     )
                     for table in CORE_TABLES
                 }
