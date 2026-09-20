@@ -79,6 +79,10 @@ Format: `## [vX.Y.Z] - YYYY-MM-DD` followed by Added / Changed / Fixed.
   `e2e-*@example.com` user: deleted when nothing references them, otherwise deactivated
   (the append-only audit log refuses the `SET NULL` for anyone who signed in, and a search
   job or decision is `RESTRICT`), both audited.
+- **Undoing a do-not-contact scheduled the CRM flag removal at wall-clock time**, not at the
+  moment the undo was decided at: the review suppression's lift ignored the caller's clock.
+  It is threaded through now (`lifted_at` and the CRM follow-up share the undo's instant).
+  Found because the test's fixed date was today: it passed until 14:05 UTC and failed after.
 
 ## [v0.7.0] - 2026-09-20
 

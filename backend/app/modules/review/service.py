@@ -497,7 +497,9 @@ def undo(
     lifted = 0
     if row.decision is Decision.do_not_contact:
         business_id = restored[0].business_id
-        lifted = compliance.lift_review_suppressions(session, business_id, actor_id=actor.id)
+        lifted = compliance.lift_review_suppressions(
+            session, business_id, actor_id=actor.id, now=moment
+        )
     session.flush()
     return UndoResult(
         undone=[

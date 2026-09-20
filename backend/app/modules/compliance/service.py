@@ -160,9 +160,13 @@ def lift_suppression(
     return row
 
 
-def _lift(session: Session, row: Suppression, *, actor_id: uuid.UUID) -> None:
+def _lift(
+    session: Session, row: Suppression, *, actor_id: uuid.UUID, now: datetime | None = None
+) -> None:
+    """`now` is the caller's clock (an undo passes the moment it was decided at), so the
+    CRM follow-up is due at the same instant and not at whatever the wall clock says."""
     before = _snapshot(row)
-    row.lifted_at = datetime.now(UTC)
+    row.lifted_at = now or datetime.now(UTC)
     row.lifted_by = actor_id
     session.flush()
     audit.record(
@@ -174,7 +178,7 @@ def _lift(session: Session, row: Suppression, *, actor_id: uuid.UUID) -> None:
         before=before,
         after=_snapshot(row),
     )
-    _notify_crm(session, row.business_id, actor_id=actor_id)
+    _notify_crm(session, row.business_id, actor_id=actor_id, now=now)
 
 
 def _notify_crm(
@@ -191,7 +195,7 @@ def _notify_crm(
 
 
 def lift_review_suppressions(
-    session: Session, business_id: uuid.UUID, *, actor_id: uuid.UUID
+    session: Session, business_id: uuid.UUID, *, actor_id: uuid.UUID, now: datetime | None = None
 ) -> int:
     """Undoing a do-not-contact lifts the review suppression(s) it created. Admin rows stay."""
     rows = list(
@@ -204,7 +208,7 @@ def lift_review_suppressions(
         )
     )
     for row in rows:
-        _lift(session, row, actor_id=actor_id)
+        _lift(session, row, actor_id=actor_id, now=now)
     return len(rows)
 
 
