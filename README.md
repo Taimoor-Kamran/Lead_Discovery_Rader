@@ -158,8 +158,10 @@ source is registered **only** when `ENVIRONMENT` (or `APP_ENV`) is `local` or
 
 `make reset-demo-data` (development only) puts the review state back to freshly loaded:
 it removes every review decision, suppression and opportunity and scores the demo
-businesses again (fake AI, no network). Businesses, audits and users stay. `make e2e`
-runs it first.
+businesses again (fake AI, no network). Businesses, audits and users stay — except the
+throw-away `e2e-*@example.com` user `make e2e` signs in as, which is deleted, or
+deactivated when the append-only audit log still names it (the next `make e2e`
+reactivates it). `make e2e` runs the reset first.
 
 ### The demo websites
 
@@ -567,7 +569,8 @@ make backup PROD=1 && make backup-verify PROD=1
 Nobody needs Swagger any more: **Users** (admin) creates accounts with a temporary password
 that must be changed on first sign-in, and **Searches** (admin, sales rep) creates and runs a
 search after showing what it will cost. Six failed sign-ins in 15 minutes get a 429; ten
-failures lock the account for 15 minutes (unlock from the Users page).
+failures lock the account for 15 minutes. The Users page shows both states — "locked
+until" and "Temporarily blocked (until HH:MM)" — and *Unlock* clears both at once.
 
 ## Roles and what each can do
 

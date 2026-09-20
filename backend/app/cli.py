@@ -272,6 +272,11 @@ def reset_demo_data_command(argv: list[str]) -> int:
         f"Removed {result.decisions_deleted} decision(s), {result.suppressions_deleted} "
         f"suppression(s) and {result.opportunities_deleted} opportunit(y/ies)."
     )
+    if result.e2e_users_deleted or result.e2e_users_deactivated:
+        print(
+            f"Removed {result.e2e_users_deleted} e2e user(s) "
+            f"(e2e-*@example.com); deactivated {result.e2e_users_deactivated} still referenced."
+        )
     status = result.classification_status.value if result.classification_status else "unknown"
     print(f"Classification: {result.classification_run_id} ({status})")
     print(f"  {_counts(result.classification_summary)}")

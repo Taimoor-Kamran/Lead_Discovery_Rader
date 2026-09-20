@@ -11,6 +11,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import delete, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -20,6 +21,7 @@ from app.core.logging import get_logger, log_fields
 from app.modules.adapters import registry
 from app.modules.adapters.base import RawDoc
 from app.modules.adapters.demo_fixture import SOURCE_NAME, demo_places, load_fixture
+from app.modules.audit import service as audit
 from app.modules.auth.models import Role, User
 from app.modules.compliance.models import Suppression
 from app.modules.crm.models import CrmLead, FakeCrmRecord
@@ -37,6 +39,9 @@ logger = get_logger("app.demo")
 
 SEARCH_JOB_NAME = "Demo - Austin plumbers"
 DISCOVERY_IDEMPOTENCY_KEY = "demo:austin-plumbers:discovery"
+# The users `make e2e` creates (`e2e-<timestamp>@example.com`, see frontend/e2e); a reset
+# removes them so repeated runs do not pile up throw-away accounts.
+E2E_USER_EMAIL_PATTERN = "e2e-%@example.com"
 
 
 @dataclass(frozen=True)
@@ -205,6 +210,10 @@ class DemoResetResult:
     classification_run_id: uuid.UUID | None
     classification_status: JobRunStatus | None
     classification_summary: dict[str, Any] = field(default_factory=dict)
+    # Throw-away `e2e-*@example.com` accounts: removed, or only deactivated when a
+    # RESTRICT foreign key (a search job or a decision they made) still points at them.
+    e2e_users_deleted: int = 0
+    e2e_users_deactivated: int = 0
 
 
 def reset_demo_data(session: Session) -> DemoResetResult:
@@ -217,6 +226,9 @@ def reset_demo_data(session: Session) -> DemoResetResult:
     stay (the fake provider answers from checked-in files, and the audit needs no network),
     so the result is byte-for-byte what `make load-demo-data` produced. Duplicate merges
     are not undone: a merge rewrites businesses and is not a review decision.
+
+    It also removes the `e2e-*@example.com` users the smoke test creates (deactivating one
+    that a RESTRICT foreign key still references); other users are never touched.
     """
     if not get_settings().is_development:
         raise ValidationFailedError(
@@ -236,6 +248,7 @@ def reset_demo_data(session: Session) -> DemoResetResult:
     # the fake destination's records with it, so `/crm` is empty again after a reset.
     _wipe(session, CrmLead)
     _wipe(session, FakeCrmRecord)
+    e2e_deleted, e2e_deactivated = _remove_e2e_users(session)
     run = enqueue_classification_for_run(
         session,
         audit_run.id,
@@ -249,6 +262,8 @@ def reset_demo_data(session: Session) -> DemoResetResult:
             decisions_deleted=decisions,
             suppressions_deleted=suppressions,
             opportunities_deleted=opportunities,
+            e2e_users_deleted=e2e_deleted,
+            e2e_users_deactivated=e2e_deactivated,
             classification_run_id=str(run_id),
         ),
     )
@@ -266,7 +281,76 @@ def reset_demo_data(session: Session) -> DemoResetResult:
         classification_run_id=run_id,
         classification_status=status,
         classification_summary=summary,
+        e2e_users_deleted=e2e_deleted,
+        e2e_users_deactivated=e2e_deactivated,
     )
+
+
+def _remove_e2e_users(session: Session) -> tuple[int, int]:
+    """Delete the throw-away users `make e2e` created; deactivate any that cannot go.
+
+    A user who never did anything can be deleted outright. One who signed in has audit
+    rows naming them as actor, and `audit_logs` is append-only (a trigger refuses the
+    `ON DELETE SET NULL`), just as a search job or a decision they made is `RESTRICT`; such
+    a user is deactivated instead, so the history stays exactly as written. Both outcomes
+    are audit rows, and a deactivated user is matched again on the next reset (still
+    inactive, counted again, nothing else changes).
+    """
+    users = list(
+        session.scalars(
+            select(User).where(User.email.ilike(E2E_USER_EMAIL_PATTERN)).order_by(User.created_at)
+        )
+    )
+    deleted = deactivated = 0
+    for user in users:
+        user_id, email, role = user.id, user.email, user.role.value
+        try:
+            with session.begin_nested():
+                session.delete(user)
+                session.flush()
+        except IntegrityError as exc:
+            # The savepoint rolled back; the row is still there. Deactivate it instead.
+            kept = session.get(User, user_id)
+            if kept is None:  # pragma: no cover - the savepoint keeps the row
+                continue
+            was_active = kept.is_active
+            if was_active:
+                kept.is_active = False
+                session.flush()
+            audit.record(
+                session,
+                action="user.updated",
+                entity_type="user",
+                entity_id=user_id,
+                actor_id=None,
+                before={"is_active": was_active},
+                after={
+                    "is_active": False,
+                    "reason": "reset-demo-data: e2e user still referenced",
+                    "refused_by": _refusing_constraint(exc),
+                },
+            )
+            deactivated += 1
+            continue
+        audit.record(
+            session,
+            action="user.deleted",
+            entity_type="user",
+            entity_id=user_id,
+            actor_id=None,
+            before={"email": email, "role": role},
+            after={"reason": "reset-demo-data: e2e user"},
+        )
+        deleted += 1
+    session.flush()
+    return deleted, deactivated
+
+
+def _refusing_constraint(exc: IntegrityError) -> str | None:
+    """The constraint (or trigger) name PostgreSQL reported, for the audit row."""
+    diag = getattr(exc.orig, "diag", None)
+    name = getattr(diag, "constraint_name", None) or getattr(diag, "context", None)
+    return str(name).strip().splitlines()[0][:120] if name else None
 
 
 def _wipe(session: Session, model: type[Any]) -> int:

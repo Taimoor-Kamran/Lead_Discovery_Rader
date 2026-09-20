@@ -64,6 +64,22 @@ Format: `## [vX.Y.Z] - YYYY-MM-DD` followed by Added / Changed / Fixed.
 - The CRM sync thread of v0.7.0 is replaced by the scheduler's `crm-sync` job; the old loop
   stays available for `SCHEDULER_ENABLED=false`.
 
+### Fixed
+
+- **Rate limit vs lockout on the Users page** (manual review): after the 5-attempt rate
+  limit the row read *LOCKED —* and an admin could do nothing. `GET /users` (admins) now
+  carries `rate_limited_until` / `rate_limited`, read from the Redis counters of every
+  address that failed for that email; the page shows *Temporarily blocked (until HH:MM)*
+  beside the 15-minute lock; *Unlock* clears the account lock **and** every rate-limit
+  counter for the email, and the `user.unlocked` audit row records how many addresses it
+  cleared.
+- **`make e2e` no longer leaves a new `e2e-<timestamp>@example.com` user behind each run.**
+  The smoke signs in as one fixed `e2e-user@example.com` (created on the first run,
+  reactivated + reset on the next), and `make reset-demo-data` removes every
+  `e2e-*@example.com` user: deleted when nothing references them, otherwise deactivated
+  (the append-only audit log refuses the `SET NULL` for anyone who signed in, and a search
+  job or decision is `RESTRICT`), both audited.
+
 ## [v0.7.0] - 2026-09-20
 
 ### Added

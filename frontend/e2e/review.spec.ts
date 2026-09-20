@@ -183,6 +183,14 @@ async function accessToken(page: Page): Promise<string> {
  */
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? "";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? "";
+/**
+ * One fixed throw-away user, not a new `e2e-<timestamp>` each run: `make reset-demo-data`
+ * (which `make e2e` runs first) deactivates every `e2e-*@example.com` user — it cannot
+ * delete one who has signed in, because the audit log is append-only — so the first run
+ * creates this user and every later run reactivates it and sets a fresh temporary
+ * password from the same Users page. Both paths end in the forced password change.
+ */
+const E2E_USER = "e2e-user@example.com";
 const TEMP_PASSWORD = "temporary-e2e-pass-9f3k2";
 const NEW_PASSWORD = "chosen-by-the-e2e-user-42";
 
@@ -195,20 +203,36 @@ async function signInAs(page: Page, email: string, password: string) {
 
 test("admin creates a user who must change their password; the searches page follows the demo pipeline", async ({ page }) => {
   test.skip(!ADMIN_EMAIL || !ADMIN_PASSWORD, "ADMIN_EMAIL / ADMIN_PASSWORD are not both set in .env; the admin steps need them");
-  const newbie = `e2e-${Date.now()}@example.com`;
+  const newbie = E2E_USER;
 
-  await test.step("admin creates the user from the Users page", async () => {
+  await test.step("admin creates the user from the Users page (or reactivates and resets the one from last time)", async () => {
     await signInAs(page, ADMIN_EMAIL, ADMIN_PASSWORD);
     // A generated admin password would itself force a change; the .env one does not.
     await expect(page.getByTestId("whoami")).toContainText(ADMIN_EMAIL);
     await page.getByRole("link", { name: "Users" }).click();
     await expect(page).toHaveURL(/\/admin\/users$/);
-    await page.getByLabel("Email", { exact: true }).fill(newbie);
-    await page.getByRole("combobox", { name: "Role", exact: true }).selectOption("reviewer");
-    await page.getByLabel("Temporary password").fill(TEMP_PASSWORD);
-    await page.getByRole("button", { name: "Create user" }).click();
-    await expect(page.getByTestId("created-once")).toContainText(TEMP_PASSWORD);
+    // The list is loaded once the admin's own row is there.
+    await expect(page.getByTestId("user-row").filter({ hasText: ADMIN_EMAIL })).toHaveCount(1);
     const row = page.getByTestId("user-row").filter({ hasText: newbie });
+    if ((await row.count()) === 0) {
+      await page.getByLabel("Email", { exact: true }).fill(newbie);
+      await page.getByRole("combobox", { name: "Role", exact: true }).selectOption("reviewer");
+      await page.getByLabel("Temporary password").fill(TEMP_PASSWORD);
+      await page.getByRole("button", { name: "Create user" }).click();
+      await expect(page.getByTestId("created-once")).toContainText(TEMP_PASSWORD);
+    } else {
+      // Left deactivated by `make reset-demo-data`; bring it back with a fresh temporary
+      // password, which forces the change just as a creation does.
+      if ((await row.textContent())?.includes("deactivated")) {
+        await row.getByRole("button", { name: "Reactivate" }).click();
+        await expect(row).not.toContainText("deactivated");
+      }
+      await row.getByRole("button", { name: "Reset password" }).click();
+      const dialog = page.getByRole("dialog", { name: `Reset password for ${newbie}` });
+      await dialog.getByLabel(/New temporary password/).fill(TEMP_PASSWORD);
+      await dialog.getByRole("button", { name: "Set password" }).click();
+      await expect(page.getByTestId("reset-once")).toContainText(TEMP_PASSWORD);
+    }
     await expect(row).toContainText("must change");
     await signOut(page);
   });

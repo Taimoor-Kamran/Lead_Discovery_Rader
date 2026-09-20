@@ -133,8 +133,11 @@ clears; if it comes back later it is a new alert.
 - **Add a user:** Users → email, role, temporary password (Generate) → Create. Hand the
   password over in person; they must change it on first sign-in.
 - **Unlock / reset:** ten failed sign-ins lock an account for 15 minutes (six in 15 minutes
-  from one address get a 429 first). Users → *Unlock*, or *Reset password* for a new
-  temporary one.
+  from one address get a 429 first). The Users page shows a red *locked until …* chip for
+  the account lock and an amber *Temporarily blocked (until HH:MM)* chip while any address
+  is still rate limited; *Unlock* clears both — the lock and every failed-attempt counter
+  for that email — and is audited (`user.unlocked`, with how many addresses were cleared).
+  *Reset password* sets a new temporary one.
 - **Run a search:** Searches → industry, city + state (or a point and radius), max results →
   read the cost estimate (Places pages, today's remaining caps, expected PageSpeed and AI
   calls) → *Save and run*. Follow the four stages on the search's page; *Open the review

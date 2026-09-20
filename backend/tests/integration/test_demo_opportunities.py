@@ -525,6 +525,96 @@ def test_reset_demo_data_puts_every_opportunity_back_to_pending(
     assert isinstance(db.get(User, reviewer.id), User)
 
 
+def test_reset_demo_data_removes_the_e2e_users_and_nobody_else(
+    db: Session, classified: DemoLoadResult
+) -> None:
+    """v0.8.0 review fix: `make e2e` signs in as `e2e-user@example.com` (any
+    `e2e-*@example.com`). A reset deletes such a user when nothing references them;
+    one that the append-only audit log or a RESTRICT foreign key still points at is
+    deactivated instead, so history stays as written."""
+    from app.demo.loader import reset_demo_data
+    from app.modules.audit import service as audit
+    from app.modules.audit.models import AuditLog
+    from app.modules.auth.models import User
+    from app.modules.jobs.models import SearchJob
+
+    reviewer = make_user(db, Role.reviewer, "reviewer@example.com")
+    untouched = make_user(db, Role.reviewer, "e2e-never-signed-in@example.com")
+    signed_in = make_user(db, Role.reviewer, "E2E-USER@example.com")
+    referenced = make_user(db, Role.reviewer, "e2e-1758380001@example.com")
+    lookalike = make_user(db, Role.reviewer, "not-e2e-1758380002@example.com")
+    # A sign-in names the user as actor; `audit_logs` is append-only, so the `SET NULL`
+    # a delete would need is refused and the user can only be deactivated.
+    audit.record(
+        db,
+        action="auth.login_succeeded",
+        entity_type="user",
+        entity_id=signed_in.id,
+        actor_id=signed_in.id,
+    )
+    # A search job keeps its creator (ON DELETE RESTRICT): the same outcome.
+    db.add(
+        SearchJob(
+            name="left behind by an e2e run",
+            geo={"city": "Austin", "state": "TX"},
+            industry="plumbing",
+            source_ids=[],
+            created_by=referenced.id,
+        )
+    )
+    db.commit()
+    untouched_id, signed_in_id, referenced_id = untouched.id, signed_in.id, referenced.id
+
+    result = reset_demo_data(db)
+    db.expire_all()
+
+    assert result.classification_status is JobRunStatus.done
+    assert result.e2e_users_deleted == 1
+    assert result.e2e_users_deactivated == 2
+    assert db.get(User, untouched_id) is None
+    for user_id in (signed_in_id, referenced_id):
+        kept = db.get(User, user_id)
+        assert kept is not None and kept.is_active is False
+    for user in (reviewer, lookalike):
+        same = db.get(User, user.id)
+        assert same is not None and same.is_active is True
+
+    rows = list(db.scalars(select(AuditLog).order_by(AuditLog.id)))
+    login = next(r for r in rows if r.action == "auth.login_succeeded")
+    assert login.actor_id == signed_in_id, "the audit log is untouched"
+    created = next(
+        r for r in rows if r.action == "user.created" and r.entity_id == str(untouched_id)
+    )
+    assert created.after is not None
+    assert created.after["email"] == "e2e-never-signed-in@example.com", "history stays"
+    deleted = next(r for r in rows if r.action == "user.deleted")
+    assert deleted.entity_id == str(untouched_id)
+    assert deleted.before == {"email": "e2e-never-signed-in@example.com", "role": "reviewer"}
+    deactivations = [
+        r for r in rows if r.action == "user.updated" and r.before == {"is_active": True}
+    ]
+    assert {r.entity_id for r in deactivations} == {str(signed_in_id), str(referenced_id)}
+    for row in deactivations:
+        assert row.after is not None and row.after["is_active"] is False
+        assert "e2e user" in row.after["reason"]
+    by_job = next(r for r in deactivations if r.entity_id == str(referenced_id))
+    assert by_job.after is not None
+    assert by_job.after["refused_by"] == "fk_search_jobs_created_by_users"
+
+    # Running it again: nothing to delete, the two inactive users are matched again and
+    # stay exactly as they are (counted, not changed, `before` says already inactive).
+    again = reset_demo_data(db)
+    assert again.e2e_users_deleted == 0
+    assert again.e2e_users_deactivated == 2
+    db.expire_all()
+    later = [
+        r
+        for r in db.scalars(select(AuditLog).order_by(AuditLog.id))
+        if r.action == "user.updated" and r.before == {"is_active": False}
+    ]
+    assert len(later) == 2
+
+
 def before_opportunities(snapshot: dict[str, dict[str, Any]]) -> list[str]:
     return [
         f"{key}:{service}" for key, item in snapshot.items() for service in item["opportunities"]
