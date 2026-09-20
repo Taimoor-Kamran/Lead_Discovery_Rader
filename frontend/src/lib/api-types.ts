@@ -397,6 +397,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/leads/{opportunity_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lead Detail
+         * @description One lead, read-only. A sales rep gets 403 on a lead not assigned to them.
+         */
+        get: operations["lead_detail_api_v1_leads__opportunity_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/match-candidates": {
         parameters: {
             query?: never;
@@ -1433,10 +1453,23 @@ export interface components {
             status: components["schemas"]["AuditStatus"];
         };
         /**
+         * LeadDetail
+         * @description One approved lead, read-only: the business, the audit behind it, the claim itself
+         *     and who approved it. A sales rep may only open a lead assigned to them.
+         */
+        LeadDetail: {
+            audit: components["schemas"]["WebsiteAuditDetail"] | null;
+            business: components["schemas"]["BusinessDetail"];
+            lead: components["schemas"]["LeadRead"];
+            opportunity: components["schemas"]["ReviewOpportunity"];
+        };
+        /**
          * LeadRead
          * @description An approved, unsuppressed opportunity as a sales rep sees it. Business-level only.
          */
         LeadRead: {
+            /** Ai Rationale */
+            ai_rationale: string | null;
             /** Approved At */
             approved_at: string | null;
             /** Approved By */
@@ -1469,6 +1502,8 @@ export interface components {
             phone_e164: string | null;
             /** Reason */
             reason: string;
+            /** Rule Reason */
+            rule_reason: string | null;
             /** Score */
             score: number;
             /** Service */
@@ -1932,6 +1967,8 @@ export interface components {
             ai_agrees: boolean | null;
             /** Ai Classification Id */
             ai_classification_id: string | null;
+            /** Ai Rationale */
+            ai_rationale: string | null;
             /** Assigned To */
             assigned_to: string | null;
             /**
@@ -1972,6 +2009,8 @@ export interface components {
             /** Reason */
             reason: string;
             review_status: components["schemas"]["ReviewStatus"];
+            /** Rule Reason */
+            rule_reason: string | null;
             /** Score */
             score: number;
             score_components: components["schemas"]["ScoreComponentsRead"];
@@ -3013,6 +3052,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Page_LeadRead_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    lead_detail_api_v1_leads__opportunity_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                opportunity_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeadDetail"];
                 };
             };
             /** @description Validation Error */

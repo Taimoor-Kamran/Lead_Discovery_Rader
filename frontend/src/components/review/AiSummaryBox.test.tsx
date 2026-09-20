@@ -26,6 +26,11 @@ describe("AiSummaryBox", () => {
     expect(screen.getByTestId("ai-label").textContent).toContain(AI_LABEL);
     expect(container.querySelector("b")).toBeNull();
     expect(screen.getByTestId("ai-summary").textContent).toContain("<b>Family-run</b> plumber");
+    // Model, prompt and status live behind a Details disclosure, not in the headline.
+    const details = screen.getByTestId("ai-details");
+    expect(details.tagName).toBe("DETAILS");
+    expect(details.textContent).toContain("scripted-triage");
+    expect(details.textContent).toContain("classify-1");
   });
 
   it("says so when there is no classification", () => {

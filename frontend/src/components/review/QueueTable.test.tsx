@@ -22,8 +22,38 @@ describe("QueueTable", () => {
       "Round Rock, TX",
     ]);
     expect(screen.getByTestId("weak-hidden").textContent).toBe("1 weak signal hidden");
-    expect(rows[0].textContent).toContain("no_https");
-    expect(rows[0].textContent).toContain("website_design");
+    // Human wording on the page, the raw code in the tooltip only.
+    expect(rows[0].textContent).toContain("No HTTPS");
+    expect(rows[0].textContent).not.toContain("no_https");
+    expect(screen.getAllByTitle("no_https").length).toBeGreaterThan(0);
+    expect(rows[0].textContent).toContain("Website redesign");
+    expect(rows[0].textContent).not.toContain("website_design");
+    expect(rows[0].textContent).toContain("Audited");
+  });
+
+  it("shows one clear number per chip and keeps confidence in the tooltip; the score column is 0–100", () => {
+    render(
+      <QueueTable items={[queueItem()]} selected={new Set()} onToggle={() => {}} onToggleBusiness={() => {}} canSelect={false} />,
+    );
+    const chip = screen.getByTestId("service-chip");
+    expect(chip.textContent).toBe("Website redesignScore 72");
+    expect(chip.textContent).not.toContain("%");
+    expect(chip.getAttribute("title")).toContain("confidence 80%");
+    expect(chip.getAttribute("title")).toContain("website_design");
+    const row = screen.getByTestId("queue-row");
+    expect(row.querySelector("td:last-child")?.textContent).toBe("72");
+  });
+
+  it("hides the checkboxes until hover unless weak signals are shown", () => {
+    const { unmount } = render(
+      <QueueTable items={[queueItem()]} selected={new Set()} onToggle={() => {}} onToggleBusiness={() => {}} canSelect />,
+    );
+    for (const box of screen.getAllByRole("checkbox")) expect(box.className).toContain("group-hover:opacity-100");
+    unmount();
+    render(
+      <QueueTable items={[queueItem()]} selected={new Set()} onToggle={() => {}} onToggleBusiness={() => {}} canSelect showWeak />,
+    );
+    for (const box of screen.getAllByRole("checkbox")) expect(box.className).not.toContain("opacity-0");
   });
 
   it("says 'location unknown' rather than inventing one", () => {
@@ -46,7 +76,7 @@ describe("QueueTable", () => {
     render(
       <QueueTable items={[queueItem()]} selected={new Set()} onToggle={onToggle} onToggleBusiness={onToggleBusiness} canSelect />,
     );
-    fireEvent.click(screen.getByLabelText("Select Website design / redesign for Barton Creek Plumbing"));
+    fireEvent.click(screen.getByLabelText("Select Website redesign for Barton Creek Plumbing"));
     expect(onToggle).toHaveBeenCalledWith("opp-1");
     fireEvent.click(screen.getByLabelText("Select every opportunity of Barton Creek Plumbing"));
     expect(onToggleBusiness).toHaveBeenCalled();

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { ReviewDetail } from "@/lib/api";
-import { formatDateTime, orUnknown, place } from "@/lib/format";
+import { formatDateTime, formatPhone, orUnknown, place } from "@/lib/format";
 import { SafeLink } from "@/components/SafeLink";
 
 /** Left column: the business as survivorship shows it, with the provenance behind it. */
@@ -15,7 +15,7 @@ export function BusinessFacts({ detail }: { detail: ReviewDetail }) {
     ["Address", orUnknown(business.address_line1)],
     ["Postal code", orUnknown(business.postal_code)],
     ["Industry", orUnknown(business.industry)],
-    ["Public phone", orUnknown(business.phone_e164)],
+    ["Public phone", <span key="phone" title={business.phone_e164 ?? undefined}>{formatPhone(business.phone_e164)}</span>],
     [
       "Website",
       business.website ? <SafeLink href={business.website}>{business.website}</SafeLink> : "none",

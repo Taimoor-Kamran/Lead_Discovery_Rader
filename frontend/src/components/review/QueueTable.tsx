@@ -3,6 +3,7 @@
 import Link from "next/link";
 import type { QueueItem } from "@/lib/api";
 import { formatDateTime, percent, place, score } from "@/lib/format";
+import { auditStatusLabel, findingLabel, serviceLabel } from "@/lib/labels";
 import { SafeLink } from "@/components/SafeLink";
 
 type Props = {
@@ -11,6 +12,8 @@ type Props = {
   onToggle: (opportunityId: string) => void;
   onToggleBusiness: (item: QueueItem) => void;
   canSelect: boolean;
+  /** With "Show weak signals" on, the checkboxes are always visible; otherwise on hover. */
+  showWeak?: boolean;
 };
 
 const SOURCE_STYLE: Record<string, string> = {
@@ -27,8 +30,12 @@ const AUDIT_STYLE: Record<string, string> = {
   failed: "text-red-700",
 };
 
+/** Hidden until the row is hovered or the box is focused or ticked; never removed from the page. */
+const HOVER_ONLY = "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 checked:opacity-100";
+
 /** The queue: one row per business, city and state next to the name, service chips. */
-export function QueueTable({ items, selected, onToggle, onToggleBusiness, canSelect }: Props) {
+export function QueueTable({ items, selected, onToggle, onToggleBusiness, canSelect, showWeak = false }: Props) {
+  const checkboxClass = showWeak ? "" : HOVER_ONLY;
   if (!items.length) {
     return (
       <p className="rounded border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-600">
@@ -56,7 +63,7 @@ export function QueueTable({ items, selected, onToggle, onToggleBusiness, canSel
               item.opportunities.length > 0 &&
               item.opportunities.every((o) => selected.has(o.id));
             return (
-              <tr key={item.business_id} className="align-top hover:bg-slate-50" data-testid="queue-row">
+              <tr key={item.business_id} className="group align-top hover:bg-slate-50" data-testid="queue-row">
                 {canSelect ? (
                   <td className="px-3 py-2">
                     <input
@@ -64,6 +71,7 @@ export function QueueTable({ items, selected, onToggle, onToggleBusiness, canSel
                       aria-label={`Select every opportunity of ${item.display_name}`}
                       checked={allSelected}
                       onChange={() => onToggleBusiness(item)}
+                      className={checkboxClass}
                     />
                   </td>
                 ) : null}
@@ -90,21 +98,20 @@ export function QueueTable({ items, selected, onToggle, onToggleBusiness, canSel
                       <li key={opportunity.id}>
                         <label
                           className={`chip cursor-pointer ${SOURCE_STYLE[opportunity.source] ?? ""}`}
-                          title={`${opportunity.service_name} · source ${opportunity.source}`}
+                          title={`${opportunity.service} · confidence ${percent(opportunity.confidence)} · source ${opportunity.source}`}
+                          data-testid="service-chip"
                         >
                           {canSelect ? (
                             <input
                               type="checkbox"
-                              aria-label={`Select ${opportunity.service_name} for ${item.display_name}`}
+                              aria-label={`Select ${serviceLabel(opportunity.service)} for ${item.display_name}`}
                               checked={selected.has(opportunity.id)}
                               onChange={() => onToggle(opportunity.id)}
-                              className="mr-1"
+                              className={`mr-1 ${checkboxClass}`}
                             />
                           ) : null}
-                          <span className="font-medium">{opportunity.service}</span>
-                          <span className="text-slate-600">
-                            {score(opportunity.score)} · {percent(opportunity.confidence)}
-                          </span>
+                          <span className="font-medium">{serviceLabel(opportunity.service)}</span>
+                          <span className="text-slate-600">Score {score(opportunity.score)}</span>
                           {opportunity.weak ? <span className="text-amber-700">weak</span> : null}
                         </label>
                       </li>
@@ -119,8 +126,8 @@ export function QueueTable({ items, selected, onToggle, onToggleBusiness, canSel
                 <td className="px-3 py-2">
                   {item.latest_audit ? (
                     <div>
-                      <span className={AUDIT_STYLE[item.latest_audit.status] ?? ""}>
-                        {item.latest_audit.status}
+                      <span className={AUDIT_STYLE[item.latest_audit.status] ?? ""} title={item.latest_audit.status}>
+                        {auditStatusLabel(item.latest_audit.status)}
                       </span>
                       <div className="text-xs text-slate-500">
                         {formatDateTime(item.latest_audit.audited_at)}
@@ -133,13 +140,15 @@ export function QueueTable({ items, selected, onToggle, onToggleBusiness, canSel
                 <td className="px-3 py-2">
                   <ul className="flex flex-wrap gap-1">
                     {item.latest_audit?.top_findings.map((code) => (
-                      <li key={code} className="chip border-slate-200 bg-slate-50 text-slate-700">
-                        {code}
+                      <li key={code} className="chip border-slate-200 bg-slate-50 text-slate-700" title={code}>
+                        {findingLabel(code)}
                       </li>
                     ))}
                   </ul>
                 </td>
-                <td className="px-3 py-2 text-right font-mono">{score(item.top_score)}</td>
+                <td className="px-3 py-2 text-right font-mono" title={`raw ${item.top_score}`}>
+                  {score(item.top_score)}
+                </td>
               </tr>
             );
           })}

@@ -2,15 +2,10 @@
 
 import type { Decision, ReviewDecisionRead, ReviewOpportunity } from "@/lib/api";
 import { DECISION_LABELS, formatDateTime, percent, REASON_LABELS, score, STATUS_LABELS } from "@/lib/format";
+import { serviceLabel, sourceLabel } from "@/lib/labels";
 import { AiLabel } from "@/components/AiLabel";
-import { SafeLink } from "@/components/SafeLink";
-
-type Evidence = {
-  finding_code?: string;
-  text?: string | null;
-  url?: string | null;
-  source?: string;
-};
+import { EvidenceList, type Evidence } from "@/components/review/EvidenceList";
+import { ReasonLines } from "@/components/review/ReasonLines";
 
 const SOURCE_STYLE: Record<string, string> = {
   rules: "border-slate-300 bg-slate-100 text-slate-800",
@@ -37,6 +32,10 @@ const COMPONENTS: [keyof ReviewOpportunity["score_components"], string][] = [
 
 export const OPEN_STATUSES = new Set(["pending", "needs_enrichment"]);
 
+export function opportunityAnchor(id: string): string {
+  return `opportunity-${id}`;
+}
+
 type Props = {
   opportunity: ReviewOpportunity;
   focused: boolean;
@@ -60,34 +59,75 @@ export function OpportunityCard({
   const open = OPEN_STATUSES.has(opportunity.review_status);
   const evidence = (opportunity.evidence as Evidence[]) ?? [];
   const aiInvolved = opportunity.source !== "rules";
+  const showDecisions = canDecide && open;
 
   return (
     <article
+      id={opportunityAnchor(opportunity.id)}
       tabIndex={0}
       onFocus={onFocus}
       onClick={onFocus}
       aria-current={focused ? "true" : undefined}
       data-testid="opportunity-card"
-      className={`flex flex-col gap-3 rounded-lg border bg-white p-4 ${
+      className={`flex scroll-mt-4 flex-col gap-3 rounded-lg border bg-white p-4 ${
         focused ? "border-teal-600 ring-2 ring-teal-300" : "border-slate-200"
       }`}
     >
-      <header className="flex flex-wrap items-center gap-2">
-        <h3 className="text-base font-semibold text-navy">{opportunity.service_name}</h3>
-        <span className={`chip ${SOURCE_STYLE[opportunity.source] ?? ""}`} title="Where this claim came from">
-          {opportunity.source}
-        </span>
-        <span className={`chip ${STATUS_STYLE[opportunity.review_status] ?? ""}`}>
-          {STATUS_LABELS[opportunity.review_status] ?? opportunity.review_status}
-        </span>
-        {opportunity.weak ? <span className="chip border-amber-300 bg-amber-50 text-amber-900">weak signal</span> : null}
-        <span className="ml-auto font-mono text-sm">
-          score {score(opportunity.score)} · confidence {percent(opportunity.confidence)}
-        </span>
-      </header>
+      {/* Sticks to the top of the viewport while the card is in view, so the decision is
+          always one click away however long the evidence below runs. */}
+      <div
+        className="sticky top-0 z-10 -mx-4 -mt-4 flex flex-col gap-2 rounded-t-lg border-b border-slate-100 bg-white px-4 pb-2 pt-4"
+        data-testid="card-top"
+      >
+        <header className="flex flex-wrap items-center gap-2">
+          <h3 className="text-base font-semibold text-navy" title={opportunity.service}>
+            {serviceLabel(opportunity.service)}
+          </h3>
+          <span
+            className={`chip ${SOURCE_STYLE[opportunity.source] ?? ""}`}
+            title={`Where this claim came from: ${opportunity.source}`}
+          >
+            {sourceLabel(opportunity.source)}
+          </span>
+          <span className={`chip ${STATUS_STYLE[opportunity.review_status] ?? ""}`}>
+            {STATUS_LABELS[opportunity.review_status] ?? opportunity.review_status}
+          </span>
+          {opportunity.weak ? <span className="chip border-amber-300 bg-amber-50 text-amber-900">weak signal</span> : null}
+          <span
+            className="ml-auto chip border-navy bg-navy font-mono text-white"
+            title={`Confidence ${percent(opportunity.confidence)} · raw score ${opportunity.score}`}
+            data-testid="score-chip"
+          >
+            Score {score(opportunity.score)}
+          </span>
+        </header>
+        {showDecisions ? (
+          <div className="flex flex-wrap gap-2" aria-label="Decisions">
+            <button type="button" className="btn-primary" disabled={busy} onClick={() => onDecide("approve")}>
+              Approve
+            </button>
+            <button type="button" className="btn-secondary" disabled={busy} onClick={() => onDecide("reject")}>
+              Reject
+            </button>
+            <button type="button" className="btn-secondary" disabled={busy} onClick={() => onDecide("needs_enrichment")}>
+              Needs enrichment
+            </button>
+            <button type="button" className="btn-secondary" disabled={busy} onClick={() => onDecide("duplicate")}>
+              Duplicate
+            </button>
+            <button type="button" className="btn-secondary" disabled={busy} onClick={() => onDecide("not_a_fit")}>
+              Not a fit
+            </button>
+          </div>
+        ) : null}
+      </div>
 
       {aiInvolved ? <AiLabel /> : null}
-      <p className="text-sm">{opportunity.reason}</p>
+      <ReasonLines
+        ruleReason={opportunity.rule_reason}
+        aiRationale={opportunity.ai_rationale}
+        fallback={opportunity.reason}
+      />
 
       <div className="grid grid-cols-[8rem_1fr_3rem] items-center gap-x-2 gap-y-1 text-xs" aria-label="Score components">
         {COMPONENTS.map(([key, label]) => {
@@ -116,55 +156,32 @@ export function OpportunityCard({
 
       <div>
         <h4 className="text-xs font-medium uppercase tracking-wide text-slate-500">Evidence</h4>
-        {evidence.length ? (
-          <ul className="mt-1 flex flex-col gap-1 text-sm">
-            {evidence.map((item, index) => (
-              <li key={index} className="rounded border border-slate-100 bg-slate-50 p-2" data-testid="evidence">
-                <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
-                  <span className="font-mono">{item.finding_code ?? "—"}</span>
-                  {item.source ? <span className="chip border-slate-200 bg-white">{item.source}</span> : null}
-                  {item.source === "ai" ? <AiLabel /> : null}
-                </div>
-                {item.text ? <blockquote className="mt-1 whitespace-pre-wrap">{item.text}</blockquote> : null}
-                {item.url ? (
-                  <p className="mt-1 text-xs">
-                    Source: <SafeLink href={item.url} />
-                  </p>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-sm text-slate-600">No evidence recorded.</p>
-        )}
+        <EvidenceList items={evidence} />
       </div>
 
       {opportunity.ai ? (
-        <p className="text-xs text-slate-600">
-          AI provenance: {opportunity.ai.model} · {opportunity.ai.prompt_version} · {opportunity.ai.status}
-          {opportunity.ai.escalated ? " · escalated" : ""}
-          {opportunity.ai_agrees === false ? " · the model did not name this service" : ""}
-        </p>
-      ) : null}
-
-      {canDecide && open ? (
-        <div className="flex flex-wrap gap-2" aria-label="Decisions">
-          <button type="button" className="btn-primary" disabled={busy} onClick={() => onDecide("approve")}>
-            Approve
-          </button>
-          <button type="button" className="btn-secondary" disabled={busy} onClick={() => onDecide("reject")}>
-            Reject
-          </button>
-          <button type="button" className="btn-secondary" disabled={busy} onClick={() => onDecide("needs_enrichment")}>
-            Needs enrichment
-          </button>
-          <button type="button" className="btn-secondary" disabled={busy} onClick={() => onDecide("duplicate")}>
-            Duplicate
-          </button>
-          <button type="button" className="btn-secondary" disabled={busy} onClick={() => onDecide("not_a_fit")}>
-            Not a fit
-          </button>
-        </div>
+        <details className="text-xs text-slate-600" data-testid="ai-details">
+          <summary className="cursor-pointer select-none text-slate-700">Details</summary>
+          <dl className="mt-1 grid grid-cols-[7rem_1fr] gap-y-0.5">
+            <dt>Model</dt>
+            <dd className="font-mono">{opportunity.ai.model}</dd>
+            <dt>Prompt</dt>
+            <dd className="font-mono">{opportunity.ai.prompt_version}</dd>
+            <dt>Status</dt>
+            <dd>
+              {opportunity.ai.status}
+              {opportunity.ai.escalated ? " · escalated" : ""}
+            </dd>
+            {opportunity.ai_agrees === false ? (
+              <>
+                <dt>Agreement</dt>
+                <dd>The model did not name this service.</dd>
+              </>
+            ) : null}
+            <dt>Confidence</dt>
+            <dd>{percent(opportunity.confidence)}</dd>
+          </dl>
+        </details>
       ) : null}
 
       {opportunity.history.length ? (

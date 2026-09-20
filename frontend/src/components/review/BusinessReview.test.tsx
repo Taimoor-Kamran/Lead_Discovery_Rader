@@ -115,6 +115,32 @@ describe("BusinessReview", () => {
     expect(router.push).not.toHaveBeenCalled();
   });
 
+  it("summarises the open opportunities at the top with jump links to each card", async () => {
+    routeFetch({
+      "GET /review-queue/biz-1": {
+        status: 200,
+        body: reviewDetail({
+          opportunities: [
+            reviewOpportunity(),
+            reviewOpportunity({ id: "opp-2", service: "seo_gbp", service_name: "SEO", score: 0.55 }),
+            reviewOpportunity({ id: "opp-3", service: "booking_setup", review_status: "rejected" }),
+          ],
+        }),
+      },
+      "GET /users": REPS,
+    });
+    renderWithProviders(<BusinessReview businessId="biz-1" />);
+    await waitFor(() => expect(screen.getByTestId("open-summary")).toBeTruthy());
+    const summary = screen.getByTestId("open-summary");
+    const links = Array.from(summary.querySelectorAll("a"));
+    expect(links.map((a) => a.getAttribute("href"))).toEqual(["#opportunity-opp-1", "#opportunity-opp-2"]);
+    expect(links.map((a) => a.textContent)).toEqual(["Website redesignScore 72", "SEO / Google profileScore 55"]);
+    expect(summary.textContent).not.toContain("Online booking");
+    expect(document.getElementById("opportunity-opp-2")).not.toBeNull();
+    // The business phone reads the way people dial it.
+    expect(screen.getByText("(512) 555-0100")).toBeTruthy();
+  });
+
   it("keyboard: a opens approve for the focused opportunity, but not while typing; j goes next", async () => {
     routeFetch({
       "GET /review-queue/biz-1": { status: 200, body: reviewDetail() },

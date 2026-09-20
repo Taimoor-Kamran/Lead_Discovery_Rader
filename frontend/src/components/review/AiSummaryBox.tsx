@@ -19,10 +19,7 @@ export function AiSummaryBox({ ai }: { ai: AISummary | null | undefined }) {
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <AiLabel />
-        <span className="text-xs text-slate-600">
-          {ai.model} · {ai.prompt_version} · {ai.status}
-          {ai.escalated ? " · escalated" : ""} · {formatDateTime(ai.created_at)}
-        </span>
+        <span className="text-xs text-slate-600">{formatDateTime(ai.created_at)}</span>
       </div>
       <p className="mt-2 whitespace-pre-wrap">
         {ai.business_summary ?? "No summary (expired or not produced)."}
@@ -42,6 +39,20 @@ export function AiSummaryBox({ ai }: { ai: AISummary | null | undefined }) {
           </>
         ) : null}
       </dl>
+      <details className="mt-2 text-xs text-slate-600" data-testid="ai-details">
+        <summary className="cursor-pointer select-none text-slate-700">Details</summary>
+        <dl className="mt-1 grid grid-cols-[7rem_1fr] gap-y-0.5">
+          <dt>Model</dt>
+          <dd className="font-mono">{ai.model}</dd>
+          <dt>Prompt</dt>
+          <dd className="font-mono">{ai.prompt_version}</dd>
+          <dt>Status</dt>
+          <dd>
+            {ai.status}
+            {ai.escalated ? " · escalated" : ""}
+          </dd>
+        </dl>
+      </details>
     </section>
   );
 }

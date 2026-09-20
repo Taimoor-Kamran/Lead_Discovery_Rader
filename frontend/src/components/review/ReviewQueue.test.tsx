@@ -22,13 +22,18 @@ describe("ReviewQueue page", () => {
 
     await waitFor(() => expect(screen.getByTestId("weak-hidden")).toBeTruthy());
     expect(calls[0].url).toContain("include_weak=false");
-    expect(screen.queryByText("ads_social")).toBeNull();
+    const chips = () => screen.getAllByTestId("service-chip").map((chip) => chip.textContent ?? "");
+    expect(chips().some((text) => text.includes("Ads & social"))).toBe(false);
+    // Selection boxes stay out of the way until the row is hovered…
+    expect(screen.getByLabelText("Select Website redesign for Barton Creek Plumbing").className).toContain("group-hover:opacity-100");
 
     fireEvent.click(screen.getByLabelText("Show weak signals"));
 
-    await waitFor(() => expect(screen.getByText("ads_social")).toBeTruthy());
+    await waitFor(() => expect(chips().some((text) => text.includes("Ads & social"))).toBe(true));
     expect(calls.at(-1)?.url).toContain("include_weak=true");
     expect(screen.queryByTestId("weak-hidden")).toBeNull();
+    // …and are always shown once weak signals are on, because that is batch-triage mode.
+    expect(screen.getByLabelText("Select Ads & social for Barton Creek Plumbing").className).not.toContain("opacity-0");
   });
 
   it("offers batch reject and not-a-fit only, and only with a selection", async () => {
@@ -41,7 +46,7 @@ describe("ReviewQueue page", () => {
     expect(buttons).toEqual(["Reject selected", "Not a fit selected"]);
     expect(screen.getByRole("button", { name: "Reject selected" })).toHaveProperty("disabled", true);
 
-    fireEvent.click(screen.getByLabelText("Select Website design / redesign for Barton Creek Plumbing"));
+    fireEvent.click(screen.getByLabelText("Select Website redesign for Barton Creek Plumbing"));
     expect(screen.getByRole("button", { name: "Reject selected" })).toHaveProperty("disabled", false);
     fireEvent.click(screen.getByRole("button", { name: "Reject selected" }));
     expect(screen.getByRole("dialog").textContent).toContain("Reject");

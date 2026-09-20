@@ -144,6 +144,8 @@ export function reviewOpportunity(overrides: Partial<ReviewOpportunity> = {}): R
     decided_by: null,
     history: [],
     weak: false,
+    rule_reason: "Audit found the site is served over http.",
+    ai_rationale: null,
     ...overrides,
   };
 }

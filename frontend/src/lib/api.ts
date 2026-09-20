@@ -36,6 +36,7 @@ export type Decision = Schemas["Decision"];
 export type ReviewStatus = Schemas["ReviewStatus"];
 export type LeadRead = Schemas["LeadRead"];
 export type LeadPage = Schemas["Page_LeadRead_"];
+export type LeadDetail = Schemas["LeadDetail"];
 export type MatchCandidate = Schemas["MatchCandidateDetail"];
 export type MatchCandidatePage = Schemas["Page_MatchCandidateDetail_"];
 export type SuppressionRead = Schemas["SuppressionRead"];
@@ -245,6 +246,10 @@ export function getLeads(query: {
   return get<LeadPage>("/leads", query);
 }
 
+export function getLeadDetail(opportunityId: string): Promise<LeadDetail> {
+  return get<LeadDetail>(`/leads/${opportunityId}`);
+}
+
 export function getSalesReps(): Promise<UserPage> {
   return get<UserPage>("/users", { role: "sales_rep", limit: 200 });
 }
@@ -294,10 +299,10 @@ export function getBusinessOpportunities(
 }
 
 export const SERVICES: readonly { key: string; name: string }[] = [
-  { key: "website_design", name: "Website design / redesign" },
-  { key: "seo_gbp", name: "SEO / Google Business Profile" },
-  { key: "booking_setup", name: "Online booking setup" },
-  { key: "ads_social", name: "Ads (Google/Meta) & social media" },
+  { key: "website_design", name: "Website redesign" },
+  { key: "seo_gbp", name: "SEO / Google profile" },
+  { key: "booking_setup", name: "Online booking" },
+  { key: "ads_social", name: "Ads & social" },
 ];
 
 export const REJECT_REASONS = [

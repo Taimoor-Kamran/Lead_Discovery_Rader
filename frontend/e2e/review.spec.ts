@@ -2,8 +2,10 @@ import { expect, test, type Page } from "@playwright/test";
 
 /**
  * The spec's smoke: reviewer approves Barton Creek `website_design` assigning rep1 →
- * rep1 sees it in My leads → reviewer marks another business do-not-contact → it leaves
- * the queue. Runs against the demo stack; nothing here talks to a live external API.
+ * rep1 sees it in My leads and opens the read-only lead page → reviewer marks another
+ * business do-not-contact → it leaves the queue. Runs against the demo stack, which
+ * `make e2e` resets first (`make reset-demo-data`), so no manual click is assumed. Nothing
+ * here talks to a live external API.
  */
 
 const PASSWORD = process.env.DEMO_USERS_PASSWORD ?? "";
@@ -34,11 +36,21 @@ test("reviewer approves a lead, the rep sees it, do-not-contact removes a busine
     const row = page.getByTestId("queue-row").filter({ hasText: BARTON });
     await expect(row).toHaveCount(1);
     await expect(row.getByTestId("queue-place")).toContainText("Austin, TX");
+    // Human labels and one number per chip: "Website redesign · Score NN", never a raw code.
+    const chip = row.getByTestId("service-chip").filter({ hasText: "Website redesign" });
+    await expect(chip).toHaveCount(1);
+    await expect(chip).toContainText(/Score \d{1,3}$/);
+    await expect(row).not.toContainText("website_design");
     await row.getByRole("link", { name: /Barton Creek/ }).click();
     await expect(page.getByRole("heading", { level: 1 })).toContainText(BARTON);
     await expect(page.getByTestId("ai-label").first()).toBeVisible();
+    await expect(page.getByTestId("open-summary")).toContainText("Website redesign");
+    await expect(page.getByText("(512) 555-0102")).toBeVisible();
 
-    const card = page.getByTestId("opportunity-card").filter({ hasText: "Website design / redesign" });
+    const card = page.getByTestId("opportunity-card").filter({ hasText: "Website redesign" });
+    await expect(card.getByTestId("rule-reason")).toBeVisible();
+    await expect(card.getByTestId("ai-rationale")).toBeVisible();
+    await expect(card.getByTestId("ai-agrees").first()).toBeVisible();
     await card.getByRole("button", { name: "Approve" }).click();
     await page.getByLabel(/Assign to sales rep/).selectOption({ label: "rep1@example.com" });
     await page.getByRole("dialog").getByRole("button", { name: "Approve" }).click();
@@ -52,7 +64,21 @@ test("reviewer approves a lead, the rep sees it, do-not-contact removes a busine
     const lead = page.getByTestId("lead-row").filter({ hasText: BARTON });
     await expect(lead).toHaveCount(1);
     await expect(lead.getByTestId("lead-place")).toContainText("Austin, TX");
+    await expect(lead).toContainText("Website redesign");
+    await expect(lead).toContainText("(512) 555-0102");
     await expect(page.getByRole("navigation", { name: "Main" })).not.toContainText("Review queue");
+
+    // The name opens the read-only lead page: facts, plain-language findings, approval.
+    await lead.getByRole("link", { name: BARTON }).click();
+    await expect(page).toHaveURL(/\/leads\/[0-9a-f-]{36}$/);
+    await expect(page.getByTestId("lead-detail")).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1 })).toContainText(BARTON);
+    await expect(page.getByTestId("approval")).toContainText("reviewer@example.com");
+    await expect(page.getByTestId("approval")).toContainText("rep1@example.com");
+    await expect(page.getByTestId("finding").first()).toBeVisible();
+    await expect(page.getByTestId("lead-detail").getByRole("button")).toHaveCount(0);
+    await page.getByRole("link", { name: "← Leads" }).click();
+    await expect(page).toHaveURL(/\/leads$/);
     await page.goto("/review");
     await expect(page.getByText("Not available for your role")).toBeVisible();
     await signOut(page);

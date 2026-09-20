@@ -8,7 +8,7 @@ import { AiSummaryBox } from "@/components/review/AiSummaryBox";
 import { AuditPanel } from "@/components/review/AuditPanel";
 import { BusinessFacts } from "@/components/review/BusinessFacts";
 import { DecisionDialog, type Assignee, type DecisionFields } from "@/components/review/DecisionDialog";
-import { OPEN_STATUSES, OpportunityCard } from "@/components/review/OpportunityCard";
+import { OPEN_STATUSES, OpportunityCard, opportunityAnchor } from "@/components/review/OpportunityCard";
 import { ShortcutsHelp } from "@/components/review/ShortcutsHelp";
 import { useShortcuts } from "@/hooks/useShortcuts";
 import {
@@ -25,6 +25,8 @@ import {
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { CONFLICT_MESSAGE, QUEUE_ORDER_KEY } from "@/lib/review";
+import { score } from "@/lib/format";
+import { serviceLabel } from "@/lib/labels";
 import { canDecide, canPickAssignee } from "@/lib/roles";
 
 export { CONFLICT_MESSAGE, QUEUE_ORDER_KEY };
@@ -90,7 +92,8 @@ export function BusinessReview({ businessId }: { businessId: string }) {
   const nextId = position >= 0 ? order[position + 1] ?? null : null;
   const previousId = position > 0 ? order[position - 1] ?? null : null;
   const opportunities = detail?.opportunities ?? [];
-  const openCount = opportunities.filter((o) => OPEN_STATUSES.has(o.review_status)).length;
+  const openOpportunities = opportunities.filter((o) => OPEN_STATUSES.has(o.review_status));
+  const openCount = openOpportunities.length;
   const focusedOpportunity = opportunities[Math.min(focused, Math.max(0, opportunities.length - 1))];
 
   function goNext() {
@@ -231,6 +234,27 @@ export function BusinessReview({ businessId }: { businessId: string }) {
           ) : null}
         </div>
       </header>
+
+      {openOpportunities.length ? (
+        <nav
+          aria-label="Open opportunities"
+          className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+          data-testid="open-summary"
+        >
+          <span className="text-slate-600">Open:</span>
+          {openOpportunities.map((opportunity) => (
+            <a
+              key={opportunity.id}
+              href={`#${opportunityAnchor(opportunity.id)}`}
+              className="chip border-slate-300 bg-slate-50 text-navy hover:border-teal-600"
+              title={`${opportunity.service} · jump to this opportunity`}
+            >
+              <span className="font-medium">{serviceLabel(opportunity.service)}</span>
+              <span className="text-slate-600">Score {score(opportunity.score)}</span>
+            </a>
+          ))}
+        </nav>
+      ) : null}
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(18rem,1fr)_minmax(20rem,1.2fr)_minmax(24rem,1.6fr)]">
         <BusinessFacts detail={detail} />

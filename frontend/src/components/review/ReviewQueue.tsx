@@ -171,6 +171,7 @@ export function ReviewQueue() {
         onToggle={toggle}
         onToggleBusiness={toggleBusiness}
         canSelect={decider}
+        showWeak={filters.include_weak}
       />
 
       <div className="flex items-center gap-3 text-sm text-slate-600">
