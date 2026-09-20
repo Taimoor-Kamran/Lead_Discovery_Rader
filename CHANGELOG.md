@@ -55,8 +55,8 @@ Format: `## [vX.Y.Z] - YYYY-MM-DD` followed by Added / Changed / Fixed.
 
 - `/crm` scheduled and held rows show the approved services before the first sync.
 - `pytest-xdist`: one PostgreSQL container, one database per worker; `make test` runs
-  `-n auto` (`TEST_ARGS=-n0` for serial). `make check` went from 9 min 59 s to the time
-  recorded in the spec's implementation notes.
+  `-n auto` (`TEST_ARGS=-n0` for serial). `make check` went from 9 min 59 s to 6 min 28 s
+  on the dev machine (backend suite 535 s → 344 s).
 - `make e2e` checks `CRM_DESTINATION=fake` first and explains what to do otherwise.
 - Dependencies: lxml 6.1, pytest 9 (advisories), pytest-asyncio 1.x, croniter, types-croniter,
   pytest-xdist, pip-audit, httpx2 (removes the Starlette TestClient deprecation); ESLint

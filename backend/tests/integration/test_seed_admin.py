@@ -118,3 +118,15 @@ def test_seed_demo_users_refuses_outside_development_and_without_a_password(
     assert main(["seed-demo-users"]) == 2
     db.expire_all()
     assert db.scalar(select(func.count()).select_from(User)) == 0
+
+
+def test_seed_admin_explains_an_unusable_email(
+    db: Session, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("ADMIN_EMAIL", "ops@agency.test")  # a reserved TLD
+    monkeypatch.setenv("ADMIN_PASSWORD", TEST_PASSWORD)
+
+    assert main(["seed-admin"]) == 2
+
+    assert "not usable" in capsys.readouterr().out
+    assert db.scalar(select(func.count()).select_from(User)) == 0

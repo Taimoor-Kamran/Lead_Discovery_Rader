@@ -49,8 +49,18 @@ def seed_admin(argv: list[str]) -> int:
         password = secrets.token_urlsafe(GENERATED_PASSWORD_BYTES)
         generated = True
 
+    from pydantic import ValidationError
+
     with session_scope() as session:
-        user, created = ensure_admin(session, email, password, must_change_password=generated)
+        try:
+            user, created = ensure_admin(session, email, password, must_change_password=generated)
+        except ValidationError as exc:
+            problems = "; ".join(str(err.get("msg", "")) for err in exc.errors())
+            print(f"ADMIN_EMAIL / ADMIN_PASSWORD are not usable: {problems}")
+            return 2
+        except ValidationFailedError as exc:
+            print(f"{exc.message}. Nothing was changed.")
+            return 2
         user_id = str(user.id)
 
     action = "created" if created else "promoted to admin"
