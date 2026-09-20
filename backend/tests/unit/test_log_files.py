@@ -68,3 +68,27 @@ def test_no_log_dir_means_stdout_only(
 
     assert not any(isinstance(h, logging.FileHandler) for h in logging.getLogger().handlers)
     assert os.environ.get("LOG_DIR") == ""
+
+
+def test_an_unwritable_log_dir_falls_back_to_stdout(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    restore_root_logger: object,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    blocked = tmp_path / "blocked"
+    blocked.mkdir()
+    blocked.chmod(0o500)
+    monkeypatch.setenv("LOG_DIR", str(blocked))
+    monkeypatch.setenv("LOG_FILE", "api.log")
+    get_settings.cache_clear()
+    try:
+        configure_logging()
+        get_logger("app.test").info("still here")
+    finally:
+        blocked.chmod(0o700)
+
+    assert not any(isinstance(h, logging.FileHandler) for h in logging.getLogger().handlers)
+    printed = capsys.readouterr().out
+    assert "log file is not writable" in printed
+    assert "still here" in printed

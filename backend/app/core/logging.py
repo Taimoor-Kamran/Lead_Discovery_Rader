@@ -172,11 +172,18 @@ def configure_logging() -> None:
         if isinstance(existing, logging.FileHandler):
             existing.close()
     root.addHandler(handler)
-    if settings.log_dir.strip():
-        root.addHandler(
-            file_handler(settings.log_dir.strip(), settings.log_file, settings.log_keep_days)
-        )
     root.setLevel(settings.log_level.upper())
+    if settings.log_dir.strip():
+        try:
+            root.addHandler(
+                file_handler(settings.log_dir.strip(), settings.log_file, settings.log_keep_days)
+            )
+        except OSError as exc:
+            # A log file must never take the service down; stdout still has every line.
+            root.warning(
+                "log file is not writable; logging to stdout only",
+                extra={"log_dir": settings.log_dir, "error": f"{type(exc).__name__}: {exc}"},
+            )
 
     for noisy in ("uvicorn", "uvicorn.access", "uvicorn.error"):
         logger = logging.getLogger(noisy)

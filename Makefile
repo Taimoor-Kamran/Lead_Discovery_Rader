@@ -49,7 +49,10 @@ install: ## Install backend and frontend dependencies
 	$(UV) sync --all-groups
 	$(PNPM) install
 
+# ./backups and ./logs are bind-mounted into the api and worker containers, which run as an
+# unprivileged user. Created here (writable) so Docker does not create them as root.
 up: $(ENV_DEP) ## Build and start the whole stack, waiting until it is healthy
+	@mkdir -p backups logs && (chmod a+rwx backups logs 2>/dev/null || true)
 	$(COMPOSE) up --build --detach --wait
 
 down: ## Stop the stack (add ARGS=-v to drop the volumes too)
