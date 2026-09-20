@@ -10,6 +10,7 @@ from app.modules.audit_web.models import WebsiteAudit
 from app.modules.auth.models import User
 from app.modules.businesses.models import Business, BusinessFieldValue
 from app.modules.compliance.models import Suppression
+from app.modules.crm.models import CrmLead, CrmLeadOpportunity, CrmSyncAttempt, FakeCrmRecord
 from app.modules.discovery.models import ApiCall, DiscoveredRecord, RecordSighting
 from app.modules.jobs.models import JobRun, SearchJob
 from app.modules.opportunities.models import Opportunity
@@ -24,7 +25,11 @@ __all__ = [
     "Base",
     "Business",
     "BusinessFieldValue",
+    "CrmLead",
+    "CrmLeadOpportunity",
+    "CrmSyncAttempt",
     "DiscoveredRecord",
+    "FakeCrmRecord",
     "JobRun",
     "MatchCandidate",
     "Opportunity",

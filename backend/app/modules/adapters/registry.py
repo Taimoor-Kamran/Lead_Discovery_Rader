@@ -102,8 +102,9 @@ def service_sources() -> list["ServiceSourceSpec"]:
     """
     from app.modules.ai.openai_client import openai_service_source
     from app.modules.audit_web.psi import pagespeed_service_source
+    from app.modules.crm.airtable_adapter import airtable_service_source
 
-    return [pagespeed_service_source(), openai_service_source()]
+    return [pagespeed_service_source(), openai_service_source(), airtable_service_source()]
 
 
 def sync_sources(session: Session) -> list[Source]:

@@ -10,6 +10,7 @@ from app.modules.audit_web.models import AuditStatus
 from app.modules.audit_web.schemas import WebsiteAuditDetail
 from app.modules.businesses.schemas import BusinessDetail
 from app.modules.compliance.schemas import SuppressionRead
+from app.modules.crm.schemas import CrmLeadStatusRead, CrmSyncAttemptRead
 from app.modules.opportunities.models import OpportunitySource, ReviewStatus
 from app.modules.opportunities.schemas import OpportunityDetail
 from app.modules.review.models import Decision
@@ -194,6 +195,8 @@ class LeadRead(BaseModel):
     top_evidence: dict[str, Any] | None
     rule_reason: str | None
     ai_rationale: str | None
+    # Where the business's CRM record stands (v0.7.0). Null until a sync was scheduled.
+    crm: CrmLeadStatusRead | None = None
 
 
 class LeadDetail(BaseModel):
@@ -204,3 +207,5 @@ class LeadDetail(BaseModel):
     business: BusinessDetail
     audit: WebsiteAuditDetail | None
     opportunity: ReviewOpportunity
+    # Every CRM sync attempt for the business, newest first (v0.7.0).
+    crm_history: list[CrmSyncAttemptRead] = []

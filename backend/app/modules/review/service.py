@@ -42,6 +42,8 @@ from app.modules.businesses import service as businesses
 from app.modules.businesses.models import Business
 from app.modules.compliance import service as compliance
 from app.modules.compliance.models import SuppressionSource
+from app.modules.crm import service as crm
+from app.modules.crm.schemas import CrmLeadStatusRead
 from app.modules.opportunities import service as opportunities
 from app.modules.opportunities.catalogue import SERVICES
 from app.modules.opportunities.models import Opportunity, OpportunitySource, ReviewStatus
@@ -273,6 +275,11 @@ def _apply(
     if decision is Decision.approve:
         opportunity.assigned_to = assigned_to
     session.flush()
+    if decision is Decision.approve:
+        # The CRM sync waits for the undo window; an undone approval never leaves.
+        crm.on_business_changed(
+            session, opportunity.business_id, actor_id=actor.id, now=now, approval=True
+        )
     audit_log.record(
         session,
         action="opportunity.reviewed",
@@ -539,6 +546,9 @@ def _restore(
     row.undone_at = now
     row.undone_by = actor.id
     session.flush()
+    if row.decision is Decision.approve:
+        # Cancels a scheduled sync, or takes the service back out of a record already sent.
+        crm.on_business_changed(session, opportunity.business_id, actor_id=actor.id, now=now)
     audit_log.record(
         session,
         action="opportunity.review_undone",
@@ -1050,8 +1060,12 @@ def list_leads(
 
     people = _emails(session, [o.decided_by for o, _ in rows] + [o.assigned_to for o, _ in rows])
     outputs = _ai_outputs(session, [o for o, _ in rows])
+    crm_blocks = crm.status_blocks(session, [business.id for _, business in rows])
     return Page[LeadRead](
-        items=[_lead(opportunity, business, people, outputs) for opportunity, business in rows],
+        items=[
+            _lead(opportunity, business, people, outputs, crm_blocks.get(business.id))
+            for opportunity, business in rows
+        ],
         next_cursor=next_cursor,
     )
 
@@ -1091,8 +1105,10 @@ def lead_detail(
     )
     outputs = _ai_outputs(session, [row])
     latest = audits.latest_audit(session, business.id)
+    crm_block = crm.status_blocks(session, [business.id]).get(business.id)
     return LeadDetail(
-        lead=_lead(row, business, people, outputs),
+        crm_history=crm.attempts_for(session, crm_block.id) if crm_block is not None else [],
+        lead=_lead(row, business, people, outputs, crm_block),
         business=businesses.detail(session, business),
         audit=audits.detail(latest, include_page_text=False) if latest is not None else None,
         opportunity=_review_opportunity(
@@ -1114,6 +1130,7 @@ def _lead(
     business: Business,
     people: dict[uuid.UUID, str],
     outputs: dict[uuid.UUID, dict[str, Any]],
+    crm_block: CrmLeadStatusRead | None = None,
 ) -> LeadRead:
     rule_reason, ai_rationale = split_reason(opportunity, _output_of(opportunity, outputs))
     return LeadRead(
@@ -1138,6 +1155,7 @@ def _lead(
         top_evidence=opportunity.evidence[0] if opportunity.evidence else None,
         rule_reason=rule_reason,
         ai_rationale=ai_rationale,
+        crm=crm_block,
     )
 
 

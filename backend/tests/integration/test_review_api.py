@@ -897,6 +897,16 @@ def test_no_contact_data_beyond_the_business_fields_reaches_a_lead(
         "top_evidence",
         "rule_reason",
         "ai_rationale",
+        "crm",
+    }
+    # The CRM block is about the record, never about a person.
+    assert set(lead["crm"]) == {
+        "id",
+        "status",
+        "external_url",
+        "last_synced_at",
+        "due_at",
+        "last_error",
     }
 
 

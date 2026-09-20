@@ -182,10 +182,15 @@ class ApiHttpClient:
             if status == httpx.codes.TOO_MANY_REQUESTS:
                 rate_limited += 1
                 if rate_limited >= self._max_attempts:
+                    # The header travels with the error so a caller that schedules its own
+                    # retries (the CRM sync) can honour it too.
                     raise RateLimitedError(
                         f"{self.source} is rate limiting this client and did not recover after "
                         f"{rate_limited} attempts",
-                        details={"attempts": rate_limited},
+                        details={
+                            "attempts": rate_limited,
+                            "retry_after_seconds": self._retry_after_header(response),
+                        },
                         source=self.source,
                     )
                 self._sleeper(self._retry_after(response, rate_limited))
@@ -230,11 +235,16 @@ class ApiHttpClient:
 
     def _retry_after(self, response: httpx.Response, failures: int) -> float:
         """Honour `Retry-After` when the header is a sane number of seconds."""
+        seconds = self._retry_after_header(response)
+        return self._backoff(failures) if seconds is None else seconds
+
+    @staticmethod
+    def _retry_after_header(response: httpx.Response) -> float | None:
         raw = response.headers.get("Retry-After", "").strip()
         try:
             seconds = float(raw)
         except ValueError:
-            return self._backoff(failures)
+            return None
         return min(max(seconds, 0.0), MAX_RETRY_AFTER_SECONDS)
 
     def _error_body(self, response: httpx.Response) -> str:

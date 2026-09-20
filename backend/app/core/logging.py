@@ -29,6 +29,7 @@ SENSITIVE_KEYS = frozenset(
         "api_key",
         "x-goog-api-key",
         "google_places_api_key",
+        "airtable_token",
         "cookie",
         "set-cookie",
     }
@@ -50,6 +51,7 @@ def _literal_secrets() -> list[str]:
         settings.redis_url,
         settings.google_places_api_key.get_secret_value(),
         settings.openai_api_key.get_secret_value(),
+        settings.airtable_token.get_secret_value(),
     ]
     return [v for v in values if v and len(v) >= 6]
 

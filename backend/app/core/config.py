@@ -3,7 +3,7 @@
 from functools import lru_cache
 from typing import Annotated, Literal
 
-from pydantic import AliasChoices, Field, SecretStr, field_validator
+from pydantic import AliasChoices, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 # RFC 7518 §3.2: an HS256 key shorter than the hash output weakens the signature. PyJWT
@@ -172,6 +172,32 @@ class Settings(BaseSettings):
     # `make seed-demo-users` (development only). Empty means the command refuses to run.
     demo_users_password: SecretStr = SecretStr("")
 
+    # --- CRM export (v0.7.0) ---
+    # Where approved leads go: csv (a file you download, no account), airtable (needs the
+    # token below) or fake (an in-database stand-in for tests and the demo; refused outside
+    # local/development/ci).
+    crm_destination: Literal["csv", "airtable", "fake"] = "csv"
+    # Sync automatically once an approval's undo window has closed. Off, leads still queue
+    # up as "scheduled" and a CRM manager sends them with Sync all / Send now.
+    crm_auto_sync: bool = True
+    # How long after an approval a lead may leave the system. Unset = the review undo
+    # window, so an undone approval can never reach the CRM.
+    crm_sync_delay_minutes: int | None = None
+    crm_sync_max_attempts: int = 3
+    crm_sync_backoff_seconds: int = 60
+    crm_sync_interval_seconds: int = 60
+    # The address of the web app, for the "Radar link" column in the CRM.
+    app_base_url: str = "http://localhost:3000"
+    airtable_token: SecretStr = SecretStr("")
+    airtable_base_id: str = ""
+    # The table's name or its `tbl…` id. A name is resolved to an id for record links.
+    airtable_table: str = "Leads"
+    # Airtable allows 5 requests/second per base; stay under it.
+    airtable_rps: float = 4.0
+    airtable_daily_call_cap: int = 5000
+    # Optional path to a copy of crm_field_map.airtable.json with the client's column names.
+    airtable_field_map: str = ""
+
     # --- Entity resolution (v0.3.0) ---
     resolution_auto_merge: float = 0.85
     resolution_review: float = 0.60
@@ -210,6 +236,7 @@ class Settings(BaseSettings):
 
     @field_validator(
         "ai_provider",
+        "crm_sync_delay_minutes",
         "ai_triage_price_in_per_m",
         "ai_triage_price_out_per_m",
         "ai_escalation_price_in_per_m",
@@ -222,6 +249,23 @@ class Settings(BaseSettings):
         if isinstance(value, str) and not value.strip():
             return None
         return value
+
+    @model_validator(mode="after")
+    def _fake_crm_only_in_development(self) -> "Settings":
+        """The fake CRM stores leads in our own database; it is never a real destination."""
+        if self.crm_destination == "fake" and self.environment not in DEVELOPMENT_ENVIRONMENTS:
+            raise ValueError(
+                "CRM_DESTINATION=fake is allowed only under local, development or ci; "
+                f"the environment is '{self.environment}'"
+            )
+        return self
+
+    @property
+    def resolved_crm_sync_delay_minutes(self) -> int:
+        """How long a fresh approval waits before it may be sent: at least the undo window."""
+        if self.crm_sync_delay_minutes is None:
+            return self.review_undo_window_minutes
+        return self.crm_sync_delay_minutes
 
     @property
     def is_development(self) -> bool:
