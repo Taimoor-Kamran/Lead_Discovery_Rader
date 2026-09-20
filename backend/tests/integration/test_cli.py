@@ -29,6 +29,7 @@ def test_the_usage_line_lists_every_command(capsys: pytest.CaptureFixture[str]) 
     printed = capsys.readouterr().out
     for command in (
         "seed-admin",
+        "seed-demo-users",
         "sync-sources",
         "purge-expired",
         "recompute-businesses",

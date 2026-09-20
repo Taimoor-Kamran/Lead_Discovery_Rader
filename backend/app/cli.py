@@ -19,8 +19,9 @@ from app.modules.adapters.base import DiscoveryConfig
 from app.modules.adapters.google_places.adapter import SOURCE_NAME as GOOGLE_PLACES
 from app.modules.ai.client import Tier
 from app.modules.auth import service as auth_service
+from app.modules.auth.models import Role
 from app.modules.auth.schemas import MIN_PASSWORD_LENGTH
-from app.modules.auth.service import ensure_admin
+from app.modules.auth.service import ensure_admin, ensure_user
 from app.modules.discovery.service import purge_expired
 from app.modules.jobs.schemas import GeoSpec
 
@@ -59,6 +60,48 @@ def seed_admin(argv: list[str]) -> int:
         )
     elif not created:
         print("Existing user kept its current password.")
+    return 0
+
+
+# The people the manual test plan signs in as. Fictional addresses under example.com.
+DEMO_USERS: tuple[tuple[str, Role], ...] = (
+    ("reviewer@example.com", Role.reviewer),
+    ("rep1@example.com", Role.sales_rep),
+    ("rep2@example.com", Role.sales_rep),
+    ("crm@example.com", Role.crm_manager),
+)
+
+
+def seed_demo_users(argv: list[str]) -> int:
+    """Create the demo reviewer, two sales reps and a CRM manager. Development only.
+
+    The password comes from DEMO_USERS_PASSWORD and is never printed. Running it again
+    is safe: an existing user keeps its password and is only given the demo role.
+    """
+    settings = get_settings()
+    if not settings.is_development:
+        print(
+            f"APP_ENV is '{settings.environment}'. Demo users are for local development only; "
+            "create real users with POST /api/v1/users."
+        )
+        return 2
+    password = settings.demo_users_password.get_secret_value().strip()
+    if not password:
+        print("DEMO_USERS_PASSWORD is not set. Put one in .env first (12+ characters).")
+        return 2
+    if len(password) < MIN_PASSWORD_LENGTH:
+        print(f"DEMO_USERS_PASSWORD must be at least {MIN_PASSWORD_LENGTH} characters.")
+        return 2
+
+    lines: list[str] = []
+    with session_scope() as session:
+        for email, role in DEMO_USERS:
+            _, created = ensure_user(session, email, password, role)
+            state = "created" if created else "already existed (password kept)"
+            lines.append(f"  {email:<24} {role.value:<12} {state}")
+    print(f"Demo users ({len(lines)}):")
+    print("\n".join(lines))
+    print("They all sign in with DEMO_USERS_PASSWORD.")
     return 0
 
 
@@ -412,6 +455,7 @@ def ai_smoke(argv: list[str]) -> int:
 
 COMMANDS: dict[str, Callable[[list[str]], int]] = {
     "seed-admin": seed_admin,
+    "seed-demo-users": seed_demo_users,
     "sync-sources": sync_sources,
     "purge-expired": purge_expired_command,
     "recompute-businesses": recompute_businesses,
