@@ -13,7 +13,7 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
-    "next": "15.5.4",
+    "next": "^15.5.25",
     "react": "19.1.1",
     "react-dom": "19.1.1"
   },
@@ -28,7 +28,7 @@
     "@vitejs/plugin-react": "4.7.0",
     "autoprefixer": "10.4.21",
     "eslint": "9.36.0",
-    "eslint-config-next": "15.5.4",
+    "eslint-config-next": "^15.5.25",
     "jsdom": "26.1.0",
     "openapi-typescript": "7.13.0",
     "postcss": "8.5.6",
