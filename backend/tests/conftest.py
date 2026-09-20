@@ -122,6 +122,9 @@ def _base_environment() -> Iterator[None]:
             "PLACES_DAILY_CALL_CAP": "200",
             "PLACES_RPS": "5",
             "PLACES_CONTENT_TTL_DAYS": "30",
+            "REVIEW_UNDO_WINDOW_MINUTES": "30",
+            "REVIEW_COOLDOWN_DAYS": "90",
+            "REVIEW_WEAK_CONFIDENCE": "0.4",
         }
     )
     get_settings.cache_clear()
@@ -147,7 +150,8 @@ def db(migrated_database: str) -> Iterator[Session]:
     session = get_session_factory()()
     session.execute(
         text(
-            "TRUNCATE opportunities, ai_classifications, website_audits, api_calls, "
+            "TRUNCATE review_decisions, suppressions, opportunities, ai_classifications, "
+            "website_audits, api_calls, "
             "match_candidates, business_field_values, businesses, record_sightings, "
             "discovered_records, audit_logs, job_runs, search_jobs, sources, users "
             "RESTART IDENTITY CASCADE"

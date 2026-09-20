@@ -22,6 +22,8 @@ EXPECTED_TABLES = {
     "website_audits",
     "ai_classifications",
     "opportunities",
+    "review_decisions",
+    "suppressions",
 }
 EXPECTED_ENUMS = {
     "user_role",
@@ -36,6 +38,8 @@ EXPECTED_ENUMS = {
     "ai_classification_status",
     "opportunity_source",
     "review_status",
+    "review_decision",
+    "suppression_source",
 }
 
 
@@ -72,24 +76,26 @@ def test_one_step_down_and_back_up_leaves_the_schema_as_it_was(database_url: str
     engine = create_engine(url)
     after_downgrade = set(inspect(engine).get_table_names())
     enums_after = _enums(engine)
+    opportunity_columns = {c["name"] for c in inspect(engine).get_columns("opportunities")}
     engine.dispose()
 
-    assert at_head - after_downgrade == {"opportunities", "ai_classifications"}
-    assert {
-        "ai_classification_status",
-        "opportunity_source",
-        "review_status",
-    } & enums_after == set()
-    assert "website_audits" in after_downgrade, "only v0.5.0 comes off"
+    assert at_head - after_downgrade == {"review_decisions", "suppressions"}
+    assert {"review_decision", "suppression_source"} & enums_after == set()
+    assert "review_status" in enums_after, "the status enum belongs to v0.5.0"
+    assert {"decided_at", "decided_by", "lock_version"} & opportunity_columns == set()
+    assert "opportunities" in after_downgrade, "only v0.6.0 comes off"
 
     command.upgrade(config, "head")
     engine = create_engine(url)
     assert set(inspect(engine).get_table_names()) == at_head
-    assert {"ai_classification_status", "opportunity_source", "review_status"} <= _enums(engine)
+    assert {"review_decision", "suppression_source", "review_status"} <= _enums(engine)
+    assert {"decided_at", "decided_by", "lock_version"} <= {
+        c["name"] for c in inspect(engine).get_columns("opportunities")
+    }
     engine.dispose()
 
 
-def test_three_steps_down_takes_entity_resolution_with_it(database_url: str) -> None:
+def test_four_steps_down_takes_entity_resolution_with_it(database_url: str) -> None:
     """The v0.3.0 migration owns the businesses tables and the columns it added."""
     url = _fresh_database(database_url)
     config = alembic_config(url)
@@ -99,7 +105,7 @@ def test_three_steps_down_takes_entity_resolution_with_it(database_url: str) -> 
     at_head = set(inspect(engine).get_table_names())
     engine.dispose()
 
-    command.downgrade(config, "-3")
+    command.downgrade(config, "-4")
     engine = create_engine(url)
     after_downgrade = set(inspect(engine).get_table_names())
     record_columns = {c["name"] for c in inspect(engine).get_columns("discovered_records")}
@@ -107,6 +113,8 @@ def test_three_steps_down_takes_entity_resolution_with_it(database_url: str) -> 
     engine.dispose()
 
     assert at_head - after_downgrade == {
+        "review_decisions",
+        "suppressions",
         "opportunities",
         "ai_classifications",
         "website_audits",

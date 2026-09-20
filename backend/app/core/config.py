@@ -161,6 +161,17 @@ class Settings(BaseSettings):
     scoring_weight_intent: float = 0.10
     scoring_weight_contactability: float = 0.20
 
+    # --- Human review (v0.6.0) ---
+    # How long after a decision the deciding reviewer (or any admin) may undo it.
+    review_undo_window_minutes: int = 30
+    # A business+service rejected, marked not-a-fit or duplicate within this many days is
+    # not re-created as pending by classification.
+    review_cooldown_days: int = 90
+    # Opportunities below this confidence are hidden from the queue unless asked for.
+    review_weak_confidence: float = 0.4
+    # `make seed-demo-users` (development only). Empty means the command refuses to run.
+    demo_users_password: SecretStr = SecretStr("")
+
     # --- Entity resolution (v0.3.0) ---
     resolution_auto_merge: float = 0.85
     resolution_review: float = 0.60

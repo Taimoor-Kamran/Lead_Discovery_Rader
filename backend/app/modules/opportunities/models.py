@@ -1,9 +1,9 @@
 """`opportunities` (blueprint slide 28): a business is a fact, an opportunity is a claim.
 
 One row says "this service fits this business", why, on what evidence, with what
-confidence and score, and — from v0.6.0 — what a human decided about it. Until then
-`review_status` is always `pending`, and the partial unique index guarantees a business
-has at most one pending opportunity per service: re-classification updates it in place.
+confidence and score, and what a human decided about it (v0.6.0). The partial unique
+index guarantees a business has at most one pending opportunity per service:
+re-classification updates it in place.
 """
 
 import enum
@@ -12,7 +12,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import Boolean, ForeignKey, Index, Numeric, Text, text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, Numeric, Text, text
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
@@ -90,6 +90,15 @@ class Opportunity(Base):
     )
     assigned_to: Mapped[uuid.UUID | None] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    # v0.6.0: who decided, when, and the optimistic-lock counter every decision request
+    # must echo back. A stale `lock_version` is a 409: someone else decided first.
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    decided_by: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    lock_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
     )
     created_at: Mapped[datetime] = created_at_column()
     updated_at: Mapped[datetime] = updated_at_column()
