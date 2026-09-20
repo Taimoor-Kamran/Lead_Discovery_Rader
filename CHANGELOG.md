@@ -3,6 +3,67 @@
 All notable changes, one section per merged spec. Newest first.
 Format: `## [vX.Y.Z] - YYYY-MM-DD` followed by Added / Changed / Fixed.
 
+## [v0.8.0] - 2026-09-20
+
+### Added
+
+- **Production mode on one machine**: `docker-compose.prod.yml` + `.env.prod.example`,
+  `make prod-up/prod-down/prod-logs/prod-ps` (and `PROD=1` on every other target). Ports on
+  127.0.0.1 only, PostgreSQL and Redis not published, `restart: unless-stopped`, memory
+  limits, separate `*-prod` volumes, `./backups` and `./logs` bind mounts.
+- **Startup checks** (`app/core/startup.py`): production refuses a short `JWT_SECRET`,
+  `DEBUG=true`, demo fixtures, `CRM_DESTINATION=fake`, `AI_PROVIDER=fake`, an admin under
+  `example.com`, a `DEMO_USERS_PASSWORD` and a `*` CORS origin — all listed at once, one test
+  per rule. The demo commands refuse uniformly outside development. The refresh cookie is
+  always `Secure` in production (127.0.0.1 is a secure context).
+- **Backups**: `make backup` (`pg_dump -Fc`, newest `BACKUP_KEEP` kept), `make restore FILE=…`
+  (typed confirmation, stops api + worker, migrates after), `make backup-verify` (restores
+  the newest dump into a throw-away database, checks `alembic_version` and the core tables,
+  drops it). Both operator commands are `job_runs`. PostgreSQL 16 client tools in the image.
+- **Scheduler** (`app/workers/scheduler.py`, croniter loop in the worker, Redis lock for a
+  single instance): `crm-sync` every minute, `watchdog` every 5 minutes (stuck runs → failed
+  "worker lost" + alert), `purge-expired` daily, `backup` daily, `backup-verify` weekly. Every
+  execution is a `scheduled:<name>` job run.
+- **Monitoring**: `GET /admin/health` with every slide-45 metric; `alerts` table with rules
+  (job success rate, source error rate, held CRM leads, AI budget, backup age, backup verify
+  failed, stale job, queue length), thresholds in config, `POST /admin/alerts/{id}/acknowledge`;
+  JSON logs also to `LOG_DIR/*.log` with daily rotation, 14 days kept.
+- **Security**: login rate limit (5 failures per email+address in 15 min → 429) and account
+  lockout (10 failures → 15 min), all audited; `must_change_password` for admin-created and
+  admin-reset users with `POST /auth/change-password` and password rules (12+, not the email,
+  not a common password); security headers on the API (`nosniff`, `DENY`, `no-referrer`,
+  `Cache-Control: no-store` on authenticated answers, HSTS only over https) and the web app
+  (the same plus a nonce-based Content-Security-Policy, documented in `frontend/src/lib/csp.ts`);
+  strict CORS (exact origins, explicit methods/headers); SafeFetcher now **pins the
+  connection** to the validated address (`Host` + SNI keep the name) so DNS cannot change
+  between check and connect; `make audit` (`pip-audit` + `pnpm audit --prod`) in CI; a secrets
+  hygiene test greps the repo for key-shaped strings.
+- **Admin UI**: `/admin/users` (create with a generated temporary password, role, deactivate /
+  reactivate, unlock, reset; placeholder-admin warning), `/searches` (industry dropdown, city +
+  state or point + radius, max results, **cost estimate before running**, Run disabled when the
+  daily cap would be exceeded, history with a 7-day re-run warning) and `/searches/{id}` (the
+  four pipeline stages with counts and errors, link to the review queue by city),
+  `/admin/health` with the alert banner on every page, `/profile` (change own password) with
+  the forced-change redirect.
+- **API for the pages**: `GET /search-jobs/industries`, `POST /search-jobs/estimate`,
+  `GET /search-jobs/{id}/estimate`, `GET /search-jobs/{id}/pipeline`, `max_results` on search
+  jobs, `last_run` on the list, `POST /users/{id}/unlock`, `POST /users/{id}/reset-password`.
+- **Docs**: `docs/operations.md`, `docs/pilot.md`, `docs/release-checklist.md`; README section
+  "Running for real on this machine".
+
+### Changed
+
+- `/crm` scheduled and held rows show the approved services before the first sync.
+- `pytest-xdist`: one PostgreSQL container, one database per worker; `make test` runs
+  `-n auto` (`TEST_ARGS=-n0` for serial). `make check` went from 9 min 59 s to the time
+  recorded in the spec's implementation notes.
+- `make e2e` checks `CRM_DESTINATION=fake` first and explains what to do otherwise.
+- Dependencies: lxml 6.1, pytest 9 (advisories), pytest-asyncio 1.x, croniter, types-croniter,
+  pytest-xdist, pip-audit, httpx2 (removes the Starlette TestClient deprecation); ESLint
+  9.39.5; pnpm overrides for sharp ≥ 0.35.4 and postcss ≥ 8.5.28.
+- The CRM sync thread of v0.7.0 is replaced by the scheduler's `crm-sync` job; the old loop
+  stays available for `SCHEDULER_ENABLED=false`.
+
 ## [v0.7.0] - 2026-09-20
 
 ### Added

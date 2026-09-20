@@ -540,6 +540,35 @@ registry, add the destination to `CRM_DESTINATION`'s allowed values, give it a `
 row so its calls are metered, and write its recorded-response tests. Everything above the
 adapter — the gate, the delay, dedupe, retry, suppression propagation — is shared.
 
+## Running for real on this machine (v0.8.0)
+
+Production mode runs the same images from `.env.prod` with every port bound to 127.0.0.1,
+strict startup checks (no demo data, no fake providers, a real admin, a strong secret), daily
+backups with a tested restore, a scheduler for the maintenance jobs, and an in-app Health page
+with alerts. The three documents that go with it:
+
+- [`docs/operations.md`](docs/operations.md) — start and stop, where data lives, backup /
+  restore / verify, rotating secrets and keys, adding users, running a search, handling held
+  CRM leads, reading the Health page, upgrading.
+- [`docs/pilot.md`](docs/pilot.md) — the real-data validation from the blueprint: one industry,
+  one city, 60 results, a results table and the go/no-go questions.
+- [`docs/release-checklist.md`](docs/release-checklist.md) — what a human ticks before `v1.0.0`.
+
+Short version:
+
+```bash
+cp .env.prod.example .env.prod   # fill in: JWT_SECRET, POSTGRES_PASSWORD, ADMIN_EMAIL, the keys
+make prod-up                     # 127.0.0.1:3000 (web) and 127.0.0.1:8000 (api)
+make migrate PROD=1
+make seed-admin PROD=1           # then create everyone else from the Users page
+make backup PROD=1 && make backup-verify PROD=1
+```
+
+Nobody needs Swagger any more: **Users** (admin) creates accounts with a temporary password
+that must be changed on first sign-in, and **Searches** (admin, sales rep) creates and runs a
+search after showing what it will cost. Six failed sign-ins in 15 minutes get a 429; ten
+failures lock the account for 15 minutes (unlock from the Users page).
+
 ## Roles and what each can do
 
 | Role | Review queue | Decide | Duplicates | My leads | Undo | Suppressions | CRM page |
