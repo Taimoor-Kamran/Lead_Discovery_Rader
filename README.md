@@ -156,6 +156,11 @@ fails the suite rather than quietly producing a different answer.
 source is registered **only** when `ENVIRONMENT` (or `APP_ENV`) is `local` or
 `development`, so fictional businesses cannot reach staging or production.
 
+`make reset-demo-data` (development only) puts the review state back to freshly loaded:
+it removes every review decision, suppression and opportunity and scores the demo
+businesses again (fake AI, no network). Businesses, audits and users stay. `make e2e`
+runs it first.
+
 ### The demo websites
 
 `make load-demo-data` also runs the website audits and the classification, so it leaves
@@ -410,6 +415,7 @@ Local setup for the manual run-through:
 docker compose down -v && make up && make migrate && make seed-admin
 make seed-demo-users        # reviewer@, rep1@, rep2@, crm@example.com — DEMO_USERS_PASSWORD in .env
 make load-demo-data
+make reset-demo-data        # later, to start the run-through over without dropping the volumes
 ```
 
 ### The decisions
