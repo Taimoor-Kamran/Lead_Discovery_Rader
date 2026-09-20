@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -450,3 +450,82 @@ def uuid_of(value: object) -> Any:
     import uuid
 
     return uuid.UUID(str(value))
+
+
+# --- reset (what `make e2e` runs first) ----------------------------------------------------
+
+
+def test_reset_demo_data_puts_every_opportunity_back_to_pending(
+    db: Session, classified: DemoLoadResult
+) -> None:
+    from datetime import UTC, datetime
+
+    from app.demo.loader import reset_demo_data
+    from app.modules.auth.models import User
+    from app.modules.compliance.models import Suppression
+    from app.modules.review import service as review
+    from app.modules.review.models import Decision, ReviewDecision
+    from app.modules.review.schemas import ReviewRequest
+
+    before = observed(db)
+    reviewer = make_user(db, Role.reviewer, "reviewer@example.com")
+    rep = make_user(db, Role.sales_rep, "rep1@example.com")
+    pending = list(
+        db.scalars(
+            select(Opportunity)
+            .where(Opportunity.review_status == ReviewStatus.pending)
+            .order_by(Opportunity.score.desc(), Opportunity.id)
+        )
+    )
+    assert len(pending) >= 3
+    first, second = pending[0], next(o for o in pending if o.business_id != pending[0].business_id)
+    now = datetime.now(UTC)
+    review.decide(
+        db,
+        first.id,
+        ReviewRequest(decision=Decision.approve, lock_version=0, assigned_to=rep.id),
+        actor=reviewer,
+        now=now,
+    )
+    review.decide(
+        db,
+        second.id,
+        ReviewRequest(decision=Decision.do_not_contact, lock_version=0, note="E2E setup"),
+        actor=reviewer,
+        now=now,
+    )
+    db.commit()
+    assert db.scalar(select(func.count()).select_from(ReviewDecision))
+    assert db.scalar(select(func.count()).select_from(Suppression)) == 1
+    assert db.scalar(
+        select(func.count())
+        .select_from(Opportunity)
+        .where(Opportunity.review_status != ReviewStatus.pending)
+    )
+
+    result = reset_demo_data(db)
+    db.expire_all()
+
+    assert result.classification_status is JobRunStatus.done
+    # Approve wrote one row; do-not-contact wrote one per open opportunity of its business.
+    assert result.decisions_deleted >= 2
+    assert result.suppressions_deleted == 1
+    assert result.opportunities_deleted == len(before_opportunities(before))
+    assert db.scalar(select(func.count()).select_from(ReviewDecision)) == 0
+    assert db.scalar(select(func.count()).select_from(Suppression)) == 0
+    statuses = set(db.scalars(select(Opportunity.review_status)))
+    assert statuses == {ReviewStatus.pending}
+    # The same opportunities as a fresh `make load-demo-data`: nothing lost, nothing new.
+    # (The AI step records one more `reused` classification per business; that is the
+    # provenance of the re-run, not a change in what the reviewer sees.)
+    after = observed(db)
+    assert {k: v["opportunities"] for k, v in after.items()} == {
+        k: v["opportunities"] for k, v in before.items()
+    }
+    assert isinstance(db.get(User, reviewer.id), User)
+
+
+def before_opportunities(snapshot: dict[str, dict[str, Any]]) -> list[str]:
+    return [
+        f"{key}:{service}" for key, item in snapshot.items() for service in item["opportunities"]
+    ]

@@ -9,10 +9,12 @@ from app.modules.audit.models import AuditLog
 from app.modules.audit_web.models import WebsiteAudit
 from app.modules.auth.models import User
 from app.modules.businesses.models import Business, BusinessFieldValue
+from app.modules.compliance.models import Suppression
 from app.modules.discovery.models import ApiCall, DiscoveredRecord, RecordSighting
 from app.modules.jobs.models import JobRun, SearchJob
 from app.modules.opportunities.models import Opportunity
 from app.modules.resolution.models import MatchCandidate
+from app.modules.review.models import ReviewDecision
 from app.modules.sources.models import Source
 
 __all__ = [
@@ -27,8 +29,10 @@ __all__ = [
     "MatchCandidate",
     "Opportunity",
     "RecordSighting",
+    "ReviewDecision",
     "SearchJob",
     "Source",
+    "Suppression",
     "User",
     "WebsiteAudit",
 ]
