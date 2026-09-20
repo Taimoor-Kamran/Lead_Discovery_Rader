@@ -14,7 +14,7 @@ from app.core.config import get_settings
 from app.core.errors import AppError, ErrorBody, ErrorEnvelope
 from app.core.health import health_router
 from app.core.logging import configure_logging, get_logger
-from app.core.middleware import RequestIdMiddleware, get_request_id
+from app.core.middleware import RequestIdMiddleware, SecurityHeadersMiddleware, get_request_id
 from app.core.startup import check_startup
 from app.modules.ai.router import ai_router
 from app.modules.audit_web.router import (
@@ -80,12 +80,17 @@ def create_app() -> FastAPI:
         openapi_url="/openapi.json",
     )
     app.add_middleware(RequestIdMiddleware)
+    app.add_middleware(SecurityHeadersMiddleware)
+    # Exact origins only (no wildcard: the production startup check refuses one), and
+    # credentials only for those — the refresh cookie must never ride to another origin.
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.cors_origins,
+        allow_origins=[origin.strip() for origin in settings.cors_origins if origin.strip()],
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type", "Idempotency-Key", "X-Request-ID"],
+        expose_headers=["X-Request-ID", "Content-Disposition"],
+        max_age=600,
     )
 
     @app.exception_handler(AppError)

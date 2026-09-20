@@ -17,7 +17,7 @@ import os
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any, Protocol
-from urllib.parse import SplitResult
+from urllib.parse import SplitResult, urlunsplit
 
 import httpx
 
@@ -80,7 +80,13 @@ class BackendResponse:
 
 @dataclass(frozen=True)
 class FetchRequest:
-    """Everything a backend needs for exactly one request."""
+    """Everything a backend needs for exactly one request.
+
+    `pinned_ip` is the address `SafeFetcher` validated for this hostname. A backend that
+    talks to the network connects to *that* address and keeps the hostname only for SNI
+    and the `Host` header, so a DNS answer cannot change between the check and the
+    connection (spec v0.8.0 §5, closing the v0.4.0 note).
+    """
 
     url: str
     parts: SplitResult
@@ -88,6 +94,7 @@ class FetchRequest:
     connect_timeout: float
     read_timeout: float
     max_bytes: int
+    pinned_ip: str | None = None
 
 
 class FetchBackend(Protocol):
@@ -126,13 +133,15 @@ class NetworkFetchBackend:
             write=request.read_timeout,
             pool=request.connect_timeout,
         )
+        url, headers, extensions = pin_connection(request)
         try:
             with self._client.stream(
                 "GET",
-                request.url,
-                headers=dict(request.headers),
+                url,
+                headers=headers,
                 timeout=timeout,
                 follow_redirects=False,
+                extensions=extensions,
             ) as response:
                 body, truncated = _read_capped(response, request.max_bytes)
                 return BackendResponse(
@@ -149,6 +158,29 @@ class NetworkFetchBackend:
             raise ConnectFailedError(type(exc).__name__) from exc
         except httpx.HTTPError as exc:
             raise ConnectFailedError(type(exc).__name__) from exc
+
+
+def pin_connection(request: FetchRequest) -> tuple[str, dict[str, str], dict[str, Any]]:
+    """Rewrite the request so the socket goes to the validated address.
+
+    The URL's host becomes the IP literal (the TCP connection), the hostname moves into
+    the `Host` header (what the web server routes on) and into httpx's `sni_hostname`
+    extension (what TLS presents and what the certificate is checked against). Without a
+    pinned address — an IP-literal URL, or a fixture backend — nothing changes.
+    """
+    headers = dict(request.headers)
+    extensions: dict[str, Any] = {}
+    host = request.parts.hostname or ""
+    if not request.pinned_ip or not host or request.pinned_ip == host:
+        return request.url, headers, extensions
+    literal = f"[{request.pinned_ip}]" if ":" in request.pinned_ip else request.pinned_ip
+    netloc = literal if request.parts.port is None else f"{literal}:{request.parts.port}"
+    pinned = urlunsplit((request.parts.scheme, netloc, request.parts.path, request.parts.query, ""))
+    host_header = host if request.parts.port is None else f"{host}:{request.parts.port}"
+    headers["Host"] = host_header
+    if request.parts.scheme.lower() == "https":
+        extensions["sni_hostname"] = host
+    return pinned, headers, extensions
 
 
 def _read_capped(response: httpx.Response, max_bytes: int) -> tuple[bytes, bool]:

@@ -37,9 +37,9 @@ def _client_from(db: Session, ip: str) -> TestClient:
 
 
 def _login(test_client: TestClient, email: str, password: str) -> int:
-    return test_client.post(
-        f"{API}/auth/login", json={"email": email, "password": password}
-    ).status_code
+    response = test_client.post(f"{API}/auth/login", json={"email": email, "password": password})
+    status: int = response.status_code
+    return status
 
 
 def _actions(db: Session) -> list[str]:

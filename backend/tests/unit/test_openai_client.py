@@ -14,7 +14,7 @@ from app.core.http import ApiCallRecord
 from app.modules.ai.client import LLMError, LLMRequest
 from app.modules.ai.openai_client import OPENAI_ENDPOINT, OpenAIClient, openai_source_config
 
-KEY = "sk-test-SENTINEL-never-log-me-0123456789"
+KEY = "sk-test-SENTINEL-never-log-me-0123456789"  # secrets-hygiene: allow (a test sentinel)
 
 
 def request() -> LLMRequest:

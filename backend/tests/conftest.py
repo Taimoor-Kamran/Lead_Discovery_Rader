@@ -98,7 +98,10 @@ def database_url() -> Iterator[str]:
     if not _docker_available():
         pytest.skip("Docker is not available; integration tests need a real PostgreSQL")
 
-    from testcontainers.postgres import PostgresContainer
+    try:  # testcontainers >= 4.13 moved the module; the old path warns
+        from testcontainers.community.postgres import PostgresContainer
+    except ImportError:  # pragma: no cover - older testcontainers
+        from testcontainers.postgres import PostgresContainer
 
     with PostgresContainer("postgres:16-alpine", driver="psycopg") as container:
         yield container.get_connection_url()

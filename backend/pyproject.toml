@@ -41,6 +41,7 @@ dev = [
     "types-croniter>=6.0,<7.0",
     "pytest-xdist>=3.6,<4.0",
     "pip-audit>=2.7,<3.0",
+    "httpx2>=2.13.0",
 ]
 
 [build-system]
