@@ -7,7 +7,6 @@ records, so a cancelled run keeps everything it had already stored.
 
 from sqlalchemy.orm import Session
 
-from app.core.config import get_settings
 from app.core.logging import get_logger, log_fields
 from app.modules.adapters import registry
 from app.modules.adapters.base import DiscoveryConfig, SourceAdapter
@@ -16,7 +15,7 @@ from app.modules.discovery import service
 from app.modules.discovery.schemas import DiscoveryResultSummary
 from app.modules.jobs.models import JobRun, SearchJob
 from app.modules.jobs.schemas import GeoSpec
-from app.modules.jobs.service import get_search_job
+from app.modules.jobs.service import effective_max_results, get_search_job
 from app.modules.sources.models import Source
 
 logger = get_logger("app.discovery.worker")
@@ -76,13 +75,12 @@ def _run_one_source(
 ) -> None:
     from app.workers.tasks import checkpoint
 
-    settings = get_settings()
     ttl_days = int(adapter.get_source_metadata().content_ttl_days)
     cfg = DiscoveryConfig(
         industry=job.industry,
         geo=GeoSpec.model_validate(job.geo),
         job_run_id=run.id,
-        max_results=settings.places_max_results_per_job,
+        max_results=effective_max_results(job),
         cancel_check=lambda: checkpoint(session, run),
     )
 

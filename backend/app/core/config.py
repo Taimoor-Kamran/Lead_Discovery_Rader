@@ -221,6 +221,40 @@ class Settings(BaseSettings):
         default_factory=lambda: ["http://localhost:3000"]
     )
 
+    # --- Production mode and operations (v0.8.0) ---
+    # `make seed-admin` reads this too. Production refuses a placeholder address.
+    admin_email: str = "admin@example.com"
+    # IANA name the schedule times below are read in ("local time" for the operator).
+    timezone: str = "UTC"
+    # Where `make backup` writes `radar-YYYYMMDD-HHMMSS.dump` files and how many it keeps.
+    backup_dir: str = "backups"
+    backup_keep: int = 14
+    # Daily backup time (HH:MM), the weekly verify (cron, Sunday 04:00) and the daily purge.
+    backup_at: str = "02:00"
+    backup_verify_cron: str = "0 4 * * 0"
+    purge_at: str = "03:00"
+    # The scheduler thread in the worker: on/off, how often it looks at the clock, and
+    # when a run still `running` counts as abandoned by a dead worker.
+    scheduler_enabled: bool = True
+    scheduler_tick_seconds: float = 15.0
+    watchdog_stale_minutes: int = 30
+    # JSON logs also go to `LOG_DIR/LOG_FILE` with daily rotation when LOG_DIR is set.
+    log_dir: str = ""
+    log_file: str = "app.log"
+    log_keep_days: int = 14
+    # Alert thresholds (blueprint slide 45). Each one is a rule on /admin/health.
+    alert_job_success_rate_min: float = 0.80
+    alert_source_error_rate_max: float = 0.20
+    alert_ai_budget_ratio: float = 0.80
+    alert_backup_max_age_hours: int = 36
+    alert_queue_length_max: int = 500
+    # Login protection: failures per email+IP inside the window before a 429, and
+    # failures per account before it is locked for `login_lockout_minutes`.
+    login_max_failures: int = 5
+    login_window_minutes: int = 15
+    login_lockout_failures: int = 10
+    login_lockout_minutes: int = 15
+
     @field_validator(
         "cors_origins",
         "resolution_source_priority",
@@ -266,6 +300,19 @@ class Settings(BaseSettings):
         if self.crm_sync_delay_minutes is None:
             return self.review_undo_window_minutes
         return self.crm_sync_delay_minutes
+
+    @property
+    def is_production(self) -> bool:
+        return self.environment == "production"
+
+    @property
+    def resolved_refresh_cookie_secure(self) -> bool:
+        """The refresh cookie is always `Secure` in production, whatever the setting says.
+
+        Browsers treat `localhost` and `127.0.0.1` as secure contexts, so the cookie still
+        works for production mode on one machine over plain http.
+        """
+        return True if self.is_production else self.refresh_cookie_secure
 
     @property
     def is_development(self) -> bool:

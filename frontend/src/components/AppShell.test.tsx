@@ -13,7 +13,7 @@ function navLabels() {
 describe("AppShell navigation by role", () => {
   it("shows a sales rep only their leads", () => {
     renderWithProviders(<AppShell>x</AppShell>, { user: me("sales_rep") });
-    expect(navLabels()).toEqual(["My leads"]);
+    expect(navLabels()).toEqual(["My leads", "Searches"]);
     expect(screen.getByTestId("whoami").textContent).toContain("Sales rep");
   });
 
@@ -24,7 +24,7 @@ describe("AppShell navigation by role", () => {
 
   it("shows an admin everything", () => {
     renderWithProviders(<AppShell>x</AppShell>, { user: me("admin") });
-    expect(navLabels()).toEqual(["Review queue", "Duplicates", "My leads", "CRM", "Suppressions"]);
+    expect(navLabels()).toEqual(["Review queue", "Duplicates", "My leads", "Searches", "CRM", "Suppressions", "Users", "Health"]);
   });
 
   it("shows a crm manager the queue (read-only), leads and the CRM; a tech admin the queue and the CRM", () => {
@@ -32,6 +32,6 @@ describe("AppShell navigation by role", () => {
     expect(navLabels()).toEqual(["Review queue", "My leads", "CRM"]);
     unmount();
     renderWithProviders(<AppShell>x</AppShell>, { user: me("tech_admin") });
-    expect(navLabels()).toEqual(["Review queue", "CRM"]);
+    expect(navLabels()).toEqual(["Review queue", "Searches", "CRM", "Health"]);
   });
 });

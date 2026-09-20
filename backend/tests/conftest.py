@@ -3,6 +3,12 @@
 Integration tests run against a real PostgreSQL 16 started by testcontainers, because the
 schema uses citext, JSONB, arrays, native enums and a trigger — none of which SQLite has.
 Redis is faked; no test ever touches a live external service.
+
+Under `pytest -n` (pytest-xdist, what `make test` runs) the controller process starts
+**one** container and hands its address to every worker; each worker then creates its
+own database on that server (`radar_test_gw0`, `radar_test_gw1`, …), migrates it and
+runs its share of the tests against it. Without `-n` a test process starts the container
+itself, as before.
 """
 
 import json
@@ -92,15 +98,73 @@ def alembic_config(database_url: str) -> Config:
     return config
 
 
+def _postgres_container() -> Any:
+    try:  # testcontainers >= 4.13 moved the module; the old path warns
+        from testcontainers.community.postgres import PostgresContainer
+    except ImportError:  # pragma: no cover - older testcontainers
+        from testcontainers.postgres import PostgresContainer
+
+    return PostgresContainer("postgres:16-alpine", driver="psycopg")
+
+
+SHARED_URL_KEY = "radar_database_url"
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """xdist controller: start the one shared container before the workers spawn."""
+    if hasattr(config, "workerinput"):
+        return  # a worker: the controller already did this
+    workers = config.getoption("numprocesses", default=None)
+    if not workers or not _docker_available():
+        return
+    container = _postgres_container()
+    container.start()
+    config.stash[_CONTAINER_KEY] = container
+    config.stash[_SHARED_URL_STASH] = container.get_connection_url()
+
+
+_CONTAINER_KEY = pytest.StashKey[Any]()
+_SHARED_URL_STASH = pytest.StashKey[str]()
+
+
+def pytest_configure_node(node: Any) -> None:
+    """xdist controller → each worker: the shared server's address."""
+    url = node.config.stash.get(_SHARED_URL_STASH, None)
+    if url:
+        node.workerinput[SHARED_URL_KEY] = url
+
+
+def pytest_unconfigure(config: pytest.Config) -> None:
+    container = config.stash.get(_CONTAINER_KEY, None)
+    if container is not None:
+        container.stop()
+
+
+def _worker_database(shared_url: str, worker_id: str) -> str:
+    """Create this worker's own database on the shared server and return its URL."""
+    from sqlalchemy import create_engine
+
+    name = f"radar_test_{worker_id}"
+    admin = create_engine(shared_url, isolation_level="AUTOCOMMIT")
+    with admin.connect() as connection:
+        connection.execute(text(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)'))
+        connection.execute(text(f'CREATE DATABASE "{name}"'))
+    admin.dispose()
+    base, _, _ = shared_url.rpartition("/")
+    return f"{base}/{name}"
+
+
 @pytest.fixture(scope="session")
-def database_url() -> Iterator[str]:
-    """A throwaway PostgreSQL 16 instance for the whole test session."""
+def database_url(request: pytest.FixtureRequest) -> Iterator[str]:
+    """A throwaway PostgreSQL 16 database for this test process."""
+    workerinput: dict[str, Any] | None = getattr(request.config, "workerinput", None)
+    if workerinput and workerinput.get(SHARED_URL_KEY):
+        yield _worker_database(str(workerinput[SHARED_URL_KEY]), str(workerinput["workerid"]))
+        return
+
     if not _docker_available():
         pytest.skip("Docker is not available; integration tests need a real PostgreSQL")
-
-    from testcontainers.postgres import PostgresContainer
-
-    with PostgresContainer("postgres:16-alpine", driver="psycopg") as container:
+    with _postgres_container() as container:
         yield container.get_connection_url()
 
 
@@ -152,8 +216,8 @@ def db(migrated_database: str) -> Iterator[Session]:
     session = get_session_factory()()
     session.execute(
         text(
-            "TRUNCATE crm_sync_attempts, crm_lead_opportunities, crm_leads, crm_fake_records, "
-            "review_decisions, suppressions, opportunities, ai_classifications, "
+            "TRUNCATE alerts, crm_sync_attempts, crm_lead_opportunities, crm_leads, "
+            "crm_fake_records, review_decisions, suppressions, opportunities, ai_classifications, "
             "website_audits, api_calls, "
             "match_candidates, business_field_values, businesses, record_sightings, "
             "discovered_records, audit_logs, job_runs, search_jobs, sources, users "
@@ -258,7 +322,14 @@ def client(db: Session) -> Iterator[TestClient]:
 def make_user(session: Session, role: Role, email: str | None = None) -> User:
     address = email or f"{role.value}-{uuid.uuid4().hex[:8]}@example.com"
     user = create_user(
-        session, UserCreate(email=address, password=TEST_PASSWORD, role=role, is_active=True)
+        session,
+        UserCreate(
+            email=address,
+            password=TEST_PASSWORD,
+            role=role,
+            is_active=True,
+            must_change_password=False,
+        ),
     )
     session.commit()
     return user

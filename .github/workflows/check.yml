@@ -41,7 +41,7 @@ jobs:
         run: docker pull postgres:16-alpine
 
       - name: Test
-        run: uv run pytest
+        run: uv run pytest -n auto
 
   frontend:
     runs-on: ubuntu-latest
@@ -73,3 +73,32 @@ jobs:
 
       - name: Build
         run: pnpm run build
+
+  # `make audit`: dependency advisories for both halves. Needs the network, so it runs
+  # here and in the release checklist rather than inside `make check`.
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: |
+          uv --directory backend sync --all-groups --frozen
+          cd frontend && pnpm install --frozen-lockfile
+
+      - name: Audit
+        run: make audit

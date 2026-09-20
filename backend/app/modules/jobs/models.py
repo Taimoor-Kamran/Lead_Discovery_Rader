@@ -46,6 +46,8 @@ class SearchJob(Base):
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     geo: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     industry: Mapped[str] = mapped_column(String(120), nullable=False)
+    # How many results one run may ask a source for. Null = PLACES_MAX_RESULTS_PER_JOB.
+    max_results: Mapped[int | None] = mapped_column(Integer, nullable=True)
     source_ids: Mapped[list[uuid.UUID]] = mapped_column(
         ARRAY(PGUUID(as_uuid=True)), nullable=False, default=list
     )

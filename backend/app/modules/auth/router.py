@@ -12,7 +12,15 @@ from app.core.security import create_access_token, create_refresh_token, decode_
 from app.modules.auth import service
 from app.modules.auth.deps import CurrentUser, DbSession, require_role
 from app.modules.auth.models import Role, User
-from app.modules.auth.schemas import LoginRequest, TokenResponse, UserCreate, UserRead, UserUpdate
+from app.modules.auth.schemas import (
+    ChangePasswordRequest,
+    LoginRequest,
+    PasswordResetRequest,
+    TokenResponse,
+    UserCreate,
+    UserRead,
+    UserUpdate,
+)
 
 auth_router = APIRouter(prefix="/auth", tags=["auth"])
 users_router = APIRouter(prefix="/users", tags=["users"])
@@ -27,18 +35,46 @@ def _set_refresh_cookie(response: Response, user: User) -> None:
         key=settings.refresh_cookie_name,
         value=token,
         httponly=True,
-        secure=settings.refresh_cookie_secure,
+        secure=settings.resolved_refresh_cookie_secure,
         samesite=settings.refresh_cookie_samesite,
         max_age=settings.refresh_token_ttl_days * 24 * 3600,
         path=settings.api_v1_prefix + "/auth",
     )
 
 
+def _client_ip(request: Request) -> str:
+    """The connecting address. No proxy sits in front of this spec's deployment, so a
+    forwarded header is not trusted; a reverse proxy is the v1.1 spec's business."""
+    return request.client.host if request.client else service.UNKNOWN_CLIENT
+
+
 @auth_router.post("/login", response_model=TokenResponse)
-def login(payload: LoginRequest, response: Response, session: DbSession) -> TokenResponse:
-    user = service.authenticate(session, str(payload.email), payload.password)
+def login(
+    payload: LoginRequest, request: Request, response: Response, session: DbSession
+) -> TokenResponse:
+    user = service.authenticate(
+        session, str(payload.email), payload.password, client_ip=_client_ip(request)
+    )
     access_token, expires_at = create_access_token(user.id, user.role.value, user.token_version)
     _set_refresh_cookie(response, user)
+    return TokenResponse(access_token=access_token, expires_at=expires_at)
+
+
+@auth_router.post("/change-password", response_model=TokenResponse)
+def change_password(
+    payload: ChangePasswordRequest, user: CurrentUser, response: Response, session: DbSession
+) -> TokenResponse:
+    """Replace your own password. Every other session is signed out; this one continues."""
+    changed = service.change_password(
+        session,
+        user,
+        current_password=payload.current_password,
+        new_password=payload.new_password,
+    )
+    access_token, expires_at = create_access_token(
+        changed.id, changed.role.value, changed.token_version
+    )
+    _set_refresh_cookie(response, changed)
     return TokenResponse(access_token=access_token, expires_at=expires_at)
 
 
@@ -84,7 +120,7 @@ def logout(request: Request, response: Response, session: DbSession) -> Response
         key=settings.refresh_cookie_name,
         path=settings.api_v1_prefix + "/auth",
         httponly=True,
-        secure=settings.refresh_cookie_secure,
+        secure=settings.resolved_refresh_cookie_secure,
         samesite=settings.refresh_cookie_samesite,
     )
     return response
@@ -118,7 +154,14 @@ def list_users(
                 details={"required": ["admin", "reviewer"]},
             )
         is_active = True
-    return service.list_users(session, role=role, is_active=is_active, limit=limit, cursor=cursor)
+    return service.list_users(
+        session,
+        role=role,
+        is_active=is_active,
+        limit=limit,
+        cursor=cursor,
+        with_login_state=actor.role is Role.admin,
+    )
 
 
 @users_router.patch("/{user_id}", response_model=UserRead)
@@ -126,4 +169,20 @@ def update_user(
     user_id: uuid.UUID, payload: UserUpdate, actor: AdminUser, session: DbSession
 ) -> UserRead:
     user = service.update_user(session, user_id, payload, actor_id=actor.id)
+    return UserRead.model_validate(user)
+
+
+@users_router.post("/{user_id}/unlock", response_model=UserRead)
+def unlock_user(user_id: uuid.UUID, actor: AdminUser, session: DbSession) -> UserRead:
+    """Lift a lockout before it expires on its own. Clears the account lock and every
+    rate-limit counter for the email, from any address."""
+    return UserRead.model_validate(service.unlock_user(session, user_id, actor_id=actor.id))
+
+
+@users_router.post("/{user_id}/reset-password", response_model=UserRead)
+def reset_user_password(
+    user_id: uuid.UUID, payload: PasswordResetRequest, actor: AdminUser, session: DbSession
+) -> UserRead:
+    """Set a temporary password. The user must change it on their next sign-in."""
+    user = service.admin_reset_password(session, user_id, payload.password, actor_id=actor.id)
     return UserRead.model_validate(user)

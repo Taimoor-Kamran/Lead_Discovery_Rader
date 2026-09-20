@@ -40,14 +40,25 @@ export function envelope(status: number, code: string, message: string, details 
   return { error: { code, message, request_id: `req-${status}`, details } };
 }
 
-export function me(role: Me["role"] = "reviewer", email = `${role}@example.com`): Me {
+export function me(
+  role: Me["role"] = "reviewer",
+  email = `${role}@example.com`,
+  overrides: Partial<Me> = {},
+): Me {
   return {
     id: `user-${role}`,
     email,
     role,
     is_active: true,
+    must_change_password: false,
+    locked_until: null,
+    locked: false,
+    rate_limited_until: null,
+    rate_limited: false,
+    last_login_at: "2026-09-20T09:00:00Z",
     created_at: "2026-09-20T00:00:00Z",
     updated_at: "2026-09-20T00:00:00Z",
+    ...overrides,
   };
 }
 
@@ -63,6 +74,11 @@ export const router = {
 export let currentPathname = "/review";
 export function setPathname(pathname: string) {
   currentPathname = pathname;
+}
+
+export let currentSearchParams = new URLSearchParams();
+export function setSearchParams(query: string) {
+  currentSearchParams = new URLSearchParams(query);
 }
 
 export function renderWithProviders(

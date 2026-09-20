@@ -5,7 +5,12 @@
 # Secrets — never commit
 .env
 .env.local
+.env.prod
 frontend/.env.local
+
+# Production-mode data on this machine (spec v0.8.0)
+backups/
+logs/
 
 # Python
 __pycache__/

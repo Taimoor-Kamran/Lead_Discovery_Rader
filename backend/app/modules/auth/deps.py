@@ -12,7 +12,10 @@ from app.core.errors import AuthenticationError, PermissionDeniedError
 from app.core.security import decode_token
 from app.modules.auth.models import Role, User
 
-DbSession = Annotated[Session, Depends(get_db)]
+# `scope="function"`: the session's commit (the exit of `get_db`) runs *before* the response
+# is sent. FastAPI's default ("request") runs it after, and a client that writes and then
+# reads straight away — the Users page, "Save and run" on a search — could read stale data.
+DbSession = Annotated[Session, Depends(get_db, scope="function")]
 
 # `auto_error=False` so a missing or malformed header raises our own error rather than
 # FastAPI's bare 403. Declaring the scheme is also what puts the **Authorize** button on
@@ -34,6 +37,12 @@ def _bearer_token(request: Request, credentials: HTTPAuthorizationCredentials | 
     return token.strip()
 
 
+# What a user who must still change their password may call: the change itself, who they
+# are (so the UI can tell), and leaving.
+PASSWORD_CHANGE_ALLOWED_SUFFIXES = ("/auth/change-password", "/auth/me", "/auth/logout")
+MUST_CHANGE_MESSAGE = "You must change your password before doing anything else"
+
+
 def get_current_user(
     request: Request, session: DbSession, credentials: BearerCredentials = None
 ) -> User:
@@ -44,6 +53,14 @@ def get_current_user(
     # A password reset raises `token_version`, which retires every token issued before it.
     if claims.token_version != user.token_version:
         raise AuthenticationError("Token is no longer valid", code="token_revoked")
+    if user.must_change_password and not request.url.path.endswith(
+        PASSWORD_CHANGE_ALLOWED_SUFFIXES
+    ):
+        raise PermissionDeniedError(
+            MUST_CHANGE_MESSAGE,
+            code="password_change_required",
+            details={"change_password_path": "/auth/change-password"},
+        )
     return user
 
 

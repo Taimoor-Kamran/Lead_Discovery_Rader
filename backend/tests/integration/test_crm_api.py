@@ -178,7 +178,8 @@ def test_the_lead_list_filters_by_status_and_shows_errors(
     item = held["items"][0]
     assert item["business_name"] == "Barton Creek Plumbing" and item["city"] == "Austin"
     assert item["attempts"] == 1 and "bad token" in item["last_error"]
-    assert item["services"] == []
+    # v0.8.0: a row not yet in the CRM shows the approved services it will carry.
+    assert item["services"] == ["Website redesign"]
     assert (
         client.get(f"{API}/crm/leads", params={"status": "synced"}, headers=headers).json()["items"]
         == []

@@ -7,13 +7,17 @@ import secrets
 import sys
 import uuid
 from collections.abc import Callable
+from typing import Any
+
+from sqlalchemy.orm import Session
 
 from app import models_registry  # noqa: F401
+from app.core.backup import BackupResult
 from app.core.config import get_settings
 from app.core.db import session_scope
 from app.core.errors import NotFoundError, ValidationFailedError
 from app.core.logging import configure_logging, get_logger
-from app.core.security import check_jwt_secret
+from app.core.startup import check_startup, refuse_outside_development
 from app.modules.adapters import registry
 from app.modules.adapters.base import DiscoveryConfig
 from app.modules.adapters.google_places.adapter import SOURCE_NAME as GOOGLE_PLACES
@@ -23,7 +27,7 @@ from app.modules.auth.models import Role
 from app.modules.auth.schemas import MIN_PASSWORD_LENGTH
 from app.modules.auth.service import ensure_admin, ensure_user
 from app.modules.discovery.service import purge_expired
-from app.modules.jobs.models import JobRunStatus
+from app.modules.jobs.models import JobRun, JobRunStatus
 from app.modules.jobs.schemas import GeoSpec
 
 logger = get_logger("app.cli")
@@ -45,8 +49,18 @@ def seed_admin(argv: list[str]) -> int:
         password = secrets.token_urlsafe(GENERATED_PASSWORD_BYTES)
         generated = True
 
+    from pydantic import ValidationError
+
     with session_scope() as session:
-        user, created = ensure_admin(session, email, password)
+        try:
+            user, created = ensure_admin(session, email, password, must_change_password=generated)
+        except ValidationError as exc:
+            problems = "; ".join(str(err.get("msg", "")) for err in exc.errors())
+            print(f"ADMIN_EMAIL / ADMIN_PASSWORD are not usable: {problems}")
+            return 2
+        except ValidationFailedError as exc:
+            print(f"{exc.message}. Nothing was changed.")
+            return 2
         user_id = str(user.id)
 
     action = "created" if created else "promoted to admin"
@@ -80,11 +94,9 @@ def seed_demo_users(argv: list[str]) -> int:
     is safe: an existing user keeps its password and is only given the demo role.
     """
     settings = get_settings()
-    if not settings.is_development:
-        print(
-            f"APP_ENV is '{settings.environment}'. Demo users are for local development only; "
-            "create real users with POST /api/v1/users."
-        )
+    refusal = refuse_outside_development(settings, "seed-demo-users")
+    if refusal is not None:
+        print(f"{refusal} Create real users from the Users page or POST /api/v1/users.")
         return 2
     password = settings.demo_users_password.get_secret_value().strip()
     if not password:
@@ -187,11 +199,9 @@ def load_demo_data_command(argv: list[str]) -> int:
     from app.demo.loader import load_demo_data, run_pipeline
 
     settings = get_settings()
-    if not settings.is_development:
-        print(
-            f"APP_ENV is '{settings.environment}'. The demo fixture is fictional data and "
-            "is only available in development."
-        )
+    refusal = refuse_outside_development(settings, "load-demo-data")
+    if refusal is not None:
+        print(f"{refusal} The demo fixture is fictional data.")
         return 2
 
     with session_scope() as session:
@@ -246,10 +256,9 @@ def reset_demo_data_command(argv: list[str]) -> int:
     from app.demo.loader import reset_demo_data
 
     settings = get_settings()
-    if not settings.is_development:
-        print(
-            f"APP_ENV is '{settings.environment}'. The demo data can only be reset in development."
-        )
+    refusal = refuse_outside_development(settings, "reset-demo-data")
+    if refusal is not None:
+        print(refusal)
         return 2
 
     with session_scope() as session:
@@ -263,6 +272,11 @@ def reset_demo_data_command(argv: list[str]) -> int:
         f"Removed {result.decisions_deleted} decision(s), {result.suppressions_deleted} "
         f"suppression(s) and {result.opportunities_deleted} opportunit(y/ies)."
     )
+    if result.e2e_users_deleted or result.e2e_users_deactivated:
+        print(
+            f"Removed {result.e2e_users_deleted} e2e user(s) "
+            f"(e2e-*@example.com); deactivated {result.e2e_users_deactivated} still referenced."
+        )
     status = result.classification_status.value if result.classification_status else "unknown"
     print(f"Classification: {result.classification_run_id} ({status})")
     print(f"  {_counts(result.classification_summary)}")
@@ -543,6 +557,110 @@ def ai_smoke(argv: list[str]) -> int:
     return 0
 
 
+def backup_command(argv: list[str]) -> int:
+    """`make backup`: one `pg_dump -Fc` into BACKUP_DIR, then keep the newest BACKUP_KEEP.
+
+    Recorded as a `backup` job run so the health page shows it beside the scheduled ones.
+    """
+    parser = argparse.ArgumentParser(prog="python -m app.cli backup")
+    parser.parse_args(argv)
+
+    from app.core.backup import create_backup
+    from app.modules.jobs.service import BACKUP_JOB_KIND, run_inline
+
+    outcome: dict[str, object] = {}
+
+    def work(session: Session, run: JobRun) -> dict[str, Any]:
+        result = create_backup()
+        outcome["result"] = result
+        return result.summary()
+
+    with session_scope() as session:
+        run = run_inline(session, kind=BACKUP_JOB_KIND, work=work)
+        status = run.status
+        error = run.error
+
+    if status is not JobRunStatus.done:
+        print(f"Backup FAILED: {error}")
+        return 1
+    result = outcome["result"]
+    assert isinstance(result, BackupResult)
+    print(f"Backup written: {result.file.path} ({result.file.size_bytes} bytes)")
+    if result.pruned:
+        print(f"Removed {len(result.pruned)} old backup(s): {', '.join(result.pruned)}")
+    print("The dump holds the database only. Copy .env.prod somewhere safe separately.")
+    return 0
+
+
+def restore_command(argv: list[str]) -> int:
+    """`make restore FILE=…` (after its typed confirmation): restore one dump in place.
+
+    Refuses without `--yes`, because this replaces every table. The Makefile stops the
+    api and the worker first and runs the migrations afterwards.
+    """
+    parser = argparse.ArgumentParser(prog="python -m app.cli restore")
+    parser.add_argument("--file", required=True, help="Path of the .dump inside the container")
+    parser.add_argument("--yes", action="store_true", help="Confirm replacing the database")
+    args = parser.parse_args(argv)
+
+    from app.core.backup import BackupError, restore_backup
+
+    if not args.yes:
+        print("Refusing: a restore replaces the whole database. Run `make restore FILE=…`.")
+        return 2
+    try:
+        name = restore_backup(args.file)
+    except BackupError as exc:
+        print(f"Restore FAILED: {exc}")
+        return 1
+    print(f"Restored {name}. Now run the migrations (`make migrate`) and start api + worker.")
+    return 0
+
+
+def backup_verify_command(argv: list[str]) -> int:
+    """`make backup-verify`: restore the newest dump into a throw-away database and check it."""
+    parser = argparse.ArgumentParser(prog="python -m app.cli backup-verify")
+    parser.add_argument("--file", help="Verify this dump instead of the newest one")
+    args = parser.parse_args(argv)
+
+    from app.core.backup import VerifyResult, verify_backup
+    from app.modules.jobs.service import BACKUP_VERIFY_JOB_KIND, run_inline
+
+    outcome: dict[str, object] = {}
+
+    def work(session: Session, run: JobRun) -> dict[str, Any]:
+        result = verify_backup(file=args.file)
+        outcome["result"] = result
+        if not result.ok:
+            from app.modules.alerts import service as alerts
+
+            alerts.raise_alert(
+                session,
+                alerts.RULE_BACKUP_VERIFY_FAILED,
+                f"Backup verify failed: {result.error}",
+                severity="critical",
+                details=result.summary(),
+            )
+            raise RuntimeError(result.error or "verify failed")
+        return result.summary()
+
+    with session_scope() as session:
+        run = run_inline(session, kind=BACKUP_VERIFY_JOB_KIND, work=work)
+        status = run.status
+
+    result = outcome.get("result")
+    if not isinstance(result, VerifyResult):  # pragma: no cover - verify never raises
+        print("Verify FAILED before it could start.")
+        return 1
+    if status is not JobRunStatus.done or not result.ok:
+        print(f"Backup verify FAILED for {result.file or 'no file'}: {result.error}")
+        return 1
+    print(f"Backup verify OK: {result.file} restored into {result.database} and dropped again.")
+    print(f"  alembic_version {result.alembic_current} = head")
+    print("  " + ", ".join(f"{table}={count}" for table, count in result.counts.items()))
+    return 0
+
+
 COMMANDS: dict[str, Callable[[list[str]], int]] = {
     "seed-admin": seed_admin,
     "seed-demo-users": seed_demo_users,
@@ -556,12 +674,15 @@ COMMANDS: dict[str, Callable[[list[str]], int]] = {
     "reset-password": reset_password,
     "crm-check": crm_check,
     "crm-bootstrap-airtable": crm_bootstrap_airtable,
+    "backup": backup_command,
+    "restore": restore_command,
+    "backup-verify": backup_verify_command,
 }
 
 
 def main(argv: list[str] | None = None) -> int:
     configure_logging()
-    check_jwt_secret()
+    check_startup()
     args = list(sys.argv[1:] if argv is None else argv)
     if not args or args[0] not in COMMANDS:
         print(f"usage: python -m app.cli [{' | '.join(COMMANDS)}] [options]")

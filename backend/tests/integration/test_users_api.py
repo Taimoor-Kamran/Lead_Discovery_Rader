@@ -21,6 +21,8 @@ def test_an_admin_can_create_a_user(client: TestClient, db: Session, admin_user:
     body = response.json()
     assert body["email"] == NEW_USER["email"]
     assert body["role"] == "reviewer"
+    assert body["must_change_password"] is True, "an admin-created password is temporary"
+    assert body["locked"] is False and body["last_login_at"] is None
     assert "password" not in body and "password_hash" not in body
 
     db.expire_all()

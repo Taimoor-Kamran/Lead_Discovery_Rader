@@ -158,8 +158,10 @@ source is registered **only** when `ENVIRONMENT` (or `APP_ENV`) is `local` or
 
 `make reset-demo-data` (development only) puts the review state back to freshly loaded:
 it removes every review decision, suppression and opportunity and scores the demo
-businesses again (fake AI, no network). Businesses, audits and users stay. `make e2e`
-runs it first.
+businesses again (fake AI, no network). Businesses, audits and users stay — except the
+throw-away `e2e-*@example.com` user `make e2e` signs in as, which is deleted, or
+deactivated when the append-only audit log still names it (the next `make e2e`
+reactivates it). `make e2e` runs the reset first.
 
 ### The demo websites
 
@@ -539,6 +541,36 @@ GET  /crm/export.csv?scope=new|all            # CSV destination only
 registry, add the destination to `CRM_DESTINATION`'s allowed values, give it a `sources`
 row so its calls are metered, and write its recorded-response tests. Everything above the
 adapter — the gate, the delay, dedupe, retry, suppression propagation — is shared.
+
+## Running for real on this machine (v0.8.0)
+
+Production mode runs the same images from `.env.prod` with every port bound to 127.0.0.1,
+strict startup checks (no demo data, no fake providers, a real admin, a strong secret), daily
+backups with a tested restore, a scheduler for the maintenance jobs, and an in-app Health page
+with alerts. The three documents that go with it:
+
+- [`docs/operations.md`](docs/operations.md) — start and stop, where data lives, backup /
+  restore / verify, rotating secrets and keys, adding users, running a search, handling held
+  CRM leads, reading the Health page, upgrading.
+- [`docs/pilot.md`](docs/pilot.md) — the real-data validation from the blueprint: one industry,
+  one city, 60 results, a results table and the go/no-go questions.
+- [`docs/release-checklist.md`](docs/release-checklist.md) — what a human ticks before `v1.0.0`.
+
+Short version:
+
+```bash
+cp .env.prod.example .env.prod   # fill in: JWT_SECRET, POSTGRES_PASSWORD, ADMIN_EMAIL, the keys
+make prod-up                     # 127.0.0.1:3000 (web) and 127.0.0.1:8000 (api)
+make migrate PROD=1
+make seed-admin PROD=1           # then create everyone else from the Users page
+make backup PROD=1 && make backup-verify PROD=1
+```
+
+Nobody needs Swagger any more: **Users** (admin) creates accounts with a temporary password
+that must be changed on first sign-in, and **Searches** (admin, sales rep) creates and runs a
+search after showing what it will cost. Six failed sign-ins in 15 minutes get a 429; ten
+failures lock the account for 15 minutes. The Users page shows both states — "locked
+until" and "Temporarily blocked (until HH:MM)" — and *Unlock* clears both at once.
 
 ## Roles and what each can do
 

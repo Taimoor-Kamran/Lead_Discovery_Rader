@@ -174,3 +174,113 @@ async function accessToken(page: Page): Promise<string> {
 }
 
 
+
+/**
+ * v0.8.0: an admin creates a user who must change their password; the searches page
+ * shows the demo job's four pipeline stages; the web and API responses carry the
+ * security headers. Needs ADMIN_EMAIL + ADMIN_PASSWORD from .env (make e2e sources it);
+ * with a generated admin password the admin steps are skipped with a message.
+ */
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? "";
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? "";
+/**
+ * One fixed throw-away user, not a new `e2e-<timestamp>` each run: `make reset-demo-data`
+ * (which `make e2e` runs first) deactivates every `e2e-*@example.com` user — it cannot
+ * delete one who has signed in, because the audit log is append-only — so the first run
+ * creates this user and every later run reactivates it and sets a fresh temporary
+ * password from the same Users page. Both paths end in the forced password change.
+ */
+const E2E_USER = "e2e-user@example.com";
+const TEMP_PASSWORD = "temporary-e2e-pass-9f3k2";
+const NEW_PASSWORD = "chosen-by-the-e2e-user-42";
+
+async function signInAs(page: Page, email: string, password: string) {
+  await page.goto("/login");
+  await page.getByLabel("Email").fill(email);
+  await page.getByLabel("Password").fill(password);
+  await page.getByRole("button", { name: "Sign in" }).click();
+}
+
+test("admin creates a user who must change their password; the searches page follows the demo pipeline", async ({ page }) => {
+  test.skip(!ADMIN_EMAIL || !ADMIN_PASSWORD, "ADMIN_EMAIL / ADMIN_PASSWORD are not both set in .env; the admin steps need them");
+  const newbie = E2E_USER;
+
+  await test.step("admin creates the user from the Users page (or reactivates and resets the one from last time)", async () => {
+    await signInAs(page, ADMIN_EMAIL, ADMIN_PASSWORD);
+    // A generated admin password would itself force a change; the .env one does not.
+    await expect(page.getByTestId("whoami")).toContainText(ADMIN_EMAIL);
+    await page.getByRole("link", { name: "Users" }).click();
+    await expect(page).toHaveURL(/\/admin\/users$/);
+    // The list is loaded once the admin's own row is there.
+    await expect(page.getByTestId("user-row").filter({ hasText: ADMIN_EMAIL })).toHaveCount(1);
+    const row = page.getByTestId("user-row").filter({ hasText: newbie });
+    if ((await row.count()) === 0) {
+      await page.getByLabel("Email", { exact: true }).fill(newbie);
+      await page.getByRole("combobox", { name: "Role", exact: true }).selectOption("reviewer");
+      await page.getByLabel("Temporary password").fill(TEMP_PASSWORD);
+      await page.getByRole("button", { name: "Create user" }).click();
+      await expect(page.getByTestId("created-once")).toContainText(TEMP_PASSWORD);
+    } else {
+      // Left deactivated by `make reset-demo-data`; bring it back with a fresh temporary
+      // password, which forces the change just as a creation does.
+      if ((await row.textContent())?.includes("deactivated")) {
+        await row.getByRole("button", { name: "Reactivate" }).click();
+        await expect(row).not.toContainText("deactivated");
+      }
+      await row.getByRole("button", { name: "Reset password" }).click();
+      const dialog = page.getByRole("dialog", { name: `Reset password for ${newbie}` });
+      await dialog.getByLabel(/New temporary password/).fill(TEMP_PASSWORD);
+      await dialog.getByRole("button", { name: "Set password" }).click();
+      await expect(page.getByTestId("reset-once")).toContainText(TEMP_PASSWORD);
+    }
+    await expect(row).toContainText("must change");
+    await signOut(page);
+  });
+
+  await test.step("the new user is sent to change their password before anything else", async () => {
+    await signInAs(page, newbie, TEMP_PASSWORD);
+    await expect(page).toHaveURL(/\/profile\?forced=1$/);
+    await expect(page.getByTestId("forced-notice")).toBeVisible();
+    await page.goto("/review");
+    await expect(page).toHaveURL(/\/profile\?forced=1$/);
+    await page.getByLabel("Current password").fill(TEMP_PASSWORD);
+    await page.getByLabel("New password", { exact: true }).fill(NEW_PASSWORD);
+    await page.getByLabel("New password again").fill(NEW_PASSWORD);
+    await page.getByRole("button", { name: "Change password" }).click();
+    await expect(page).toHaveURL(/\/review$/);
+    await expect(page.getByRole("status")).toContainText("Password changed");
+    await signOut(page);
+  });
+
+  await test.step("the demo search shows its four pipeline stages and links to the queue", async () => {
+    await signInAs(page, ADMIN_EMAIL, ADMIN_PASSWORD);
+    await page.getByRole("link", { name: "Searches" }).click();
+    await expect(page).toHaveURL(/\/searches$/);
+    await expect(page.getByTestId("estimate")).toBeVisible();
+    const demo = page.getByTestId("search-row").filter({ hasText: "Demo" }).first();
+    await expect(demo.getByTestId("last-run")).toContainText("done");
+    await demo.getByRole("link").first().click();
+    await expect(page).toHaveURL(/\/searches\/[0-9a-f-]{36}$/);
+    for (const stage of ["discovery", "resolution", "audit", "classification"]) {
+      await expect(page.getByTestId(`stage-${stage}`).getByTestId("stage-status")).toHaveText("done");
+    }
+    await expect(page.getByTestId("count-discovery-stored_new")).not.toHaveText("0");
+    await expect(page.getByTestId("review-link")).toHaveAttribute("href", /\/review\?city=/);
+    await page.getByTestId("review-link").click();
+    await expect(page).toHaveURL(/\/review\?city=/);
+    await expect(page.getByTestId("queue-row").first()).toBeVisible();
+    await signOut(page);
+  });
+
+  await test.step("web and API responses carry the security headers", async () => {
+    const web = await page.request.get("/login");
+    expect(web.headers()["x-content-type-options"]).toBe("nosniff");
+    expect(web.headers()["x-frame-options"]).toBe("DENY");
+    expect(web.headers()["referrer-policy"]).toBe("no-referrer");
+    expect(web.headers()["content-security-policy"]).toMatch(/default-src 'self'/);
+    expect(web.headers()["content-security-policy"]).toMatch(/script-src 'self' 'nonce-/);
+    const api = await page.request.get(`${API}/health`);
+    expect(api.headers()["x-content-type-options"]).toBe("nosniff");
+    expect(api.headers()["x-frame-options"]).toBe("DENY");
+  });
+});

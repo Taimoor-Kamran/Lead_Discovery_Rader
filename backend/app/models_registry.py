@@ -5,6 +5,7 @@ Alembic and the test harness both rely on this single import point.
 
 from app.core.db import Base
 from app.modules.ai.models import AIClassification
+from app.modules.alerts.models import Alert
 from app.modules.audit.models import AuditLog
 from app.modules.audit_web.models import WebsiteAudit
 from app.modules.auth.models import User
@@ -20,6 +21,7 @@ from app.modules.sources.models import Source
 
 __all__ = [
     "AIClassification",
+    "Alert",
     "ApiCall",
     "AuditLog",
     "Base",

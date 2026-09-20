@@ -1,0 +1,88 @@
+# Production mode on ONE machine (spec v0.8.0). Used together with docker-compose.yml:
+#
+#   make prod-up      # docker compose -p radar-prod --env-file .env.prod \
+#                     #   -f docker-compose.yml -f docker-compose.prod.yml up --build -d --wait
+#
+# What this overlay changes:
+#   - every service reads `.env.prod` (gitignored; copy `.env.prod.example`) and runs with
+#     ENVIRONMENT=production, so the startup checks in app/core/startup.py apply;
+#   - only the API and the web app are published, and only on 127.0.0.1 — nothing on this
+#     machine's LAN address can reach them, and PostgreSQL and Redis are not published at all;
+#   - `restart: unless-stopped`, memory limits, and separate `*-prod` volumes so `make down
+#     ARGS=-v` on the development stack can never touch production data;
+#   - `./backups` and `./logs` are bind-mounted so dumps and rotating log files land on the
+#     host, where the operator copies them off the machine.
+#
+# `!override` replaces the base file's list instead of merging with it (Compose v2.24+);
+# without it the base file's 0.0.0.0 port mappings would still be published.
+
+services:
+  postgres:
+    ports: !override []
+    restart: unless-stopped
+    volumes: !override
+      - postgres-data-prod:/var/lib/postgresql/data
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+
+  redis:
+    ports: !override []
+    restart: unless-stopped
+    volumes: !override
+      - redis-data-prod:/data
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+
+  api:
+    env_file: !override [.env.prod]
+    environment:
+      ENVIRONMENT: production
+      LOG_DIR: /app/logs
+      LOG_FILE: api.log
+      BACKUP_DIR: /app/backups
+    ports: !override
+      - "127.0.0.1:${API_PORT:-8000}:8000"
+    restart: unless-stopped
+    volumes: !override
+      - ./backups:/app/backups
+      - ./logs:/app/logs
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+
+  worker:
+    env_file: !override [.env.prod]
+    environment:
+      ENVIRONMENT: production
+      LOG_DIR: /app/logs
+      LOG_FILE: worker.log
+      BACKUP_DIR: /app/backups
+    restart: unless-stopped
+    volumes: !override
+      - ./backups:/app/backups
+      - ./logs:/app/logs
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+
+  web:
+    build:
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://127.0.0.1:8000/api/v1}
+    ports: !override
+      - "127.0.0.1:${WEB_PORT:-3000}:3000"
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+volumes:
+  postgres-data-prod:
+  redis-data-prod:

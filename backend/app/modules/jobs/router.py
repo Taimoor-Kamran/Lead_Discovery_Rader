@@ -10,8 +10,13 @@ from app.modules.auth.deps import CurrentUser, DbSession, require_role
 from app.modules.auth.models import Role, User
 from app.modules.jobs import service
 from app.modules.jobs.schemas import (
+    CostEstimate,
+    EstimateRequest,
+    IndustryOption,
     JobRunRead,
+    PipelineRead,
     SearchJobCreate,
+    SearchJobListItem,
     SearchJobRead,
     SearchJobUpdate,
 )
@@ -30,14 +35,32 @@ def create_search_job(
     return SearchJobRead.model_validate(job)
 
 
-@search_jobs_router.get("", response_model=Page[SearchJobRead])
+@search_jobs_router.get("", response_model=Page[SearchJobListItem])
 def list_search_jobs(
     user: CurrentUser,
     session: DbSession,
     limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
     cursor: Annotated[str | None, Query()] = None,
-) -> Page[SearchJobRead]:
+) -> Page[SearchJobListItem]:
+    """Search jobs, newest first, each with its most recent discovery run."""
     return service.list_search_jobs(session, limit=limit, cursor=cursor)
+
+
+# Static paths are declared before `/{search_job_id}` so they are not read as an id.
+@search_jobs_router.get("/industries", response_model=list[IndustryOption])
+def list_industries(user: CurrentUser) -> list[IndustryOption]:
+    """The industry dropdown: taxonomy slugs with the text a source is asked for."""
+    return service.industries()
+
+
+@search_jobs_router.post("/estimate", response_model=CostEstimate)
+def estimate_search(
+    payload: EstimateRequest, user: CurrentUser, session: DbSession
+) -> CostEstimate:
+    """What a run with these settings would cost against today's caps. Calls nothing."""
+    return service.estimate(
+        session, max_results=payload.max_results, source_ids=list(payload.source_ids)
+    )
 
 
 @search_jobs_router.get("/{search_job_id}", response_model=SearchJobRead)
@@ -70,6 +93,26 @@ def list_search_job_runs(
     return service.list_runs_for_search_job(session, search_job_id, limit=limit, cursor=cursor)
 
 
+@search_jobs_router.get("/{search_job_id}/estimate", response_model=CostEstimate)
+def estimate_search_job(
+    search_job_id: uuid.UUID, user: CurrentUser, session: DbSession
+) -> CostEstimate:
+    """The cost estimate for running this job now."""
+    return service.estimate_for_job(session, service.get_search_job(session, search_job_id))
+
+
+@search_jobs_router.get("/{search_job_id}/pipeline", response_model=PipelineRead)
+def search_job_pipeline(
+    search_job_id: uuid.UUID,
+    user: CurrentUser,
+    session: DbSession,
+    run_id: Annotated[uuid.UUID | None, Query()] = None,
+) -> PipelineRead:
+    """Discovery → resolution → audit → classification for the latest (or the given) run."""
+    job = service.get_search_job(session, search_job_id)
+    return service.pipeline(session, job, discovery_run_id=run_id)
+
+
 @search_jobs_router.post(
     "/{search_job_id}/run", response_model=JobRunRead, status_code=status.HTTP_202_ACCEPTED
 )
@@ -79,14 +122,10 @@ def run_search_job(
     session: DbSession,
     idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
 ) -> JobRunRead:
-    """Enqueue a run. Repeating the call with the same Idempotency-Key returns the first run."""
-    service.get_search_job(session, search_job_id)
-    run = service.enqueue_run(
-        session,
-        search_job_id=search_job_id,
-        actor_id=actor.id,
-        idempotency_key=idempotency_key,
-    )
+    """Enqueue a run, unless today's Places cap cannot cover it (422 `daily_cap_exceeded`).
+    Repeating the call with the same Idempotency-Key returns the first run."""
+    job = service.get_search_job(session, search_job_id)
+    run = service.run_search_job(session, job, actor_id=actor.id, idempotency_key=idempotency_key)
     return JobRunRead.model_validate(run)
 
 

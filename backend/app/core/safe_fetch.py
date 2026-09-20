@@ -16,9 +16,11 @@ otherwise. The blueprint's rule (slide 42) is "SSRF-guard everything", which her
 * one host is asked at most once every few seconds, and the whole process keeps a cap on
   how many audits fetch at the same time.
 
-Known limitation, by design in this spec: the addresses are validated and the connection
-is then made by name, so a hostile DNS server could in theory answer differently the
-second time. Closing that needs a pinned resolver or an egress proxy, which is v0.8.0.
+Since v0.8.0 the connection is **pinned**: the address that passed validation is the one
+the socket opens to (`FetchRequest.pinned_ip`, honoured by the network backend), while
+the hostname is kept for SNI and the `Host` header. A DNS server that answers with a
+public address first and a private one second gains nothing: the second answer is never
+asked for.
 """
 
 import hashlib
@@ -541,8 +543,9 @@ class SafeFetcher:
         host = parts.hostname or ""
         backend = self._backend(host)
         assert self.throttle is not None and self.concurrency is not None
+        pinned_ip: str | None = None
         if backend.resolves_dns:
-            self._validate_dns(host, port_of(parts), url)
+            pinned_ip = self._validate_dns(host, port_of(parts), url)
             # Politeness is owed to a real server. A fixture answered from disk has nobody
             # to be polite to, which is what keeps a demo load and the test suite quick
             # instead of sleeping five seconds between every page.
@@ -567,6 +570,7 @@ class SafeFetcher:
                         read_timeout if read_timeout is not None else float("inf"),
                     ),
                     max_bytes=self.settings.audit_max_bytes,
+                    pinned_ip=pinned_ip,
                 )
             )
         finally:
@@ -578,11 +582,18 @@ class SafeFetcher:
                 return backend
         raise UnsafeUrlError(f"No fetch backend will answer for '{host}'")
 
-    def _validate_dns(self, host: str, port: int, url: str) -> None:
-        """Resolve the name and refuse if *any* answer is an address we may not reach."""
+    def _validate_dns(self, host: str, port: int, url: str) -> str | None:
+        """Resolve the name, refuse if *any* answer is an address we may not reach, and
+        return the address the connection must be pinned to (IPv4 preferred).
+
+        An IP-literal host was validated by `split_safe_url`; it needs no pin.
+        """
+        if _as_ip(host) is not None:
+            return None
         addresses = self.resolver(host, port)
         if not addresses:
             raise ConnectFailedError(f"'{host}' resolved to no addresses")
+        validated: list[ipaddress.IPv4Address | ipaddress.IPv6Address] = []
         for raw in addresses:
             address = _as_ip(raw)
             if address is None:
@@ -590,6 +601,9 @@ class SafeFetcher:
             blocked = blocked_reason(address)
             if blocked is not None:
                 raise UnsafeUrlError(f"'{host}' resolves to {address}, which is {blocked}", url=url)
+            validated.append(address)
+        preferred = next((a for a in validated if a.version == 4), validated[0])
+        return str(preferred)
 
 
 def robots_allows(body: str, url: str, user_agent: str) -> bool:

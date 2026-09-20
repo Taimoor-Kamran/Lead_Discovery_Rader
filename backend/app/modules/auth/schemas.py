@@ -1,9 +1,9 @@
 """Auth and user request/response models."""
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, computed_field
 
 from app.modules.auth.models import Role
 
@@ -28,8 +28,25 @@ class UserRead(BaseModel):
     email: str
     role: Role
     is_active: bool
+    # v0.8.0: the forced-change flag, the lock, and when they last signed in.
+    must_change_password: bool = False
+    locked_until: datetime | None = None
+    # Set only on the admin listing: when the login rate limit (any address) lets the
+    # email try again. `None` means not currently blocked, or not looked up.
+    rate_limited_until: datetime | None = None
+    last_login_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def locked(self) -> bool:
+        return self.locked_until is not None and self.locked_until > datetime.now(UTC)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def rate_limited(self) -> bool:
+        return self.rate_limited_until is not None and self.rate_limited_until > datetime.now(UTC)
 
 
 class UserCreate(BaseModel):
@@ -37,9 +54,22 @@ class UserCreate(BaseModel):
     password: str = Field(min_length=MIN_PASSWORD_LENGTH, max_length=256)
     role: Role
     is_active: bool = True
+    # A user an admin creates gets a temporary password and must replace it first thing.
+    must_change_password: bool = True
 
 
 class UserUpdate(BaseModel):
     role: Role | None = None
     is_active: bool | None = None
     password: str | None = Field(default=None, min_length=MIN_PASSWORD_LENGTH, max_length=256)
+
+
+class PasswordResetRequest(BaseModel):
+    """An admin sets a new temporary password; the user must change it on next sign-in."""
+
+    password: str = Field(min_length=MIN_PASSWORD_LENGTH, max_length=256)
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str = Field(min_length=1, max_length=256)
+    new_password: str = Field(min_length=1, max_length=256)

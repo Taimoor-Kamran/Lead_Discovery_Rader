@@ -38,8 +38,14 @@ services:
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://radar:radar@postgres:5432/radar}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      BACKUP_DIR: /app/backups
+      LOG_DIR: /app/logs
+      LOG_FILE: api.log
     ports:
       - "${API_PORT:-8000}:8000"
+    volumes:
+      - ./backups:/app/backups
+      - ./logs:/app/logs
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -58,6 +64,12 @@ services:
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://radar:radar@postgres:5432/radar}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      BACKUP_DIR: /app/backups
+      LOG_DIR: /app/logs
+      LOG_FILE: worker.log
+    volumes:
+      - ./backups:/app/backups
+      - ./logs:/app/logs
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }

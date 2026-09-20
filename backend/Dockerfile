@@ -8,8 +8,14 @@ ENV PYTHONUNBUFFERED=1 \
     UV_PROJECT_ENVIRONMENT=/opt/venv \
     PATH="/opt/venv/bin:$PATH"
 
+# curl for the health check; the PostgreSQL 16 client tools (pg_dump / pg_restore) for
+# `make backup`, `make restore` and the scheduled backup + verify. Debian bookworm ships
+# the 15 client, which refuses to dump a 16 server, hence the PGDG repository.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl \
+    && apt-get install -y --no-install-recommends curl ca-certificates gnupg lsb-release \
+       postgresql-common \
+    && /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y \
+    && apt-get install -y --no-install-recommends postgresql-client-16 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=ghcr.io/astral-sh/uv:0.9.29 /uv /usr/local/bin/uv

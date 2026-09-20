@@ -11,8 +11,11 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { href: "/review", label: "Review queue", roles: ["admin", "reviewer", "crm_manager", "tech_admin"] },
   { href: "/duplicates", label: "Duplicates", roles: ["admin", "reviewer"] },
   { href: "/leads", label: "My leads", roles: ["admin", "reviewer", "sales_rep", "crm_manager"] },
+  { href: "/searches", label: "Searches", roles: ["admin", "sales_rep", "tech_admin"] },
   { href: "/crm", label: "CRM", roles: ["admin", "crm_manager", "tech_admin"] },
   { href: "/admin/suppressions", label: "Suppressions", roles: ["admin"] },
+  { href: "/admin/users", label: "Users", roles: ["admin"] },
+  { href: "/admin/health", label: "Health", roles: ["admin", "tech_admin"] },
 ];
 
 export function navFor(role: Role): NavItem[] {
@@ -33,6 +36,16 @@ export function canSeeAllLeads(role: Role): boolean {
 
 export function canPickAssignee(role: Role): boolean {
   return role === "admin" || role === "reviewer";
+}
+
+/** Who may create and run a search. A tech admin only reads the searches page. */
+export function canRunSearches(role: Role): boolean {
+  return role === "admin" || role === "sales_rep";
+}
+
+/** Who sees the alert banner and the health page. */
+export function canSeeAlerts(role: Role): boolean {
+  return role === "admin" || role === "tech_admin";
 }
 
 /** Who may send, retry and export leads. A tech admin only reads the CRM page. */

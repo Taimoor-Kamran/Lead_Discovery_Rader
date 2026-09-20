@@ -63,7 +63,7 @@ from app.modules.crm.schemas import (
     ExportScope,
     SyncAllResult,
 )
-from app.modules.opportunities.models import Opportunity
+from app.modules.opportunities.models import Opportunity, ReviewStatus
 
 logger = get_logger("app.crm")
 
@@ -888,6 +888,19 @@ def read_lead(session: Session, lead: CrmLead, business: Business | None = None)
             .order_by(Opportunity.score.desc())
         )
     ]
+    if not services and lead.status in {CrmLeadStatus.scheduled, CrmLeadStatus.held}:
+        # Nothing has been carried to the CRM yet: show what the approvals say will go.
+        services = [
+            service_label(service)
+            for service in session.scalars(
+                select(Opportunity.service)
+                .where(
+                    Opportunity.business_id == lead.business_id,
+                    Opportunity.review_status == ReviewStatus.approved,
+                )
+                .order_by(Opportunity.score.desc())
+            )
+        ]
     return CrmLeadRead(
         id=lead.id,
         business_id=lead.business_id,

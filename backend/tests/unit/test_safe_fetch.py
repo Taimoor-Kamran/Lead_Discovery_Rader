@@ -44,12 +44,14 @@ class RecordingBackend:
     default: BackendResponse | Exception | None = None
     resolves_dns: bool = True
     calls: list[str] = field(default_factory=list)
+    requests: list[FetchRequest] = field(default_factory=list)
 
     def handles(self, host: str) -> bool:
         return True
 
     def get(self, request: FetchRequest) -> BackendResponse:
         self.calls.append(request.url)
+        self.requests.append(request)
         answer = self.responses.get(request.url, self.default)
         if answer is None:
             return BackendResponse(status_code=404, headers={"content-type": "text/plain"})
@@ -471,3 +473,74 @@ def test_the_concurrency_guard_releases_its_slot() -> None:
     fetcher.fetch(HOME)
 
     assert int(cast(bytes, shared.get("audit:concurrency")) or 0) == 0
+
+
+# --- pinned connections (v0.8.0): DNS cannot change between the check and the socket -----
+
+
+def test_the_connection_is_pinned_to_the_validated_address() -> None:
+    backend = RecordingBackend(default=html("<html><body>ok</body></html>"))
+    fetcher = build(backend, resolves_to=["2606:2800:220:1:248:1893:25c8:1946", PUBLIC_IP])
+
+    outcome = fetcher.fetch(HOME)
+
+    assert outcome.status_code == 200
+    assert [r.pinned_ip for r in backend.requests] == [PUBLIC_IP], "IPv4 preferred, as text"
+    assert backend.requests[0].parts.hostname == "example.test", "the name stays for SNI/Host"
+
+
+def test_a_resolver_that_changes_its_answer_cannot_redirect_the_socket() -> None:
+    """DNS rebinding: the first lookup says public, every later one says private.
+
+    The fetcher resolves once, validates that answer and pins the connection to it, so
+    the backend is handed the public address and the second answer is never consulted.
+    """
+    backend = RecordingBackend(default=html("<html><body>ok</body></html>"))
+    fetcher = build(backend)
+    answers = iter([[PUBLIC_IP], ["10.0.0.7"], ["10.0.0.7"]])
+    lookups: list[str] = []
+
+    def rebinding_resolver(host: str, port: int) -> Sequence[str]:
+        lookups.append(host)
+        return next(answers)
+
+    fetcher.resolver = rebinding_resolver
+
+    outcome = fetcher.fetch(HOME)
+
+    assert outcome.status_code == 200
+    assert lookups == ["example.test"], "exactly one lookup per request"
+    assert backend.requests[0].pinned_ip == PUBLIC_IP
+
+    # The very next request resolves again — and this time the answer is private, so it
+    # is refused before any socket opens. Nothing ever connected to 10.0.0.7.
+    with pytest.raises(UnsafeUrlError, match="private"):
+        fetcher.fetch(HOME)
+    assert len(backend.requests) == 1
+
+
+def test_an_ip_literal_url_needs_no_pin() -> None:
+    backend = RecordingBackend(default=html("<html><body>ok</body></html>"))
+    fetcher = build(backend)
+    fetcher.resolver = lambda host, port: pytest.fail("an IP literal is never resolved")
+
+    fetcher.fetch(f"http://{PUBLIC_IP}/")
+
+    assert backend.requests[0].pinned_ip is None
+
+
+def test_each_redirect_hop_is_pinned_to_its_own_validated_address() -> None:
+    backend = RecordingBackend(
+        responses={HOME: redirect("https://other.test/"), "https://other.test/": html("<p>x</p>")}
+    )
+    fetcher = build(backend)
+    fetcher.resolver = lambda host, port: (
+        [PUBLIC_IP] if host == "example.test" else ["93.184.216.35"]
+    )
+
+    fetcher.fetch(HOME)
+
+    assert [(r.parts.hostname, r.pinned_ip) for r in backend.requests] == [
+        ("example.test", PUBLIC_IP),
+        ("other.test", "93.184.216.35"),
+    ]
