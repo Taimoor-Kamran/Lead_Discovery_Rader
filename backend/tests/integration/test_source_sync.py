@@ -1,5 +1,6 @@
 """`sync-sources`: the registry is the source of truth for the `sources` table."""
 
+import pytest
 from sqlalchemy.orm import Session
 
 from app.modules.adapters import registry
@@ -87,3 +88,21 @@ def test_sync_sources_refreshes_metadata_but_keeps_the_operators_choice(db: Sess
 
     assert synced.config["content_ttl_days"] == 90
     assert synced.enabled is False, "sync-sources must never re-enable a disabled source"
+
+
+def test_the_openai_row_is_a_metered_service_and_not_searchable(db: Session) -> None:
+    """v0.5.0: the AI provider gets a source row for metering, never for discovery."""
+    from app.core.errors import ValidationFailedError
+    from app.modules.sources.service import validate_source_ids
+
+    sources = {s.name: s for s in registry.sync_sources(db)}
+    db.commit()
+
+    openai_row = sources["openai"]
+    assert openai_row.kind.value == "api"
+    assert openai_row.config["role"] == "ai_service"
+    assert openai_row.config["rate_limit"]["daily_call_cap"] == 500
+    assert "never a phone number" in openai_row.config["commercial_use_note"]
+    with pytest.raises(ValidationFailedError) as info:
+        validate_source_ids(db, [openai_row.id])
+    assert info.value.details["service_sources"] == ["openai"]

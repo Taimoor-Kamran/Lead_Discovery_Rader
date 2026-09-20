@@ -3,6 +3,104 @@
 All notable changes, one section per merged spec. Newest first.
 Format: `## [vX.Y.Z] - YYYY-MM-DD` followed by Added / Changed / Fixed.
 
+## [v0.5.0] - 2026-09-20
+
+### Added
+
+- **Opportunities** (`app/modules/opportunities`, migration `0005`). Every audited business
+  gets, per service that fits, one *pending* opportunity carrying the reason, the verbatim
+  evidence (finding code, text, URL), a confidence, a four-part score and its provenance.
+  The four services live as data in `catalogue.py`: `website_design`, `seo_gbp`,
+  `booking_setup`, `ads_social`. A partial unique index keeps one pending opportunity per
+  business and service, so re-classification updates in place and never duplicates.
+- **Deterministic rules first** (`rules.py`). Findings map to services; a service's
+  confidence is `1 - prod(1 - c)` over its findings' base confidences by severity
+  (high 0.8, medium 0.6, low 0.4, info 0.2), capped at 0.95. `ads_social` is the one weak
+  signal from a check (no social links on a parsed page, fixed 0.3). Robots-blocked and
+  permanently closed businesses get nothing; an unreachable site yields `website_design`
+  only. Rules need no model and run under every provider, including `disabled`.
+- **AI second, never trusted** (`app/modules/ai`). A provider-agnostic `LLMClient` with an
+  `OpenAIClient` (official SDK, strict JSON-schema output, the SDK's timeout and 429/5xx
+  retries, metered into `api_calls` under a new `openai` source row) and a `FakeLLMClient`
+  that answers from `app/demo/ai/`. The prompt is checked in as `classify_v1.md`
+  (`classify-1`): page text is untrusted data inside delimiters the page cannot close, only
+  catalogue services may be proposed, every claim must quote its input verbatim, unknown
+  stays `unknown`, and no person, email, phone, address, budget, date or intent may be
+  invented. **What is sent is minimised**: name, industry, city/state, website, the
+  findings with their evidence, the PageSpeed score, the tech stack and up to 8 000 chars
+  of page text — with phone numbers, emails and street addresses scrubbed from every
+  string first, including ones printed on the page.
+- **Guardrails on every answer** (`guardrails.py`, one test per rule). A quote that is not
+  a whitespace-normalised substring of the input is dropped; an unknown finding code drops
+  the evidence item; an unknown service drops the opportunity; an opportunity with no
+  valid evidence left is dropped; an AI-only opportunity is capped at 0.6 and marked
+  `source = ai`; a rationale or summary carrying an email, a phone number or a URL that was
+  never sent is blanked; forbidden wording ("needs", "should", "bad", "terrible",
+  "outdated website") blanks the rationale; `buying_intent = explicit` survives only when a
+  valid quote matches a configured pattern; `needs_human_review` is always `true`; an
+  industry outside the taxonomy becomes `unknown`. Every drop is recorded in
+  `rejected_claims` on the classification row.
+- **Merging**: the AI may confirm a rule (raising its confidence by at most 0.15, with
+  valid evidence) or add a service the rules missed. It can never remove a rule
+  opportunity: a service the AI omits stays, with `ai_agrees = false`.
+- **Two-tier routing** (`routing.py`): every business goes to `AI_TRIAGE_MODEL`; it is
+  escalated once to `AI_ESCALATION_MODEL` when the schema is still invalid after one retry,
+  a kept confidence lands in 0.40–0.60, the audit flagged a JavaScript shell, or the
+  industry does not match the listing. The escalation answer replaces the triage answer;
+  both are stored. `AI_ESCALATION_ENABLED=false` leaves unclear cases as they are.
+- **Cost controls** (`budget.py`): a daily USD budget and call cap (Redis, UTC day), a
+  per-run cap, an estimated cost from configured per-million prices (`null` when prices are
+  not set, with a logged warning), and **reuse by input hash** — the same prompt version,
+  model and input is never sent twice (`status = reused`, zero tokens). When a guard trips
+  the AI is skipped (`status = skipped_budget`), rule opportunities are still created and
+  the run finishes `done`.
+- **`ai_classifications`**: model, prompt version, input hash, status
+  (`ok | schema_invalid | guardrail_trimmed | error | skipped_budget | skipped_disabled |
+  reused`), escalated, validated `output`, `raw_output` (≤ 20 KB), `rejected_claims`,
+  tokens, estimated cost, latency, error. `raw_output` and `output.business_summary` expire
+  with `AUDIT_CONTENT_TTL_DAYS`: `make purge-expired` nulls them and keeps the rest.
+- **Scoring `scoring-1`** (`scoring.py`): `facts` (operational, website state known,
+  industry known, city + state), `inference` (the final confidence), `intent` (1 only for a
+  guardrail-passed explicit intent), `contactability` (a public business phone, and a
+  contact form or email link on the homepage — business-level only). Total is
+  `0.25·facts + 0.45·inference + 0.10·intent + 0.20·contactability`, weights in settings,
+  and the components are stored and returned with every opportunity.
+- **The `classification` job**, queued automatically when an audit run finishes and keyed
+  off it. One business failing never fails the run (savepoint per business); an AI failure
+  of any kind leaves the rules standing. `result_summary` reports `{businesses,
+  opportunities_created, opportunities_updated, ai_calls, ai_escalations, ai_reused,
+  ai_skipped_budget, ai_errors, est_cost_usd}`.
+- **Endpoints.** `GET /opportunities` (filters `service`, `review_status` — default
+  `pending` — `min_score`, `industry`, `city`, `state`, `source`; sort by `score` or
+  `created_at`; cursor pagination), `GET /opportunities/{id}` (reason, every evidence
+  item, score components, AI provenance), `GET /businesses/{id}/opportunities`,
+  `POST /businesses/{id}/classify` (`admin`, `reviewer`, `tech_admin`, idempotent),
+  `POST /jobs/{id}/classify` (`admin`, `tech_admin`), `GET /ai/classifications/{id}` and
+  `GET /ai/usage?date=` (`admin`, `tech_admin`). `sales_rep` reads opportunities and gets
+  403 on the rest.
+- **Demo.** Six scripted model answers under `app/demo/ai/` cover a clean answer, schema
+  drift then a valid retry, an invented quote, an invented email, a prompt-injection
+  homepage (new demo site `riversideplumbing.invalid`, new listing `demo-e14`) and an
+  unclear case that escalates. `expected_opportunities.json` records what every demo
+  business must end up with; `make load-demo-data` now runs classification too and ends
+  with scored opportunities, with no key and no network call.
+- **`make ai-smoke`** — the second and only other command that talks to a live external
+  API, run by a human: one real OpenAI call for one demo business, printing the validated
+  output, the rejected claims, the tokens and the estimated cost. It stores nothing.
+- New settings in `.env.example`: `AI_PROVIDER`, `OPENAI_API_KEY`, `AI_TRIAGE_MODEL`,
+  `AI_ESCALATION_MODEL`, the four price variables, `AI_ESCALATION_ENABLED`,
+  `AI_DAILY_BUDGET_USD`, `AI_MAX_CALLS_PER_RUN`, `AI_DAILY_CALL_CAP`, `AI_RPS`,
+  `AI_PAGE_TEXT_MAX_CHARS`, `AI_TIMEOUT_SECONDS`, `AI_MAX_RETRIES`,
+  `AI_RAW_OUTPUT_MAX_CHARS`, `AI_EXPLICIT_INTENT_PATTERNS`, `SCORING_WEIGHT_*`.
+
+### Changed
+
+- `follow_up` now chains four runs: discovery → resolution → audit → classification.
+- `purge-expired` reports a fourth count, the AI classifications whose raw output and
+  summary it nulled.
+- The demo dataset has 41 listings and 30 businesses (one more, for the injection case);
+  `expected_audits.json` and `austin_plumbers.expected.json` moved accordingly.
+
 ## [v0.4.0] - 2026-09-19
 
 ### Added

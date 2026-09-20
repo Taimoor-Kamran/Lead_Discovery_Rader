@@ -1,0 +1,36 @@
+{
+  "note": "An invented quote (must be dropped and recorded) next to a valid one, plus an AI-only ads_social suggestion the rules did not make (the page links to Facebook), which must be capped at 0.6 and marked source=ai.",
+  "triage": [
+    {
+      "tokens_in": 1420,
+      "tokens_out": 240,
+      "output": {
+        "business_summary": "A family-run, licensed plumber in greater Austin: leak repair, drain and sewer cleaning, water heater replacement.",
+        "industry": "plumbing",
+        "industry_matches_listing": true,
+        "opportunities": [
+          {
+            "service": "website_design",
+            "confidence": 0.9,
+            "rationale": "Audit found no phone link, email link or contact form on the homepage, and a 2019 copyright.",
+            "evidence": [
+              {"finding_code": "no_contact_on_homepage", "quote": "Audit found no phone link, email link or contact form on the homepage.", "source_url": "https://oakhillplumbing.invalid/"},
+              {"finding_code": null, "quote": "We offer a 20% discount for new customers who book this month", "source_url": "https://oakhillplumbing.invalid/"}
+            ]
+          },
+          {
+            "service": "ads_social",
+            "confidence": 0.9,
+            "rationale": "The homepage links to a single Facebook page and no other platform.",
+            "evidence": [
+              {"finding_code": null, "quote": "Find us on Facebook", "source_url": "https://oakhillplumbing.invalid/"}
+            ]
+          }
+        ],
+        "buying_intent": "none_detected",
+        "unknowns": ["How the business takes enquiries"],
+        "needs_human_review": true
+      }
+    }
+  ]
+}

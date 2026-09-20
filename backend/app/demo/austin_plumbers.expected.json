@@ -5,15 +5,15 @@
     "so a change to the thresholds, the weights or the hard rules shows up as a failure",
     "rather than as a quietly different answer."
   ],
-  "records": 40,
+  "records": 41,
   "run_summary": {
-    "processed": 40,
+    "processed": 41,
     "linked_existing": 5,
-    "created": 29,
+    "created": 30,
     "needs_review": 6,
     "invalid": 0
   },
-  "businesses": 29,
+  "businesses": 30,
   "pending_match_candidates": 6,
 
   "auto_merged": {
@@ -57,7 +57,7 @@
   },
 
   "website_kinds": {
-    "own_site": ["demo-a1-1", "demo-e7", "demo-e12"],
+    "own_site": ["demo-a1-1", "demo-e7", "demo-e12", "demo-e14"],
     "builder_subdomain": {
       "demo-e1": "wixwaterworks.wixsite.com",
       "demo-e2": "squaresitesewer.square.site",

@@ -8,17 +8,17 @@
     "builder subdomain that exists only in this fixture, and all of them are answered",
     "from disk."
   ],
-  "businesses_audited": 28,
+  "businesses_audited": 29,
   "run_summary": {
-    "audited": 21,
+    "audited": 22,
     "skipped": 3,
     "robots_blocked": 2,
     "unreachable": 2,
     "failed": 0,
-    "psi_calls": 20
+    "psi_calls": 21
   },
   "not_audited": {
-    "demo-e8": "closed_permanently \u2014 a business that has closed for good is not a lead"
+    "demo-e8": "closed_permanently — a business that has closed for good is not a lead"
   },
   "by_domain": {
     "lonestarplumbing.invalid": {
@@ -233,6 +233,15 @@
         "no_online_booking"
       ],
       "psi_score": 79
+    },
+    "riversideplumbing.invalid": {
+      "case": "v0.5.0: the page text carries a prompt injection. The audit itself is ordinary.",
+      "status": "done",
+      "findings": [
+        "no_online_booking",
+        "no_structured_data"
+      ],
+      "psi_score": 76
     }
   },
   "by_record": {

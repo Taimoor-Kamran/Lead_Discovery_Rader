@@ -30,7 +30,7 @@ is the active spec in `specs/`. Source of truth for *why* is the Technical Bluep
 - Workers: RQ + Redis
 - DB: PostgreSQL 16 (JSONB for raw payloads)
 - Frontend: Next.js (App Router) + React + TypeScript + Tailwind
-- AI: Anthropic Messages API via the official `anthropic` Python SDK, model names from env vars
+- AI: provider-agnostic LLMClient (app/modules/ai); OpenAI implemented, model names from env vars; Fake provider for tests/demo
 - Tooling: uv (Python deps), ruff (lint+format), mypy (types), pytest, respx (HTTP mocking), pnpm (frontend)
 - Runtime: Docker Compose (api, worker, web, postgres, redis)
 
@@ -41,7 +41,8 @@ backend/app/
   core/          config, db, security, logging, errors
   modules/
     auth/ jobs/ sources/ adapters/ normalization/ resolution/
-    audit/ ai/ scoring/ review/ crm/ compliance/
+    discovery/ businesses/ audit_web/ opportunities/ audit/ ai/
+    scoring/ review/ crm/ compliance/   (audit/ = audit log; audit_web/ = website audits)
   workers/       RQ task entrypoints
 backend/migrations/  Alembic
 backend/tests/   unit/ integration/ fixtures/  (recorded API responses live in fixtures/)
@@ -54,7 +55,7 @@ scripts/
 
 - **Permitted sources only.** Official APIs + fetching a business's public homepage within robots.txt.
   No social-media scraping (LinkedIn, Meta, TikTok, X, Reddit). No logins, no CAPTCHA bypass, no anti-bot evasion.
-- **Every fetch goes through the SSRF-guarded HTTP client** (`app/core/http.py` once it exists).
+- **Every fetch of a business website goes through `app/core/safe_fetch.py`** (SSRF guard, robots.txt); official APIs go through `app/core/http.py`.
 - **Provenance is mandatory.** Every stored fact carries `source`, `source_url`, `source_record_id`,
   `discovered_at`, and where relevant `evidence_text` + `confidence`.
 - **Never invent data.** Unknown is `null` / `"unknown"`, never a guess. This applies to code *and* AI prompts.

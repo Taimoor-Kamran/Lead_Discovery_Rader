@@ -53,9 +53,10 @@ def set_enabled(
 
 def is_service_source(source: Source) -> bool:
     """Whether this row is an API the pipeline calls for a service, not for discovery."""
+    from app.modules.ai.openai_client import AI_SERVICE_ROLE
     from app.modules.audit_web.psi import AUDIT_SERVICE_ROLE
 
-    return (source.config or {}).get("role") == AUDIT_SERVICE_ROLE
+    return (source.config or {}).get("role") in {AUDIT_SERVICE_ROLE, AI_SERVICE_ROLE}
 
 
 def validate_source_ids(session: Session, source_ids: list[uuid.UUID]) -> list[Source]:

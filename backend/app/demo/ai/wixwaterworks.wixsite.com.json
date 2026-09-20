@@ -1,0 +1,27 @@
+{
+  "note": "An invented email address in the rationale. The rationale is blanked; the evidence and the opportunity stay.",
+  "triage": [
+    {
+      "tokens_in": 1400,
+      "tokens_out": 150,
+      "output": {
+        "business_summary": "A family-run, licensed plumber in greater Austin offering leak repair, drain cleaning and water heater replacement.",
+        "industry": "plumbing",
+        "industry_matches_listing": true,
+        "opportunities": [
+          {
+            "service": "booking_setup",
+            "confidence": 0.75,
+            "rationale": "Audit found no online booking link; the owner can be reached at owner@wixwaterworks.com to set one up.",
+            "evidence": [
+              {"finding_code": "no_online_booking", "quote": "Audit found no online booking or scheduling link on the homepage.", "source_url": "https://wixwaterworks.wixsite.com/home"}
+            ]
+          }
+        ],
+        "buying_intent": "none_detected",
+        "unknowns": [],
+        "needs_human_review": true
+      }
+    }
+  ]
+}

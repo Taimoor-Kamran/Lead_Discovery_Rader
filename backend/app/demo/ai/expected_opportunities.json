@@ -1,0 +1,772 @@
+{
+  "note": [
+    "What `make load-demo-data` must produce once the classification run has finished.",
+    "Written from the rules in `catalogue.py`, the scripted answers in this directory and",
+    "the merge rules in `opportunities/service.py`; asserted by",
+    "`tests/integration/test_demo_opportunities.py`. Confidence is given as [min, max].",
+    "No request leaves the machine: the AI is the fake provider, every cost is 0."
+  ],
+  "run_summary": {
+    "ai_calls": 23,
+    "ai_errors": 0,
+    "ai_escalations": 1,
+    "ai_reused": 0,
+    "ai_skipped_budget": 0,
+    "businesses": 29,
+    "est_cost_usd": 0.0,
+    "opportunities_created": 56,
+    "opportunities_updated": 0
+  },
+  "businesses": {
+    "abcplumbing.invalid": {
+      "case": "tls_invalid: only website_design, from the unreachable audit.",
+      "services": {
+        "website_design": {
+          "source": "rules",
+          "confidence": [
+            0.8,
+            0.8
+          ],
+          "ai_agrees": null
+        }
+      },
+      "ai_statuses": [],
+      "escalated": false,
+      "buying_intent": null,
+      "rejected_rules": []
+    },
+    "badphoneplumbing.invalid": {
+      "case": "unreachable: only website_design.",
+      "services": {
+        "website_design": {
+          "source": "rules",
+          "confidence": [
+            0.8,
+            0.8
+          ],
+          "ai_agrees": null
+        }
+      },
+      "ai_statuses": [],
+      "escalated": false,
+      "buying_intent": null,
+      "rejected_rules": []
+    },
+    "bartoncreekplumbing.invalid": {
+      "case": "Clean AI answer: agrees with every rule, raises seo_gbp and booking_setup by at most 0.15, website_design already at the 0.95 cap.",
+      "services": {
+        "ads_social": {
+          "source": "rules",
+          "confidence": [
+            0.3,
+            0.3
+          ],
+          "ai_agrees": false
+        },
+        "booking_setup": {
+          "source": "rules+ai",
+          "confidence": [
+            0.7,
+            0.7
+          ],
+          "ai_agrees": true
+        },
+        "seo_gbp": {
+          "source": "rules+ai",
+          "confidence": [
+            0.85,
+            0.85
+          ],
+          "ai_agrees": true
+        },
+        "website_design": {
+          "source": "rules+ai",
+          "confidence": [
+            0.95,
+            0.95
+          ],
+          "ai_agrees": true
+        }
+      },
+      "ai_statuses": [
+        "ok"
+      ],
+      "escalated": false,
+      "buying_intent": "none_detected",
+      "rejected_rules": []
+    },
+    "capitalplumbingatx.invalid": {
+      "services": {
+        "ads_social": {
+          "source": "rules",
+          "confidence": [
+            0.3,
+            0.3
+          ],
+          "ai_agrees": false
+        },
+        "booking_setup": {
+          "source": "rules",
+          "confidence": [
+            0.6,
+            0.6
+          ],
+          "ai_agrees": false
+        }
+      },
+      "ai_statuses": [
+        "ok"
+      ],
+      "escalated": false,
+      "buying_intent": "none_detected",
+      "rejected_rules": []
+    },
+    "capitalplumbinghou.invalid": {
+      "services": {
+        "ads_social": {
+          "source": "rules",
+          "confidence": [
+            0.3,
+            0.3
+          ],
+          "ai_agrees": false
+        },
+        "booking_setup": {
+          "source": "rules",
+          "confidence": [
+            0.6,
+            0.6
+          ],
+          "ai_agrees": false
+        }
+      },
+      "ai_statuses": [
+        "ok"
+      ],
+      "escalated": false,
+      "buying_intent": "none_detected",
+      "rejected_rules": []
+    },
+    "closeddownplumbing.invalid": {
+      "case": "closed_permanently: never audited, never classified, no opportunities.",
+      "services": {},
+      "ai_statuses": [],
+      "escalated": false,
+      "buying_intent": null,
+      "rejected_rules": []
+    },
+    "crestviewpipe.invalid": {
+      "case": "robots_blocked (503): no opportunities at all.",
+      "services": {},
+      "ai_statuses": [],
+      "escalated": false,
+      "buying_intent": null,
+      "rejected_rules": []
+    },
+    "demo-e4": {
+      "case": "Social profile only: website_design from the listing, no AI.",
+      "services": {
+        "website_design": {
+          "source": "rules",
+          "confidence": [
+            0.8,
+            0.8
+          ],
+          "ai_agrees": null
+        }
+      },
+      "ai_statuses": [],
+      "escalated": false,
+      "buying_intent": null,
+      "rejected_rules": []
+    },
+    "demo-e5": {
+      "case": "Social profile only: website_design from the listing, no AI.",
+      "services": {
+        "website_design": {
+          "source": "rules",
+          "confidence": [
+            0.8,
+            0.8
+          ],
+          "ai_agrees": null
+        }
+      },
+      "ai_statuses": [],
+      "escalated": false,
+      "buying_intent": null,
+      "rejected_rules": []
+    },
+    "demo-e6": {
+      "case": "No website: website_design from our own record, no AI.",
+      "services": {
+        "website_design": {
+          "source": "rules",
+          "confidence": [
+            0.8,
+            0.8
+          ],
+          "ai_agrees": null
+        }
+      },
+      "ai_statuses": [],
+      "escalated": false,
+      "buying_intent": null,
+      "rejected_rules": []
+    },
+    "godaddygutters.godaddysites.com": {
+      "case": "Unclear triage (0.5) escalates exactly once; the escalation answer replaces it.",
+      "services": {
+        "ads_social": {
+          "source": "rules",
+          "confidence": [
+            0.3,
+            0.3
+          ],
+          "ai_agrees": false
+        },
+        "booking_setup": {
+          "source": "rules+ai",
+          "confidence": [
+            0.75,
+            0.75
+          ],
+          "ai_agrees": true
+        },
+        "seo_gbp": {
+          "source": "rules",
+          "confidence": [
+            0.4,
+            0.4
+          ],
+          "ai_agrees": false
+        },
+        "website_design": {
+          "source": "rules+ai",
+          "confidence": [
+            0.75,
+            0.75
+          ],
+          "ai_agrees": true
+        }
+      },
+      "ai_statuses": [
+        "ok",
+        "ok"
+      ],
+      "escalated": true,
+      "buying_intent": "none_detected",
+      "rejected_rules": []
+    },
+    "hydeparkdrain.invalid": {
+      "case": "robots_blocked: no opportunities at all.",
+      "services": {},
+      "ai_statuses": [],
+      "escalated": false,
+      "buying_intent": null,
+      "rejected_rules": []
+    },
+    "lonestarplumbing.invalid": {
+      "case": "A complete site: only the weak ads_social signal (no social links), which the fake AI does not confirm.",
+      "services": {
+        "ads_social": {
+          "source": "rules",
+          "confidence": [
+            0.3,
+            0.3
+          ],
+          "ai_agrees": false
+        }
+      },
+      "ai_statuses": [
+        "ok"
+      ],
+      "escalated": false,
+      "buying_intent": "none_detected",
+      "rejected_rules": []
+    },
+    "messyformat-demo.com": {
+      "services": {
+        "ads_social": {
+          "source": "rules",
+          "confidence": [
+            0.3,
+            0.3
+          ],
+          "ai_agrees": false
+        }
+      },
+      "ai_statuses": [
+        "ok"
+      ],
+      "escalated": false,
+      "buying_intent": "none_detected",
+      "rejected_rules": []
+    },
+    "muellerplumbing.invalid": {
+      "services": {
+        "ads_social": {
+          "source": "rules",
+          "confidence": [
+            0.3,
+            0.3
+          ],
+          "ai_agrees": false
+        }
+      },
+      "ai_statuses": [
+        "ok"
+      ],
+      "escalated": false,
+      "buying_intent": "none_detected",
+      "rejected_rules": []
+    },
+    "nocomponents.invalid": {
+      "services": {
+        "ads_social": {
+          "source": "rules",
+          "confidence": [
+            0.3,
+            0.3
+          ],
+          "ai_agrees": false
+        },
+        "booking_setup": {
+          "source": "rules",
+          "confidence": [
+            0.6,
+            0.6
+          ],
+          "ai_agrees": false
+        }
+      },
+      "ai_statuses": [
+        "ok"
+      ],
+      "escalated": false,
+      "buying_intent": "none_detected",
+      "rejected_rules": []
+    },
+    "oakhillplumbing.invalid": {
+      "case": "An invented quote is dropped (rejected_claims) and an AI-only ads_social suggestion is capped at 0.6 with source=ai.",
+      "services": {
+        "ads_social": {
+          "source": "ai",
+          "confidence": [
+            0.6,
+            0.6
+          ],
+          "ai_agrees": true
+        },
+        "booking_setup": {
+          "source": "rules",
+          "confidence": [
+            0.6,
+            0.6
+          ],
+          "ai_agrees": false
+        },
+        "seo_gbp": {
+          "source": "rules",
+          "confidence": [
+            0.856,
+            0.856
+          ],
+          "ai_agrees": false
+        },
+        "website_design": {
+          "source": "rules+ai",
+          "confidence": [
+            0.95,
+            0.95
+          ],
+          "ai_agrees": true
+        }
+      },
+      "ai_statuses": [
+        "guardrail_trimmed"
+      ],
+      "escalated": false,
+      "buying_intent": "none_detected",
+      "rejected_rules": [
+        "quote_not_in_input"
+      ]
+    },
+    "quickfixatx.invalid": {
+      "services": {
+        "ads_social": {
+          "source": "rules",
+          "confidence": [
+            0.3,
+            0.3
+          ],
+          "ai_agrees": false
+        }
+      },
+      "ai_statuses": [
+        "ok"
+      ],
+      "escalated": false,
+      "buying_intent": "none_detected",
+      "rejected_rules": []
+    },
+    "quickfixsatx.invalid": {
+      "services": {
+        "ads_social": {
+          "source": "rules",
+          "confidence": [
+            0.3,
+            0.3
+          ],
+          "ai_agrees": false
+        },
+        "booking_setup": {
+          "source": "rules",
+          "confidence": [
+            0.6,
+            0.6
+          ],
+          "ai_agrees": false
+        }
+      },
+      "ai_statuses": [
+        "ok"
+      ],
+      "escalated": false,
+      "buying_intent": "none_detected",
+      "rejected_rules": []
+    },
+    "reliableplumbingatx.invalid": {
+      "services": {
+        "ads_social": {
+          "source": "rules",
+          "confidence": [
+            0.3,
+            0.3
+          ],
+          "ai_agrees": false
+        },
+        "booking_setup": {
+          "source": "rules",
+          "confidence": [
+            0.6,
+            0.6
+          ],
+          "ai_agrees": false
+        }
+      },
+      "ai_statuses": [
+        "ok"
+      ],
+      "escalated": false,
+      "buying_intent": "none_detected",
+      "rejected_rules": []
+    },
+    "reliableplumbingdfw.invalid": {
+      "services": {
+        "ads_social": {
+          "source": "rules",
+          "confidence": [
+            0.3,
+            0.3
+          ],
+          "ai_agrees": false
+        },
+        "booking_setup": {
+          "source": "rules",
+          "confidence": [
+            0.6,
+            0.6
+          ],
+          "ai_agrees": false
+        }
+      },
+      "ai_statuses": [
+        "ok"
+      ],
+      "escalated": false,
+      "buying_intent": "none_detected",
+      "rejected_rules": []
+    },
+    "riversideplumbing.invalid": {
+      "case": "Prompt injection: the fake model says buying_intent=explicit; the guardrails force none_detected and the intent score is 0.",
+      "services": {
+        "ads_social": {
+          "source": "rules",
+          "confidence": [
+            0.3,
+            0.3
+          ],
+          "ai_agrees": false
+        },
+        "booking_setup": {
+          "source": "rules+ai",
+          "confidence": [
+            0.7,
+            0.7
+          ],
+          "ai_agrees": true
+        },
+        "seo_gbp": {
+          "source": "rules",
+          "confidence": [
+            0.4,
+            0.4
+          ],
+          "ai_agrees": false
+        }
+      },
+      "ai_statuses": [
+        "guardrail_trimmed"
+      ],
+      "escalated": false,
+      "buying_intent": "none_detected",
+      "rejected_rules": [
+        "intent_without_evidence"
+      ]
+    },
+    "roofingcousins.invalid": {
+      "services": {
+        "ads_social": {
+          "source": "rules",
+          "confidence": [
+            0.3,
+            0.3
+          ],
+          "ai_agrees": false
+        },
+        "booking_setup": {
+          "source": "rules",
+          "confidence": [
+            0.6,
+            0.6
+          ],
+          "ai_agrees": false
+        }
+      },
+      "ai_statuses": [
+        "ok"
+      ],
+      "escalated": false,
+      "buying_intent": "none_detected",
+      "rejected_rules": []
+    },
+    "squaresitesewer.square.site": {
+      "case": "A JavaScript shell keeps no page text, so the AI never runs: rules only, ai_agrees null.",
+      "services": {
+        "ads_social": {
+          "source": "rules",
+          "confidence": [
+            0.3,
+            0.3
+          ],
+          "ai_agrees": null
+        },
+        "booking_setup": {
+          "source": "rules",
+          "confidence": [
+            0.6,
+            0.6
+          ],
+          "ai_agrees": null
+        },
+        "seo_gbp": {
+          "source": "rules",
+          "confidence": [
+            0.856,
+            0.856
+          ],
+          "ai_agrees": null
+        },
+        "website_design": {
+          "source": "rules",
+          "confidence": [
+            0.84,
+            0.84
+          ],
+          "ai_agrees": null
+        }
+      },
+      "ai_statuses": [],
+      "escalated": false,
+      "buying_intent": null,
+      "rejected_rules": []
+    },
+    "temporarilyshut.invalid": {
+      "services": {
+        "ads_social": {
+          "source": "rules",
+          "confidence": [
+            0.3,
+            0.3
+          ],
+          "ai_agrees": false
+        },
+        "booking_setup": {
+          "source": "rules",
+          "confidence": [
+            0.6,
+            0.6
+          ],
+          "ai_agrees": false
+        }
+      },
+      "ai_statuses": [
+        "ok"
+      ],
+      "escalated": false,
+      "buying_intent": "none_detected",
+      "rejected_rules": []
+    },
+    "texastrustedplumbing.invalid": {
+      "services": {
+        "ads_social": {
+          "source": "rules",
+          "confidence": [
+            0.3,
+            0.3
+          ],
+          "ai_agrees": false
+        },
+        "booking_setup": {
+          "source": "rules",
+          "confidence": [
+            0.6,
+            0.6
+          ],
+          "ai_agrees": false
+        }
+      },
+      "ai_statuses": [
+        "ok"
+      ],
+      "escalated": false,
+      "buying_intent": "none_detected",
+      "rejected_rules": []
+    },
+    "travisheightsplumbers.invalid": {
+      "services": {
+        "ads_social": {
+          "source": "rules",
+          "confidence": [
+            0.3,
+            0.3
+          ],
+          "ai_agrees": false
+        }
+      },
+      "ai_statuses": [
+        "ok"
+      ],
+      "escalated": false,
+      "buying_intent": "none_detected",
+      "rejected_rules": []
+    },
+    "unknownstatus.invalid": {
+      "services": {
+        "ads_social": {
+          "source": "rules",
+          "confidence": [
+            0.3,
+            0.3
+          ],
+          "ai_agrees": false
+        },
+        "booking_setup": {
+          "source": "rules",
+          "confidence": [
+            0.6,
+            0.6
+          ],
+          "ai_agrees": false
+        }
+      },
+      "ai_statuses": [
+        "ok"
+      ],
+      "escalated": false,
+      "buying_intent": "none_detected",
+      "rejected_rules": []
+    },
+    "wixwaterworks.wixsite.com": {
+      "case": "An invented email in the rationale is blanked; the opportunity and its evidence stay.",
+      "services": {
+        "ads_social": {
+          "source": "rules",
+          "confidence": [
+            0.3,
+            0.3
+          ],
+          "ai_agrees": false
+        },
+        "booking_setup": {
+          "source": "rules+ai",
+          "confidence": [
+            0.75,
+            0.75
+          ],
+          "ai_agrees": true
+        },
+        "seo_gbp": {
+          "source": "rules",
+          "confidence": [
+            0.4,
+            0.4
+          ],
+          "ai_agrees": false
+        },
+        "website_design": {
+          "source": "rules",
+          "confidence": [
+            0.6,
+            0.6
+          ],
+          "ai_agrees": false
+        }
+      },
+      "ai_statuses": [
+        "guardrail_trimmed"
+      ],
+      "escalated": false,
+      "buying_intent": "none_detected",
+      "rejected_rules": [
+        "pii_in_rationale"
+      ]
+    },
+    "zilkerpipeworks.invalid": {
+      "case": "Schema drift on the first call, valid on the retry: one classification row, status ok, two calls.",
+      "services": {
+        "ads_social": {
+          "source": "rules",
+          "confidence": [
+            0.3,
+            0.3
+          ],
+          "ai_agrees": false
+        },
+        "booking_setup": {
+          "source": "rules+ai",
+          "confidence": [
+            0.7,
+            0.7
+          ],
+          "ai_agrees": true
+        },
+        "seo_gbp": {
+          "source": "rules+ai",
+          "confidence": [
+            0.8,
+            0.8
+          ],
+          "ai_agrees": true
+        }
+      },
+      "ai_statuses": [
+        "ok"
+      ],
+      "escalated": false,
+      "buying_intent": "none_detected",
+      "rejected_rules": []
+    }
+  }
+}
