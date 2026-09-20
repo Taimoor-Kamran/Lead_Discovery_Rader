@@ -45,7 +45,6 @@ from app.modules.compliance.models import SuppressionSource
 from app.modules.opportunities import service as opportunities
 from app.modules.opportunities.catalogue import SERVICES
 from app.modules.opportunities.models import Opportunity, ReviewStatus
-from app.modules.opportunities.schemas import OpportunityDetail
 from app.modules.review.models import Decision, ReviewDecision
 from app.modules.review.schemas import (
     NOT_A_FIT_REASON_CODES,
@@ -1022,7 +1021,6 @@ def _decode_lead_cursor(cursor: str) -> tuple[datetime, uuid.UUID]:
 
 
 __all__ = [
-    "OpportunityDetail",
     "decide",
     "decide_batch",
     "list_leads",

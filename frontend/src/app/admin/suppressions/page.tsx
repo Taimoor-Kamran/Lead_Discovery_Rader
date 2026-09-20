@@ -6,10 +6,10 @@ import { Suppressions } from "@/components/admin/Suppressions";
 
 export default function SuppressionsPage() {
   return (
-    <RequireRole roles={["admin"]}>
-      <AppShell>
+    <AppShell>
+      <RequireRole roles={["admin"]}>
         <Suppressions />
-      </AppShell>
-    </RequireRole>
+      </RequireRole>
+    </AppShell>
   );
 }

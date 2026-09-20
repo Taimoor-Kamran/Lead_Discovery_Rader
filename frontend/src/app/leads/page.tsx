@@ -6,10 +6,10 @@ import { Leads } from "@/components/leads/Leads";
 
 export default function LeadsPage() {
   return (
-    <RequireRole roles={["admin", "reviewer", "sales_rep", "crm_manager"]}>
-      <AppShell>
+    <AppShell>
+      <RequireRole roles={["admin", "reviewer", "sales_rep", "crm_manager"]}>
         <Leads />
-      </AppShell>
-    </RequireRole>
+      </RequireRole>
+    </AppShell>
   );
 }

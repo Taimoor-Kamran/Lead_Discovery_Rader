@@ -6,10 +6,10 @@ import { Duplicates } from "@/components/duplicates/Duplicates";
 
 export default function DuplicatesPage() {
   return (
-    <RequireRole roles={["admin", "reviewer"]}>
-      <AppShell>
+    <AppShell>
+      <RequireRole roles={["admin", "reviewer"]}>
         <Duplicates />
-      </AppShell>
-    </RequireRole>
+      </RequireRole>
+    </AppShell>
   );
 }

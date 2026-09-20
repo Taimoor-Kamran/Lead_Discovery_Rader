@@ -54,7 +54,7 @@ test("reviewer approves a lead, the rep sees it, do-not-contact removes a busine
     await expect(lead.getByTestId("lead-place")).toContainText("Austin, TX");
     await expect(page.getByRole("navigation", { name: "Main" })).not.toContainText("Review queue");
     await page.goto("/review");
-    await expect(page.getByRole("alert")).toContainText("Not available for your role");
+    await expect(page.getByText("Not available for your role")).toBeVisible();
     await signOut(page);
   });
 

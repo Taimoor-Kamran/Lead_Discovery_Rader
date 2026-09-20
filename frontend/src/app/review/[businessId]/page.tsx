@@ -12,10 +12,10 @@ export default function BusinessReviewPage({
 }) {
   const { businessId } = use(params);
   return (
-    <RequireRole roles={["admin", "reviewer", "crm_manager", "tech_admin"]}>
-      <AppShell>
+    <AppShell>
+      <RequireRole roles={["admin", "reviewer", "crm_manager", "tech_admin"]}>
         <BusinessReview businessId={businessId} />
-      </AppShell>
-    </RequireRole>
+      </RequireRole>
+    </AppShell>
   );
 }

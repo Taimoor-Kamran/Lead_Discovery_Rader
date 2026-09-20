@@ -24,10 +24,10 @@ import {
   type ReviewOpportunity,
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { CONFLICT_MESSAGE, QUEUE_ORDER_KEY } from "@/lib/review";
 import { canDecide, canPickAssignee } from "@/lib/roles";
 
-export const QUEUE_ORDER_KEY = "radar.queue.order";
-export const CONFLICT_MESSAGE = "Another reviewer already decided this";
+export { CONFLICT_MESSAGE, QUEUE_ORDER_KEY };
 
 type Pending = { decision: Decision; opportunity: ReviewOpportunity };
 

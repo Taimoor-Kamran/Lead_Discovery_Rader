@@ -7,8 +7,8 @@ import { EMPTY_FILTERS, QueueFilters, type QueueFilterState } from "@/components
 import { QueueTable } from "@/components/review/QueueTable";
 import { ApiError, getReviewQueue, reviewBatch, type QueueItem } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { QUEUE_ORDER_KEY } from "@/lib/review";
 import { canDecide } from "@/lib/roles";
-import { QUEUE_ORDER_KEY } from "@/components/review/BusinessReview";
 
 /** The queue page. Selection enables batch reject / not-a-fit only; nothing else is batched. */
 export function ReviewQueue() {
