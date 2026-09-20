@@ -3,6 +3,12 @@
 Integration tests run against a real PostgreSQL 16 started by testcontainers, because the
 schema uses citext, JSONB, arrays, native enums and a trigger — none of which SQLite has.
 Redis is faked; no test ever touches a live external service.
+
+Under `pytest -n` (pytest-xdist, what `make test` runs) the controller process starts
+**one** container and hands its address to every worker; each worker then creates its
+own database on that server (`radar_test_gw0`, `radar_test_gw1`, …), migrates it and
+runs its share of the tests against it. Without `-n` a test process starts the container
+itself, as before.
 """
 
 import json
@@ -92,18 +98,73 @@ def alembic_config(database_url: str) -> Config:
     return config
 
 
-@pytest.fixture(scope="session")
-def database_url() -> Iterator[str]:
-    """A throwaway PostgreSQL 16 instance for the whole test session."""
-    if not _docker_available():
-        pytest.skip("Docker is not available; integration tests need a real PostgreSQL")
-
+def _postgres_container() -> Any:
     try:  # testcontainers >= 4.13 moved the module; the old path warns
         from testcontainers.community.postgres import PostgresContainer
     except ImportError:  # pragma: no cover - older testcontainers
         from testcontainers.postgres import PostgresContainer
 
-    with PostgresContainer("postgres:16-alpine", driver="psycopg") as container:
+    return PostgresContainer("postgres:16-alpine", driver="psycopg")
+
+
+SHARED_URL_KEY = "radar_database_url"
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """xdist controller: start the one shared container before the workers spawn."""
+    if hasattr(config, "workerinput"):
+        return  # a worker: the controller already did this
+    workers = config.getoption("numprocesses", default=None)
+    if not workers or not _docker_available():
+        return
+    container = _postgres_container()
+    container.start()
+    config.stash[_CONTAINER_KEY] = container
+    config.stash[_SHARED_URL_STASH] = container.get_connection_url()
+
+
+_CONTAINER_KEY = pytest.StashKey[Any]()
+_SHARED_URL_STASH = pytest.StashKey[str]()
+
+
+def pytest_configure_node(node: Any) -> None:
+    """xdist controller → each worker: the shared server's address."""
+    url = node.config.stash.get(_SHARED_URL_STASH, None)
+    if url:
+        node.workerinput[SHARED_URL_KEY] = url
+
+
+def pytest_unconfigure(config: pytest.Config) -> None:
+    container = config.stash.get(_CONTAINER_KEY, None)
+    if container is not None:
+        container.stop()
+
+
+def _worker_database(shared_url: str, worker_id: str) -> str:
+    """Create this worker's own database on the shared server and return its URL."""
+    from sqlalchemy import create_engine
+
+    name = f"radar_test_{worker_id}"
+    admin = create_engine(shared_url, isolation_level="AUTOCOMMIT")
+    with admin.connect() as connection:
+        connection.execute(text(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)'))
+        connection.execute(text(f'CREATE DATABASE "{name}"'))
+    admin.dispose()
+    base, _, _ = shared_url.rpartition("/")
+    return f"{base}/{name}"
+
+
+@pytest.fixture(scope="session")
+def database_url(request: pytest.FixtureRequest) -> Iterator[str]:
+    """A throwaway PostgreSQL 16 database for this test process."""
+    workerinput: dict[str, Any] | None = getattr(request.config, "workerinput", None)
+    if workerinput and workerinput.get(SHARED_URL_KEY):
+        yield _worker_database(str(workerinput[SHARED_URL_KEY]), str(workerinput["workerid"]))
+        return
+
+    if not _docker_available():
+        pytest.skip("Docker is not available; integration tests need a real PostgreSQL")
+    with _postgres_container() as container:
         yield container.get_connection_url()
 
 

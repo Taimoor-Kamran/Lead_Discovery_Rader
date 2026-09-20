@@ -171,11 +171,14 @@ format: ## Apply ruff's fixes and formatting to the backend
 typecheck: ## Type-check the backend
 	$(UV) run mypy app tests
 
-test: ## Run the backend test suite
-	$(UV) run pytest
+# `-n auto`: one pytest worker per CPU, each with its own database on one shared
+# PostgreSQL container (tests/conftest.py). `TEST_ARGS=-n0` runs serially.
+TEST_ARGS ?= -n auto
+test: ## Run the backend test suite (parallel; TEST_ARGS=-n0 for serial)
+	$(UV) run pytest $(TEST_ARGS)
 
 test-unit: ## Run only the backend unit tests (no database needed)
-	$(UV) run pytest tests/unit
+	$(UV) run pytest tests/unit $(TEST_ARGS)
 
 frontend-install: ## Install frontend dependencies
 	$(PNPM) install --frozen-lockfile

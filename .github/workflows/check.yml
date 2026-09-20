@@ -41,7 +41,7 @@ jobs:
         run: docker pull postgres:16-alpine
 
       - name: Test
-        run: uv run pytest
+        run: uv run pytest -n auto
 
   frontend:
     runs-on: ubuntu-latest
