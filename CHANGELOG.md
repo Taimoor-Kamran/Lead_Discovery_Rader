@@ -7,6 +7,25 @@ Format: `## [vX.Y.Z] - YYYY-MM-DD` followed by Added / Changed / Fixed.
 
 ### Added
 
+- **Lead detail** `GET /leads/{opportunity_id}` and the read-only page `/leads/[id]`:
+  business facts, plain-language findings with evidence, the reason, the evidence and the
+  approval. A sales rep gets a 403 on a lead not assigned to them (tested).
+- `ReviewOpportunity` / `LeadRead` carry `rule_reason` and `ai_rationale` (the stored
+  `reason` taken apart for display; nothing reworded).
+- `make reset-demo-data` (development only): removes every decision, suppression and
+  opportunity and classifies the demo again. `make e2e` runs it first.
+
+### Changed
+
+- Review UI after the manual pass: human labels for services, finding codes, audit
+  statuses and sources (raw code in the tooltip); scores shown as 0–100 integers; queue
+  chips read "Score 78" with confidence in the tooltip; queue checkboxes appear on hover or
+  when weak signals are shown; rule reason and AI rationale on two labelled lines; one
+  evidence item per finding with an "AI agrees" badge; US phones as `(512) 555-0102`; AI
+  provenance behind a "Details" disclosure; an open-opportunities strip with jump links and
+  sticky decision buttons on the detail page; PageSpeed as "Mobile score 55/100", "Load
+  time (LCP) 3.6 s", "Layout shift (CLS) 0.11" with good / needs work / poor bands.
+
 - **Human review** (`app/modules/review`, migration `0006`). Six decisions per opportunity —
   approve, reject, needs enrichment, duplicate, not a fit, do not contact — each with the
   fields the blueprint requires (reason codes for reject / not-a-fit, a note for

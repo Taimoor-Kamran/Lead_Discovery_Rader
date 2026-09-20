@@ -451,13 +451,22 @@ POST /opportunities/{id}/review                        # {decision, lock_version
 POST /opportunities/review-batch                       # {ids ≤ 50, decision: reject|not_a_fit, reason_code, note?}
 POST /review-decisions/{id}/undo
 GET  /leads?service=&assigned_to=&city=                # a sales rep only ever gets their own
+GET  /leads/{opportunity_id}                           # one lead, read-only; 403 for a rep it is not assigned to
 GET  /users?role=sales_rep                             # the assignment picker (admin, reviewer)
 GET  /suppressions · POST /suppressions · POST /suppressions/{id}/lift
 ```
 
+On **My leads** every business name opens a read-only lead page (`/leads/<id>`): the
+business facts, the website findings in plain words with their evidence, why it is a lead
+(the rules' wording and the AI's rationale on separate lines) and who approved it. A sales
+rep can only open leads assigned to them; the API answers 403 otherwise.
+
 `make e2e` runs the Playwright smoke against the running stack (reviewer approves Barton
-Creek for rep1 → rep1 sees it → a do-not-contact removes a business from the queue). It
-downloads Chromium on first run and is deliberately **not** part of `make check`.
+Creek for rep1 → rep1 sees it and opens the lead page → a do-not-contact removes a business
+from the queue). It first runs `make reset-demo-data` (development only), which removes
+every decision, suppression and opportunity and scores the demo businesses again, so the
+run never depends on what someone clicked before. It downloads Chromium on first run and is
+deliberately **not** part of `make check`.
 
 ## Roles and what each can do
 
