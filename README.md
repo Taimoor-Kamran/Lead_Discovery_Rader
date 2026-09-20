@@ -469,20 +469,86 @@ rep can only open leads assigned to them; the API answers 403 otherwise.
 
 `make e2e` runs the Playwright smoke against the running stack (reviewer approves Barton
 Creek for rep1 → rep1 sees it and opens the lead page → a do-not-contact removes a business
-from the queue). It first runs `make reset-demo-data` (development only), which removes
-every decision, suppression and opportunity and scores the demo businesses again, so the
-run never depends on what someone clicked before. It downloads Chromium on first run and is
+from the queue → with `CRM_DESTINATION=fake`, the CRM manager sends Barton Creek now, sees
+it synced on `/crm`, rep1 sees "In CRM ✓", and a do-not-contact flags the fake record). It
+first runs `make reset-demo-data` (development only), which removes every decision,
+suppression, opportunity and CRM lead and scores the demo businesses again, so the run
+never depends on what someone clicked before. It downloads Chromium on first run and is
 deliberately **not** part of `make check`.
+
+## Getting leads into your CRM
+
+Approved leads leave Radar — and **only** approved leads. A business is sent to the CRM
+when at least one of its opportunities is `approved` and it is not on the suppression
+list; the check runs when the sync is scheduled and **again right before every call** to
+the CRM, so nothing a reviewer did not sign off can ever reach it. Each approval first
+waits out its undo window (`CRM_SYNC_DELAY_MINUTES`, by default the 30-minute
+`REVIEW_UNDO_WINDOW_MINUTES`), so an approval undone in time never leaves.
+
+There is **one CRM record per business**, however many services were approved, so two
+reps never call the same owner about two things. The record carries the business facts,
+the services in plain words (`Website redesign; Online booking`), the highest score
+(0–100), the audit rules' reasons, the latest findings, source and listing link, a link
+back to the lead in Radar, dates, the reviewer, and a **Do not contact** flag. Four
+columns belong to the sales team and are written only when the record is created:
+**Assigned rep**, **Status** (`New`), **Follow-up date**, **Notes** (the reviewer's approval
+note). Later approvals update the same record and never touch those four. If every approval
+is undone after the sync, Status becomes `Withdrawn` — but only while it still reads `New`.
+A do-not-contact after the sync sets the Do not contact flag; lifting it clears the flag.
+A CRM record is **never deleted**.
+
+`CRM_DESTINATION` picks where leads go:
+
+- **`csv`** (default, works today, no account): the CRM page has **Export CSV** — *new*
+  (rows not yet exported, or changed since) or *all*. The file opens in Excel, LibreOffice
+  and Google Sheets (UTF-8 with BOM, RFC 4180 quoting) and any cell starting with `=`,
+  `+`, `-`, `@`, tab or carriage return is prefixed with `'` so a business name can never
+  become a formula.
+- **`airtable`**: the client's own base. Follow **`docs/crm/airtable-setup.md`** (create the
+  base and the Leads table — or `make crm-bootstrap-airtable` — and a personal access token
+  scoped to that base), put `AIRTABLE_TOKEN`, `AIRTABLE_BASE_ID`, `AIRTABLE_TABLE` in `.env`,
+  run `make crm-check` until every field reads OK, then set `CRM_DESTINATION=airtable`.
+  Column names live in `backend/app/modules/crm/crm_field_map.airtable.json`
+  (`AIRTABLE_FIELD_MAP` points at a copy). Calls go through the metered, rate-limited API
+  client under the `airtable` source row; the token is never logged.
+- **`fake`** (development and CI only): an in-database stand-in, so the whole flow runs in
+  the demo and in `make e2e` without an account. `/crm` says "Destination: fake (demo)".
+
+The **CRM page** (`/crm`, for `crm_manager`, `admin`; `tech_admin` read-only) shows the
+destination and its health (what `make crm-check` prints), counts by status, the **Held**
+list with each error and a **Retry** button, the **Scheduled** list, **Export CSV** and
+**Sync all due**. My leads and the lead page show a CRM badge: *Scheduled* (with the time),
+*In CRM ✓* (linking to the record when the CRM has a link), *Held ⚠*. A transient failure
+(timeout, 429, 5xx) is retried three times with growing pauses, honouring `Retry-After`;
+a bad token, a missing column or a rejected payload holds the lead immediately. Every
+attempt is a row on the lead page and an audit entry.
+
+```
+GET  /crm/status                              # destination, health, counts (crm_manager, admin, tech_admin)
+GET  /crm/leads?status=held|scheduled|synced  # with business, attempts, last error
+GET  /crm/leads/{id}/attempts
+POST /crm/leads/{id}/retry                    # a held lead, now
+POST /crm/businesses/{business_id}/sync-now   # skips the wait, never the gate
+POST /crm/sync-all                            # every due or held lead
+GET  /crm/export.csv?scope=new|all            # CSV destination only
+```
+
+**Adding HubSpot, GoHighLevel or Pipedrive later** is one module: implement the
+`CrmAdapter` protocol in `backend/app/modules/crm/adapter.py` (`check`, `upsert`,
+`find_by_keys`, `mark_do_not_contact`, `withdraw`), register a factory in the same file's
+registry, add the destination to `CRM_DESTINATION`'s allowed values, give it a `sources`
+row so its calls are metered, and write its recorded-response tests. Everything above the
+adapter — the gate, the delay, dedupe, retry, suppression propagation — is shared.
 
 ## Roles and what each can do
 
-| Role | Review queue | Decide | Duplicates | My leads | Undo | Suppressions |
-|---|---|---|---|---|---|---|
-| `admin` | ✅ | ✅ | ✅ | all leads | any decision | add, lift |
-| `reviewer` | ✅ | ✅ | ✅ | all leads (read) | own decisions | read |
-| `sales_rep` | ❌ (403) | ❌ | ❌ | leads **assigned to them** | ❌ | ❌ |
-| `crm_manager` | read-only | ❌ | ❌ | all leads (read) | ❌ | read |
-| `tech_admin` | read-only | ❌ | ❌ | ❌ | ❌ | read |
+| Role | Review queue | Decide | Duplicates | My leads | Undo | Suppressions | CRM page |
+|---|---|---|---|---|---|---|---|
+| `admin` | ✅ | ✅ | ✅ | all leads | any decision | add, lift | send, retry, export |
+| `reviewer` | ✅ | ✅ | ✅ | all leads (read) | own decisions | read | ❌ |
+| `sales_rep` | ❌ (403) | ❌ | ❌ | leads **assigned to them** (with CRM status) | ❌ | ❌ | ❌ |
+| `crm_manager` | read-only | ❌ | ❌ | all leads (read) | ❌ | read | send, retry, export |
+| `tech_admin` | read-only | ❌ | ❌ | ❌ | ❌ | read | read-only |
 
 The API enforces every cell (a sales rep gets a 403 on the review endpoints); the UI hides
 what a role cannot do but never relies on hiding. Create real people with `POST /users` as

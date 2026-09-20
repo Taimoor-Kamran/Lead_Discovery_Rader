@@ -11,6 +11,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { href: "/review", label: "Review queue", roles: ["admin", "reviewer", "crm_manager", "tech_admin"] },
   { href: "/duplicates", label: "Duplicates", roles: ["admin", "reviewer"] },
   { href: "/leads", label: "My leads", roles: ["admin", "reviewer", "sales_rep", "crm_manager"] },
+  { href: "/crm", label: "CRM", roles: ["admin", "crm_manager", "tech_admin"] },
   { href: "/admin/suppressions", label: "Suppressions", roles: ["admin"] },
 ];
 
@@ -32,6 +33,11 @@ export function canSeeAllLeads(role: Role): boolean {
 
 export function canPickAssignee(role: Role): boolean {
   return role === "admin" || role === "reviewer";
+}
+
+/** Who may send, retry and export leads. A tech admin only reads the CRM page. */
+export function canManageCrm(role: Role): boolean {
+  return role === "admin" || role === "crm_manager";
 }
 
 export const ROLE_LABELS: Record<Role, string> = {

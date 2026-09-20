@@ -3,6 +3,54 @@
 All notable changes, one section per merged spec. Newest first.
 Format: `## [vX.Y.Z] - YYYY-MM-DD` followed by Added / Changed / Fixed.
 
+## [v0.7.0] - 2026-09-20
+
+### Added
+
+- **CRM export** (`app/modules/crm`, migration `0007`). Approved leads leave the system —
+  and only approved leads: a business is sent when it has at least one `approved`
+  opportunity and no active suppression, checked when the sync is scheduled **and again
+  immediately before every call to an adapter** (tested over every destination).
+- **One CRM record per business** listing its approved services (`Website redesign; Online
+  booking`), highest score, the rules' reasons, the latest audit's findings in plain words,
+  source, Radar link, dates, reviewer — and four **CRM-owned** fields (Assigned rep, Status,
+  Follow-up date, Notes) written once on create and never overwritten.
+- **Undo-safe delay**: each approval waits its own undo window (`CRM_SYNC_DELAY_MINUTES`,
+  default = `REVIEW_UNDO_WINDOW_MINUTES`) before it is sent; an approval undone in time
+  never leaves. Undoing after the sync removes the service from the record, or sets Status
+  to `Withdrawn` while it still reads `New`.
+- **Destinations**, swappable with `CRM_DESTINATION`: `csv` (default; `GET /crm/export.csv`
+  with `scope=new|all`, UTF-8 BOM, RFC 4180, formula characters neutralised with a leading
+  `'`), `airtable` (through `core/http.py`, metered under the `airtable` source row, token
+  never logged; `crm_field_map.airtable.json` for column names; `make crm-check` and the
+  optional `make crm-bootstrap-airtable`; guide in `docs/crm/airtable-setup.md`) and `fake`
+  (in-database, development/ci only, for the demo and `make e2e`).
+- **Dedupe**: the stored id first, then the CRM's own search by Radar Business ID, domain
+  and phone — an existing record is linked, not duplicated. **Unchanged** payload → no call.
+- **Retry**: 429/5xx/timeouts back off (60s, 120s, honouring `Retry-After`) for three
+  attempts, then the lead is `held`; auth, config and rejected errors hold at once. Every
+  attempt is a `crm_sync_attempts` row and an audit entry.
+- **Suppression propagation**: a do-not-contact on a business already in the CRM sets its
+  Do not contact field; lifting it clears the flag. A CRM record is never deleted.
+- **Endpoints** `GET /crm/status`, `GET /crm/leads?status=`, `GET /crm/leads/{id}/attempts`,
+  `POST /crm/leads/{id}/retry`, `POST /crm/businesses/{id}/sync-now`, `POST /crm/sync-all`,
+  `GET /crm/export.csv`; `GET /leads` and `GET /leads/{id}` carry a `crm` block (and the
+  detail a `crm_history`).
+- **UI**: CRM status badges on My leads and the lead page (Scheduled with time, In CRM ✓
+  linking to the record, Held ⚠ with Retry for CRM managers and admins), sync history on the
+  lead page, and a `/crm` page (destination and health, counts, held and scheduled lists,
+  Export CSV new/all, Sync all due) in the nav for CRM managers, admins and tech admins.
+- **Worker**: a sync loop beside the RQ worker sends due leads every
+  `CRM_SYNC_INTERVAL_SECONDS`.
+
+### Fixed
+
+- The "AI-generated — verify before use" label appears once per AI item (the AI summary
+  box and the AI rationale line); the extra banner at the top of each opportunity card and
+  the lead page header is gone.
+- A classification reused from the cache is not counted as an escalation in the run summary
+  or `/ai/usage`.
+
 ## [v0.6.0] - 2026-09-20
 
 ### Added

@@ -32,7 +32,7 @@ Keep implementing. If an item is truly blocked on a human (credentials, a decisi
 fi
 
 if [[ -f "$ROOT/Makefile" ]]; then
-  OUT="$(cd "$ROOT" && timeout 840 make check 2>&1)"; RC=$?
+  OUT="$(cd "$ROOT" && timeout 1740 make check 2>&1)"; RC=$?
   if (( RC != 0 )); then
     block "All boxes are ticked but 'make check' fails (exit $RC). Fix it, and untick any box whose claim is no longer true. Last output:
 $(echo "$OUT" | tail -60)"

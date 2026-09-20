@@ -12,7 +12,7 @@ PNPM := cd $(FRONTEND) && pnpm
 .PHONY: help env install up down logs ps migrate revision seed-admin seed-demo-users \
         sync-sources purge-expired recompute-businesses places-smoke ai-smoke load-demo-data \
         reset-demo-data \
-        reset-password \
+        reset-password crm-check crm-bootstrap-airtable \
         lint format typecheck test test-unit check check-backend check-frontend \
         frontend-install frontend-lint frontend-typecheck frontend-test \
         api-types api-types-check e2e clean FORCE
@@ -88,6 +88,16 @@ places-smoke: env ## One live Google Places call: make places-smoke ARGS="--indu
 # Costs real money and needs OPENAI_API_KEY + the model names. Set a monthly limit first.
 ai-smoke: env ## One live OpenAI call on one demo business, stores nothing: make ai-smoke ARGS="--domain bartoncreekplumbing.invalid"
 	$(COMPOSE) run --rm api python -m app.cli ai-smoke $(ARGS)
+
+# Reads the CRM destination's setup and prints OK / missing per field. Writes nothing.
+# For Airtable the token needs schema.bases:read.
+crm-check: env ## Check the CRM destination (token, base, table, every mapped field)
+	$(COMPOSE) run --rm api python -m app.cli crm-check
+
+# Creates the Airtable Leads table with every field. Needs schema.bases:write on the token.
+# Refuses if the table already exists.
+crm-bootstrap-airtable: env ## Create the Airtable Leads table from the field map (optional)
+	$(COMPOSE) run --rm api python -m app.cli crm-bootstrap-airtable
 
 lint: ## Lint and format-check the backend
 	$(UV) run ruff check .

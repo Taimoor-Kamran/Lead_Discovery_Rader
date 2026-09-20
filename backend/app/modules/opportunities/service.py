@@ -334,7 +334,9 @@ def _run_ai(
                 reasons=decision.reasons,
             )
             _absorb(run, escalation)
-            run.escalated = not escalation.skipped_budget
+            # Counted only when the stronger model was actually called: a budget skip and a
+            # reused answer both cost nothing and are not escalations.
+            run.escalated = not escalation.skipped_budget and not escalation.reused
             if escalation.output is not None or escalation.schema_invalid:
                 # The escalation answer replaces the triage answer — including a still
                 # invalid one, which leaves the rules on their own.

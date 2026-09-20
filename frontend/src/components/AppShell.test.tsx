@@ -24,14 +24,14 @@ describe("AppShell navigation by role", () => {
 
   it("shows an admin everything", () => {
     renderWithProviders(<AppShell>x</AppShell>, { user: me("admin") });
-    expect(navLabels()).toEqual(["Review queue", "Duplicates", "My leads", "Suppressions"]);
+    expect(navLabels()).toEqual(["Review queue", "Duplicates", "My leads", "CRM", "Suppressions"]);
   });
 
-  it("shows a crm manager the queue (read-only) and leads, a tech admin the queue only", () => {
+  it("shows a crm manager the queue (read-only), leads and the CRM; a tech admin the queue and the CRM", () => {
     const { unmount } = renderWithProviders(<AppShell>x</AppShell>, { user: me("crm_manager") });
-    expect(navLabels()).toEqual(["Review queue", "My leads"]);
+    expect(navLabels()).toEqual(["Review queue", "My leads", "CRM"]);
     unmount();
     renderWithProviders(<AppShell>x</AppShell>, { user: me("tech_admin") });
-    expect(navLabels()).toEqual(["Review queue"]);
+    expect(navLabels()).toEqual(["Review queue", "CRM"]);
   });
 });

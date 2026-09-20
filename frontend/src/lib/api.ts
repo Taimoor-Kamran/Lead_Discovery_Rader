@@ -44,6 +44,13 @@ export type SuppressionCreate = Schemas["SuppressionCreate"];
 export type SuppressionPage = Schemas["Page_SuppressionRead_"];
 export type UserPage = Schemas["Page_UserRead_"];
 export type AISummary = Schemas["AISummaryRead"];
+export type CrmStatus = Schemas["CrmStatusRead"];
+export type CrmLead = Schemas["CrmLeadRead"];
+export type CrmLeadPage = Schemas["Page_CrmLeadRead_"];
+export type CrmLeadStatus = Schemas["CrmLeadStatus"];
+export type CrmLeadBlock = Schemas["CrmLeadStatusRead"];
+export type CrmSyncAttempt = Schemas["CrmSyncAttemptRead"];
+export type SyncAllResult = Schemas["SyncAllResult"];
 export type ErrorEnvelope = {
   error: { code: string; message: string; request_id: string; details?: Record<string, unknown> };
 };
@@ -252,6 +259,56 @@ export function getLeadDetail(opportunityId: string): Promise<LeadDetail> {
 
 export function getSalesReps(): Promise<UserPage> {
   return get<UserPage>("/users", { role: "sales_rep", limit: 200 });
+}
+
+// --- crm -------------------------------------------------------------------------------
+
+export function getCrmStatus(): Promise<CrmStatus> {
+  return get<CrmStatus>("/crm/status");
+}
+
+export function getCrmLeads(status?: CrmLeadStatus, cursor?: string): Promise<CrmLeadPage> {
+  return get<CrmLeadPage>("/crm/leads", { status, limit: 100, cursor });
+}
+
+export function getCrmLeadAttempts(crmLeadId: string): Promise<CrmSyncAttempt[]> {
+  return get<CrmSyncAttempt[]>(`/crm/leads/${crmLeadId}/attempts`);
+}
+
+export function retryCrmLead(crmLeadId: string): Promise<CrmLead> {
+  return post<CrmLead>(`/crm/leads/${crmLeadId}/retry`);
+}
+
+export function syncBusinessNow(businessId: string): Promise<CrmLead> {
+  return post<CrmLead>(`/crm/businesses/${businessId}/sync-now`);
+}
+
+export function syncAllCrm(): Promise<SyncAllResult> {
+  return post<SyncAllResult>("/crm/sync-all");
+}
+
+export type CsvExport = { filename: string; blob: Blob };
+
+/**
+ * The CSV needs the bearer token, so it cannot be a plain link. Fetched like every other
+ * request (one refresh on a 401) and handed back as a blob for the browser to save.
+ */
+export async function downloadCrmExport(scope: "new" | "all"): Promise<CsvExport> {
+  const path = withQuery("/crm/export.csv", { scope });
+  let response = await send(path, { method: "GET" }, getAccessToken());
+  if (response.status === 401) {
+    const token = await refreshAccessToken();
+    if (!token) {
+      clearAccessToken();
+      onSessionLost();
+      throw await toApiError(response);
+    }
+    response = await send(path, { method: "GET" }, token);
+  }
+  if (!response.ok) throw await toApiError(response);
+  const disposition = response.headers.get("Content-Disposition") ?? "";
+  const match = /filename="([^"]+)"/.exec(disposition);
+  return { filename: match?.[1] ?? "radar-leads.csv", blob: await response.blob() };
 }
 
 // --- duplicates ------------------------------------------------------------------------

@@ -273,6 +273,60 @@ def _counts(summary: dict[str, object]) -> str:
     return ", ".join(f"{key}={value}" for key, value in summary.items()) or "no counts reported"
 
 
+def crm_check(argv: list[str]) -> int:
+    """`make crm-check`: is the CRM destination set up? Prints one OK/missing line per check.
+
+    For Airtable this needs `schema.bases:read` on the token. Nothing is written. Exit 0 when
+    everything is fine, 1 when a check failed, 2 when the destination is not configured.
+    """
+    parser = argparse.ArgumentParser(prog="python -m app.cli crm-check")
+    parser.parse_args(argv)
+
+    from app.modules.crm import adapter as crm_adapters
+    from app.modules.crm.adapter import CrmError
+
+    settings = get_settings()
+    print(f"Destination: {settings.crm_destination}")
+    with session_scope() as session:
+        try:
+            health = crm_adapters.build(session, settings=settings).check()
+        except CrmError as exc:
+            print(f"  FAIL  {exc.message}")
+            return 2
+    width = max((len(check.name) for check in health.checks), default=10)
+    for check in health.checks:
+        print(
+            f"  {'OK   ' if check.ok else 'MISSING' if 'missing' in check.detail else 'FAIL '}"
+            f" {check.name:<{width}}  {check.detail}"
+        )
+    print(health.message or ("all checks passed" if health.ok else "some checks failed"))
+    return 0 if health.ok else 1
+
+
+def crm_bootstrap_airtable(argv: list[str]) -> int:
+    """`make crm-bootstrap-airtable`: create the Leads table with every field. Needs
+    `schema.bases:write`. Refuses when the table already exists."""
+    parser = argparse.ArgumentParser(prog="python -m app.cli crm-bootstrap-airtable")
+    parser.parse_args(argv)
+
+    from app.modules.crm.adapter import CrmError
+    from app.modules.crm.airtable_adapter import build_airtable_adapter
+
+    settings = get_settings()
+    with session_scope() as session:
+        try:
+            table_id = build_airtable_adapter(session, settings).bootstrap_table()
+        except CrmError as exc:
+            print(f"Could not create the table: {exc.message}")
+            return 2
+    print(
+        f"Created table '{settings.airtable_table}' ({table_id}) "
+        f"in base {settings.airtable_base_id}."
+    )
+    print("Run `make crm-check` to confirm every field, then set CRM_DESTINATION=airtable.")
+    return 0
+
+
 def reset_password(argv: list[str]) -> int:
     """Set a new password for one user and invalidate every token they already hold.
 
@@ -500,6 +554,8 @@ COMMANDS: dict[str, Callable[[list[str]], int]] = {
     "load-demo-data": load_demo_data_command,
     "reset-demo-data": reset_demo_data_command,
     "reset-password": reset_password,
+    "crm-check": crm_check,
+    "crm-bootstrap-airtable": crm_bootstrap_airtable,
 }
 
 

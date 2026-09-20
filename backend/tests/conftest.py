@@ -125,6 +125,8 @@ def _base_environment() -> Iterator[None]:
             "REVIEW_UNDO_WINDOW_MINUTES": "30",
             "REVIEW_COOLDOWN_DAYS": "90",
             "REVIEW_WEAK_CONFIDENCE": "0.4",
+            "CRM_AUTO_SYNC": "true",
+            "APP_BASE_URL": "http://localhost:3000",
         }
     )
     get_settings.cache_clear()
@@ -150,7 +152,8 @@ def db(migrated_database: str) -> Iterator[Session]:
     session = get_session_factory()()
     session.execute(
         text(
-            "TRUNCATE review_decisions, suppressions, opportunities, ai_classifications, "
+            "TRUNCATE crm_sync_attempts, crm_lead_opportunities, crm_leads, crm_fake_records, "
+            "review_decisions, suppressions, opportunities, ai_classifications, "
             "website_audits, api_calls, "
             "match_candidates, business_field_values, businesses, record_sightings, "
             "discovered_records, audit_logs, job_runs, search_jobs, sources, users "
@@ -163,6 +166,17 @@ def db(migrated_database: str) -> Iterator[Session]:
     finally:
         session.rollback()
         session.close()
+
+
+@pytest.fixture(autouse=True)
+def _settings_cache() -> Iterator[None]:
+    """A test that changes the environment must not leave its settings cached for the next.
+
+    Autouse fixtures are set up first and torn down last, so this runs after `monkeypatch`
+    has put the environment back.
+    """
+    yield
+    get_settings.cache_clear()
 
 
 @pytest.fixture(autouse=True)

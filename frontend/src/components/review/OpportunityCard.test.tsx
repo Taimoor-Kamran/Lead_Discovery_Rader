@@ -112,19 +112,29 @@ describe("OpportunityCard safety rules", () => {
     expect(link.getAttribute("target")).toBe("_blank");
   });
 
-  it("labels an AI-only opportunity and AI evidence", () => {
+  it("labels each AI item once: the rationale line and an AI-only evidence quote", () => {
     card({
       source: "ai",
+      rule_reason: null,
+      ai_rationale: "The model read the homepage.",
       evidence: [{ finding_code: "no_h1", text: "quote", url: "https://x.invalid/", source: "ai" }],
     });
     const labels = screen.getAllByTestId("ai-label");
-    expect(labels.length).toBeGreaterThanOrEqual(2);
+    expect(labels).toHaveLength(2);
     expect(labels[0].textContent).toContain(AI_LABEL);
+    expect(screen.getByTestId("ai-rationale").querySelector("[data-testid='ai-label']")).not.toBeNull();
+    expect(screen.getByTestId("evidence").querySelector("[data-testid='ai-label']")).not.toBeNull();
   });
 
-  it("labels a rules+ai opportunity too, and not a rules-only one", () => {
-    const { unmount } = card({ source: "rules+ai" });
-    expect(screen.getAllByTestId("ai-label")).toHaveLength(1);
+  it("puts exactly one label on a rules+ai opportunity — on the AI line, never a banner — and none on rules-only", () => {
+    const { unmount } = card({
+      source: "rules+ai",
+      rule_reason: "Audit found the site is served over http.",
+      ai_rationale: "The model also read a 2016 copyright line.",
+    });
+    const labels = screen.getAllByTestId("ai-label");
+    expect(labels).toHaveLength(1);
+    expect(labels[0].closest("[data-testid='ai-rationale']")).not.toBeNull();
     unmount();
     card({ source: "rules" });
     expect(screen.queryByTestId("ai-label")).toBeNull();

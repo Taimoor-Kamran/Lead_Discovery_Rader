@@ -232,6 +232,166 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/crm/businesses/{business_id}/sync-now": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sync Business Now
+         * @description Send one business now, skipping the undo-window wait but never the human gate.
+         */
+        post: operations["sync_business_now_api_v1_crm_businesses__business_id__sync_now_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/crm/export.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Csv
+         * @description The CSV destination's records: `new` (not yet exported) or `all`. Marks them exported.
+         */
+        get: operations["export_csv_api_v1_crm_export_csv_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/crm/fake-records/{record_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Fake Record
+         * @description What the fake destination holds for one record (demo and e2e only). 404 elsewhere.
+         */
+        get: operations["fake_record_api_v1_crm_fake_records__record_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/crm/leads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Crm Leads
+         * @description Leads at the configured destination, newest first, optionally by status.
+         */
+        get: operations["list_crm_leads_api_v1_crm_leads_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/crm/leads/{crm_lead_id}/attempts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Crm Lead Attempts
+         * @description Every attempt made on this lead's behalf, newest first.
+         */
+        get: operations["crm_lead_attempts_api_v1_crm_leads__crm_lead_id__attempts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/crm/leads/{crm_lead_id}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retry Crm Lead
+         * @description Try a held lead again now. The gate is checked again first.
+         */
+        post: operations["retry_crm_lead_api_v1_crm_leads__crm_lead_id__retry_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/crm/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Crm Status
+         * @description Destination, `check()` health and counts by status.
+         */
+        get: operations["crm_status_api_v1_crm_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/crm/sync-all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sync All
+         * @description Send every due or held lead. Approvals still inside their undo window wait.
+         */
+        post: operations["sync_all_api_v1_crm_sync_all_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/discovered-records/{record_id}": {
         parameters: {
             query?: never;
@@ -1131,6 +1291,154 @@ export interface components {
          * @enum {string}
          */
         ClassificationStatus: "ok" | "schema_invalid" | "guardrail_trimmed" | "error" | "skipped_budget" | "skipped_disabled" | "reused";
+        /** CrmCheckRead */
+        CrmCheckRead: {
+            /** Detail */
+            detail: string;
+            /** Name */
+            name: string;
+            /** Ok */
+            ok: boolean;
+        };
+        /** CrmHealthRead */
+        CrmHealthRead: {
+            /** Checks */
+            checks: components["schemas"]["CrmCheckRead"][];
+            /** Destination */
+            destination: string;
+            /** Message */
+            message: string | null;
+            /** Ok */
+            ok: boolean;
+        };
+        /**
+         * CrmLeadRead
+         * @description One business at the configured destination, as `/crm` lists it.
+         */
+        CrmLeadRead: {
+            /** Attempts */
+            attempts: number;
+            /**
+             * Business Id
+             * Format: uuid
+             */
+            business_id: string;
+            /** Business Name */
+            business_name: string;
+            /** City */
+            city: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Destination */
+            destination: string;
+            /** Due At */
+            due_at: string | null;
+            /** Export Batch Id */
+            export_batch_id: string | null;
+            /** External Id */
+            external_id: string | null;
+            /** External Url */
+            external_url: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Last Error */
+            last_error: string | null;
+            /** Last Synced At */
+            last_synced_at: string | null;
+            /** Services */
+            services: string[];
+            /** State */
+            state: string | null;
+            status: components["schemas"]["CrmLeadStatus"];
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * CrmLeadStatus
+         * @enum {string}
+         */
+        CrmLeadStatus: "scheduled" | "syncing" | "synced" | "held" | "cancelled" | "withdrawn";
+        /**
+         * CrmLeadStatusRead
+         * @description The `crm` block on a lead: enough for a badge, a link and a Retry button.
+         */
+        CrmLeadStatusRead: {
+            /** Due At */
+            due_at: string | null;
+            /** External Url */
+            external_url: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Last Error */
+            last_error: string | null;
+            /** Last Synced At */
+            last_synced_at: string | null;
+            status: components["schemas"]["CrmLeadStatus"];
+        };
+        /**
+         * CrmStatusRead
+         * @description `GET /crm/status`: where leads go, whether it works, and how many stand where.
+         */
+        CrmStatusRead: {
+            /** Auto Sync */
+            auto_sync: boolean;
+            /** Counts */
+            counts: {
+                [key: string]: number;
+            };
+            /** Demo */
+            demo: boolean;
+            /** Destination */
+            destination: string;
+            health: components["schemas"]["CrmHealthRead"];
+            /** Sync Delay Minutes */
+            sync_delay_minutes: number;
+        };
+        /**
+         * CrmSyncAction
+         * @enum {string}
+         */
+        CrmSyncAction: "create" | "update" | "link" | "unchanged" | "mark_dnc" | "withdraw" | "export";
+        /** CrmSyncAttemptRead */
+        CrmSyncAttemptRead: {
+            action: components["schemas"]["CrmSyncAction"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Crm Lead Id
+             * Format: uuid
+             */
+            crm_lead_id: string;
+            /** Duration Ms */
+            duration_ms: number;
+            /** Error */
+            error: string | null;
+            /** Http Status */
+            http_status: number | null;
+            /** Id */
+            id: number;
+            status: components["schemas"]["CrmSyncStatus"];
+        };
+        /**
+         * CrmSyncStatus
+         * @enum {string}
+         */
+        CrmSyncStatus: "ok" | "failed";
         /**
          * DecidedOpportunity
          * @description What a decision endpoint returns: the updated opportunity and the row it wrote.
@@ -1332,6 +1640,31 @@ export interface components {
             website: string | null;
         };
         /**
+         * FakeCrmRecordRead
+         * @description A record in the fake destination (development and CI only).
+         */
+        FakeCrmRecordRead: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Fields */
+            fields: {
+                [key: string]: unknown;
+            };
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
          * FieldValueRead
          * @description Who said what, when, and until when it may be kept.
          */
@@ -1460,6 +1793,11 @@ export interface components {
         LeadDetail: {
             audit: components["schemas"]["WebsiteAuditDetail"] | null;
             business: components["schemas"]["BusinessDetail"];
+            /**
+             * Crm History
+             * @default []
+             */
+            crm_history: components["schemas"]["CrmSyncAttemptRead"][];
             lead: components["schemas"]["LeadRead"];
             opportunity: components["schemas"]["ReviewOpportunity"];
         };
@@ -1489,6 +1827,7 @@ export interface components {
             business_name: string;
             /** City */
             city: string | null;
+            crm?: components["schemas"]["CrmLeadStatusRead"] | null;
             /** Industry */
             industry: string | null;
             /** Lock Version */
@@ -1739,6 +2078,13 @@ export interface components {
         Page_BusinessSummary_: {
             /** Items */
             items: components["schemas"]["BusinessSummary"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** Page[CrmLeadRead] */
+        Page_CrmLeadRead_: {
+            /** Items */
+            items: components["schemas"]["CrmLeadRead"][];
             /** Next Cursor */
             next_cursor?: string | null;
         };
@@ -2223,6 +2569,19 @@ export interface components {
          * @enum {string}
          */
         SuppressionSource: "review" | "admin";
+        /** SyncAllResult */
+        SyncAllResult: {
+            /** Cancelled */
+            cancelled: number;
+            /** Considered */
+            considered: number;
+            /** Held */
+            held: number;
+            /** Scheduled */
+            scheduled: number;
+            /** Synced */
+            synced: number;
+        };
         /** TokenResponse */
         TokenResponse: {
             /** Access Token */
@@ -2780,6 +3139,232 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    sync_business_now_api_v1_crm_businesses__business_id__sync_now_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                business_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CrmLeadRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_csv_api_v1_crm_export_csv_get: {
+        parameters: {
+            query?: {
+                scope?: "new" | "all";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    fake_record_api_v1_crm_fake_records__record_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                record_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FakeCrmRecordRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_crm_leads_api_v1_crm_leads_get: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["CrmLeadStatus"] | null;
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_CrmLeadRead_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    crm_lead_attempts_api_v1_crm_leads__crm_lead_id__attempts_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                crm_lead_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CrmSyncAttemptRead"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    retry_crm_lead_api_v1_crm_leads__crm_lead_id__retry_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                crm_lead_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CrmLeadRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    crm_status_api_v1_crm_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CrmStatusRead"];
+                };
+            };
+        };
+    };
+    sync_all_api_v1_crm_sync_all_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SyncAllResult"];
                 };
             };
         };

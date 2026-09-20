@@ -3,9 +3,11 @@ import { expect, test, type Page } from "@playwright/test";
 /**
  * The spec's smoke: reviewer approves Barton Creek `website_design` assigning rep1 →
  * rep1 sees it in My leads and opens the read-only lead page → reviewer marks another
- * business do-not-contact → it leaves the queue. Runs against the demo stack, which
- * `make e2e` resets first (`make reset-demo-data`), so no manual click is assumed. Nothing
- * here talks to a live external API.
+ * business do-not-contact → it leaves the queue → (v0.7.0, with `CRM_DESTINATION=fake`)
+ * the CRM manager sends Barton Creek now, `/crm` shows it synced, rep1 sees "In CRM ✓",
+ * the reviewer marks Barton Creek do-not-contact and the fake record is flagged. Runs
+ * against the demo stack, which `make e2e` resets first (`make reset-demo-data`), so no
+ * manual click is assumed. Nothing here talks to a live external API.
  */
 
 const PASSWORD = process.env.DEMO_USERS_PASSWORD ?? "";
@@ -98,5 +100,77 @@ test("reviewer approves a lead, the rep sees it, do-not-contact removes a busine
     await page.goto("/review");
     await page.getByLabel("Search").fill(name);
     await expect(page.getByText("Nothing to review with these filters.")).toBeVisible();
+    await signOut(page);
+  });
+
+  await test.step("the CRM manager sends Barton Creek now and /crm shows it synced", async () => {
+    await signIn(page, "crm@example.com");
+    await page.getByRole("link", { name: "CRM" }).click();
+    await expect(page).toHaveURL(/\/crm$/);
+    const destination = page.getByTestId("crm-destination");
+    await expect(destination).toBeVisible();
+    const text = (await destination.textContent()) ?? "";
+    test.skip(!text.includes("Destination: fake"), `CRM_DESTINATION is not fake (${text.trim().split("\n")[0]}); set it to fake for the CRM flow`);
+    await expect(page.getByTestId("crm-health")).toContainText("Healthy");
+    // Barton Creek is scheduled behind its undo window; "Sync all due" leaves it waiting.
+    await expect(page.getByTestId("crm-scheduled")).toContainText(BARTON);
+    await page.getByRole("button", { name: "Sync all due" }).click();
+    await expect(page.getByRole("status")).toContainText("still waiting");
+    await expect(page.getByTestId("crm-scheduled")).toContainText(BARTON);
+
+    // Send now skips the wait but goes through the API's human gate.
+    await page.getByTestId("crm-scheduled").getByTestId("crm-row").filter({ hasText: BARTON }).getByRole("button", { name: "Send now" }).click();
+    await expect(page.getByRole("status").last()).toContainText("In CRM");
+    await expect(page.getByTestId("crm-synced")).toContainText(BARTON);
+    await expect(page.getByTestId("crm-scheduled")).not.toContainText(BARTON);
+    await signOut(page);
+  });
+
+  await test.step("rep1 sees In CRM ✓ on the lead", async () => {
+    await signIn(page, "rep1@example.com");
+    const lead = page.getByTestId("lead-row").filter({ hasText: BARTON });
+    await expect(lead.getByTestId("crm-badge")).toContainText("In CRM ✓");
+    await lead.getByRole("link", { name: BARTON }).click();
+    await expect(page.getByTestId("crm-badge")).toContainText("In CRM ✓");
+    await expect(page.getByTestId("crm-attempt").first()).toContainText("Created");
+    await signOut(page);
+  });
+
+  await test.step("a do-not-contact after the sync flags the fake CRM record", async () => {
+    await signIn(page, "reviewer@example.com");
+    await page.getByLabel("Search").fill("Barton Creek");
+    const row = page.getByTestId("queue-row").filter({ hasText: BARTON });
+    await expect(row).toHaveCount(1);
+    await row.getByRole("link", { name: /Barton Creek/ }).click();
+    await page.getByRole("button", { name: "Do not contact" }).click();
+    await page.getByLabel(/Note/).fill("E2E: owner asked not to be contacted");
+    await page.getByRole("button", { name: "Confirm: do not contact" }).click();
+    await expect(page.getByRole("status")).toContainText("do not contact");
+    await signOut(page);
+
+    await signIn(page, "crm@example.com");
+    await page.goto("/crm");
+    // The flag goes out on the next tick; force it with Sync all due and read the record.
+    await page.getByRole("button", { name: "Sync all due" }).click();
+    await expect(page.getByRole("status")).toBeVisible();
+    const token = await accessToken(page);
+    const leads = await (await page.request.get(`${API}/crm/leads?status=synced`, { headers: { Authorization: `Bearer ${token}` } })).json();
+    const barton = leads.items.find((item: { business_name: string }) => item.business_name.includes(BARTON));
+    expect(barton).toBeTruthy();
+    const attempts = await (await page.request.get(`${API}/crm/leads/${barton.id}/attempts`, { headers: { Authorization: `Bearer ${token}` } })).json();
+    expect(attempts.map((a: { action: string }) => a.action)).toContain("mark_dnc");
+    const record = await (await page.request.get(`${API}/crm/fake-records/${barton.external_id}`, { headers: { Authorization: `Bearer ${token}` } })).json();
+    expect(record.fields["Do not contact"]).toBe(true);
   });
 });
+
+const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api/v1";
+
+/** The access token the signed-in page holds; refreshed through the same cookie the app uses. */
+async function accessToken(page: Page): Promise<string> {
+  const response = await page.request.post(`${API}/auth/refresh`);
+  expect(response.ok()).toBeTruthy();
+  return (await response.json()).access_token as string;
+}
+
+

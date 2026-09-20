@@ -25,6 +25,14 @@ const LEAD = {
   top_evidence: null,
   rule_reason: "Audit found the site is served over http.",
   ai_rationale: "The model also read a 2016 copyright line.",
+  crm: {
+    id: "crm-1",
+    status: "synced",
+    external_url: "https://airtable.com/app1/tbl1/rec1",
+    last_synced_at: "2026-09-20T12:31:00Z",
+    due_at: null,
+    last_error: null,
+  },
 };
 
 afterEach(() => vi.unstubAllGlobals());
@@ -51,6 +59,24 @@ describe("Leads page", () => {
     expect(screen.getByRole("link", { name: "Barton Creek Plumbing" }).getAttribute("href")).toBe("/leads/opp-1");
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("My leads");
     expect(screen.queryByLabelText("Sales rep")).toBeNull();
+    // The CRM badge: in the CRM, with a link to the record; a rep never gets a Retry button.
+    expect(screen.getByTestId("crm-badge").textContent).toContain("In CRM ✓");
+    expect(screen.getByRole("link", { name: "Open record" }).getAttribute("href")).toBe("https://airtable.com/app1/tbl1/rec1");
+    expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+  });
+
+  it("shows a held lead with Retry to a CRM manager and not to a rep", async () => {
+    const held = { ...LEAD, crm: { ...LEAD.crm, status: "held", external_url: null, last_error: "bad token" } };
+    routeFetch({ "GET /leads": { status: 200, body: { items: [held], next_cursor: null } } });
+    const { unmount } = renderWithProviders(<Leads />, { user: me("crm_manager") });
+    await waitFor(() => expect(screen.getAllByTestId("lead-row")).toHaveLength(1));
+    expect(screen.getByTestId("crm-badge").textContent).toContain("Held ⚠");
+    expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy();
+    unmount();
+    routeFetch({ "GET /leads": { status: 200, body: { items: [held], next_cursor: null } } });
+    renderWithProviders(<Leads />, { user: me("sales_rep") });
+    await waitFor(() => expect(screen.getAllByTestId("lead-row")).toHaveLength(1));
+    expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
   });
 
   it("lets a reviewer filter by rep", async () => {

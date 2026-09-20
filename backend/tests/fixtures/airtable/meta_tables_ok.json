@@ -1,0 +1,37 @@
+{
+  "tables": [
+    {
+      "id": "tblLeads0000000001",
+      "name": "Leads",
+      "primaryFieldId": "fldRadarBusinessId",
+      "fields": [
+        {"id": "fldRadarBusinessId", "name": "Radar Business ID", "type": "singleLineText"},
+        {"id": "fld02", "name": "Business name", "type": "singleLineText"},
+        {"id": "fld03", "name": "Legal name", "type": "singleLineText"},
+        {"id": "fld04", "name": "Industry", "type": "singleLineText"},
+        {"id": "fld05", "name": "City", "type": "singleLineText"},
+        {"id": "fld06", "name": "State", "type": "singleLineText"},
+        {"id": "fld07", "name": "Postal code", "type": "singleLineText"},
+        {"id": "fld08", "name": "Address", "type": "singleLineText"},
+        {"id": "fld09", "name": "Website", "type": "url"},
+        {"id": "fld10", "name": "Public phone", "type": "phoneNumber"},
+        {"id": "fld11", "name": "Services", "type": "singleLineText"},
+        {"id": "fld12", "name": "Lead score", "type": "number", "options": {"precision": 0}},
+        {"id": "fld13", "name": "Why this is a lead", "type": "multilineText"},
+        {"id": "fld14", "name": "Top findings", "type": "multilineText"},
+        {"id": "fld15", "name": "Source", "type": "singleLineText"},
+        {"id": "fld16", "name": "Source URL", "type": "url"},
+        {"id": "fld17", "name": "Radar link", "type": "url"},
+        {"id": "fld18", "name": "Date discovered", "type": "date", "options": {"dateFormat": {"name": "iso", "format": "YYYY-MM-DD"}}},
+        {"id": "fld19", "name": "Date approved", "type": "date", "options": {"dateFormat": {"name": "iso", "format": "YYYY-MM-DD"}}},
+        {"id": "fld20", "name": "Approved by", "type": "email"},
+        {"id": "fld21", "name": "Do not contact", "type": "checkbox", "options": {"color": "redBright", "icon": "xCheckbox"}},
+        {"id": "fld22", "name": "Assigned rep", "type": "singleLineText"},
+        {"id": "fld23", "name": "Status", "type": "singleSelect", "options": {"choices": [{"id": "selNew", "name": "New"}, {"id": "selWithdrawn", "name": "Withdrawn"}]}},
+        {"id": "fld24", "name": "Follow-up date", "type": "date", "options": {"dateFormat": {"name": "iso", "format": "YYYY-MM-DD"}}},
+        {"id": "fld25", "name": "Notes", "type": "multilineText"}
+      ],
+      "views": [{"id": "viwGrid0000000001", "name": "Grid view", "type": "grid"}]
+    }
+  ]
+}

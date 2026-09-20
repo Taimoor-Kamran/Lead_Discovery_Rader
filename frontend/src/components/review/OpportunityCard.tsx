@@ -3,7 +3,6 @@
 import type { Decision, ReviewDecisionRead, ReviewOpportunity } from "@/lib/api";
 import { DECISION_LABELS, formatDateTime, percent, REASON_LABELS, score, STATUS_LABELS } from "@/lib/format";
 import { serviceLabel, sourceLabel } from "@/lib/labels";
-import { AiLabel } from "@/components/AiLabel";
 import { EvidenceList, type Evidence } from "@/components/review/EvidenceList";
 import { ReasonLines } from "@/components/review/ReasonLines";
 
@@ -58,7 +57,6 @@ export function OpportunityCard({
 }: Props) {
   const open = OPEN_STATUSES.has(opportunity.review_status);
   const evidence = (opportunity.evidence as Evidence[]) ?? [];
-  const aiInvolved = opportunity.source !== "rules";
   const showDecisions = canDecide && open;
 
   return (
@@ -122,7 +120,8 @@ export function OpportunityCard({
         ) : null}
       </div>
 
-      {aiInvolved ? <AiLabel /> : null}
+      {/* The AI label sits on the AI rationale line (and on AI-only evidence), once per AI
+          item — not as a banner over the whole card. */}
       <ReasonLines
         ruleReason={opportunity.rule_reason}
         aiRationale={opportunity.ai_rationale}
