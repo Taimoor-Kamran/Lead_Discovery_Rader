@@ -5,6 +5,7 @@ businesses" — so it is tested through the real worker, the real adapter, the r
 client and a real PostgreSQL. Only the network is a recording.
 """
 
+import json
 import uuid
 from datetime import UTC, datetime
 from typing import Any
@@ -14,7 +15,7 @@ import httpx
 import pytest
 import respx
 from fastapi.testclient import TestClient
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from app.modules.adapters import registry
@@ -115,7 +116,17 @@ def test_every_stored_record_carries_its_provenance(
     sales_user: User,
     places_source: Source,
 ) -> None:
-    three_pages(mock_http)
+    # The pages answer by token, not in order, so the retry gets the same three again.
+    pages = {
+        None: places_fixture("text_search_page_1.json"),
+        "radar-page-token-2": places_fixture("text_search_page_2.json"),
+        "radar-page-token-3": places_fixture("text_search_page_3.json"),
+    }
+    mock_http.post(SEARCH_URL).mock(
+        side_effect=lambda request: httpx.Response(
+            200, json=pages[json.loads(request.content).get("pageToken")]
+        )
+    )
     run_id = start_run(db, search_job, sales_user)
     tasks.execute_job_run(run_id)
 
@@ -139,7 +150,17 @@ def test_every_stored_record_carries_its_provenance(
 def test_a_record_that_only_has_a_place_id_is_stored_with_nothing_invented(
     db: Session, mock_http: respx.MockRouter, search_job: SearchJob, sales_user: User
 ) -> None:
-    three_pages(mock_http)
+    # The pages answer by token, not in order, so the retry gets the same three again.
+    pages = {
+        None: places_fixture("text_search_page_1.json"),
+        "radar-page-token-2": places_fixture("text_search_page_2.json"),
+        "radar-page-token-3": places_fixture("text_search_page_3.json"),
+    }
+    mock_http.post(SEARCH_URL).mock(
+        side_effect=lambda request: httpx.Response(
+            200, json=pages[json.loads(request.content).get("pageToken")]
+        )
+    )
     run_id = start_run(db, search_job, sales_user)
     tasks.execute_job_run(run_id)
 
@@ -428,7 +449,17 @@ def test_cancelling_stops_at_the_next_record_and_keeps_what_was_stored(
 def test_a_sighting_records_where_a_record_ranked(
     db: Session, mock_http: respx.MockRouter, search_job: SearchJob, sales_user: User
 ) -> None:
-    three_pages(mock_http)
+    # The pages answer by token, not in order, so the retry gets the same three again.
+    pages = {
+        None: places_fixture("text_search_page_1.json"),
+        "radar-page-token-2": places_fixture("text_search_page_2.json"),
+        "radar-page-token-3": places_fixture("text_search_page_3.json"),
+    }
+    mock_http.post(SEARCH_URL).mock(
+        side_effect=lambda request: httpx.Response(
+            200, json=pages[json.loads(request.content).get("pageToken")]
+        )
+    )
     run_id = start_run(db, search_job, sales_user)
     tasks.execute_job_run(run_id)
 
@@ -492,3 +523,64 @@ def test_a_discovery_run_without_a_search_job_fails(
     db.commit()
 
     assert tasks.execute_job_run(run.id, sleeper=lambda seconds: None) is JobRunStatus.failed
+
+
+# --- the run that stopped after four places (spec v0.9.0) ------------------------------
+
+
+def test_a_run_broken_partway_through_a_page_retries_and_stores_every_result(
+    db: Session,
+    mock_http: respx.MockRouter,
+    search_job: SearchJob,
+    sales_user: User,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Why the real "plumber in Austin, TX" run stored four places out of twenty.
+
+    One `places:searchText` call came back 200 with a full page, and the run stored four
+    of it before `checkpoint`'s `session.refresh` hit the shared-connection bug
+    (`prepared statement "_pg3_1" already exists`). The 16 results already in hand were
+    never processed, the exception escaped `execute_job_run`, and the run sat in
+    `running` for half an hour until the watchdog failed it — so nothing retried it
+    either. Now the break fails the attempt properly, the attempt is retried, and
+    `store_raw` being an upsert means the retry ends with the whole page stored.
+    """
+    # The pages answer by token, not in order, so the retry gets the same three again.
+    pages = {
+        None: places_fixture("text_search_page_1.json"),
+        "radar-page-token-2": places_fixture("text_search_page_2.json"),
+        "radar-page-token-3": places_fixture("text_search_page_3.json"),
+    }
+    mock_http.post(SEARCH_URL).mock(
+        side_effect=lambda request: httpx.Response(
+            200, json=pages[json.loads(request.content).get("pageToken")]
+        )
+    )
+    run_id = start_run(db, search_job, sales_user)
+
+    real_checkpoint = tasks.checkpoint
+    breaks = {"left": 1}
+
+    def break_on_the_fourth_record(session: Session, run: JobRun, **kwargs: Any) -> None:
+        if breaks["left"] and run.progress_done == 4:
+            breaks["left"] -= 1
+            # Poisoned the same way the real one was: the connection error aborts the
+            # transaction, so the retry path could not write to this session either.
+            try:
+                session.execute(text("SELECT no_such_column FROM job_runs"))
+            except Exception as exc:
+                raise RuntimeError('prepared statement "_pg3_1" already exists') from exc
+        real_checkpoint(session, run, **kwargs)
+
+    monkeypatch.setattr(tasks, "checkpoint", break_on_the_fourth_record)
+
+    delays: list[float] = []
+    assert tasks.execute_job_run(run_id, sleeper=delays.append) is JobRunStatus.done
+
+    assert breaks["left"] == 0, "the break never fired, so this proved nothing"
+    assert delays, "the broken attempt has to be retried, not abandoned"
+    run = reread(db, run_id)
+    assert run.attempts == 2
+    assert count(db, DiscoveredRecord) == TOTAL_RESULTS, "every result, not the first four"
+    assert run.result_summary is not None
+    assert run.result_summary["fetched"] == TOTAL_RESULTS
