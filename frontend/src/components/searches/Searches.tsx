@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { useToast } from "@/components/Toast";
+import { useToast } from "@/components/ui";
 import { EstimatePanel } from "@/components/searches/EstimatePanel";
 import { confirmRerun, ranRecently } from "@/components/searches/rerun";
 import {

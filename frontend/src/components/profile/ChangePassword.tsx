@@ -2,7 +2,7 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
-import { useToast } from "@/components/Toast";
+import { useToast } from "@/components/ui";
 import { ApiError, changePassword } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { homeFor, ROLE_LABELS } from "@/lib/roles";

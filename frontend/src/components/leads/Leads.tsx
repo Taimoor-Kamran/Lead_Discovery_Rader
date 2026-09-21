@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { SafeLink } from "@/components/SafeLink";
-import { useToast } from "@/components/Toast";
+import { useToast } from "@/components/ui";
 import { CrmBadge } from "@/components/crm/CrmBadge";
 import { ReasonLines } from "@/components/review/ReasonLines";
 import { ApiError, getLeads, retryCrmLead, SERVICES, type LeadRead } from "@/lib/api";

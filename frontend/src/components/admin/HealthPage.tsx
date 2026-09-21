@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useToast } from "@/components/Toast";
+import { useToast } from "@/components/ui";
 import { acknowledgeAlert, ApiError, getAdminHealth, type AlertRead, type HealthReport } from "@/lib/api";
 import { formatDateTime, percent } from "@/lib/format";
 

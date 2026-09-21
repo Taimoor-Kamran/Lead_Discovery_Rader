@@ -5,7 +5,7 @@
 
 import { render, type RenderOptions } from "@testing-library/react";
 import { vi } from "vitest";
-import { ToastProvider } from "@/components/Toast";
+import { ToastProvider } from "@/components/ui";
 import type { Me, QueueItem, ReviewDetail, ReviewOpportunity } from "@/lib/api";
 import { AuthProvider, type AuthStatus } from "@/lib/auth";
 

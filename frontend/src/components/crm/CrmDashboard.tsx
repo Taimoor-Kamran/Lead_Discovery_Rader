@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { useToast } from "@/components/Toast";
+import { useToast } from "@/components/ui";
 import { SafeLink } from "@/components/SafeLink";
 import {
   ApiError,

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useToast } from "@/components/Toast";
+import { useToast } from "@/components/ui";
 import { addSuppression, ApiError, getSuppressions, liftSuppression, type SuppressionRead } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
 

@@ -2,7 +2,7 @@
 
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useToast } from "@/components/Toast";
+import { useToast } from "@/components/ui";
 import { DecisionDialog, type DecisionFields } from "@/components/review/DecisionDialog";
 import { EMPTY_FILTERS, QueueFilters, type QueueFilterState } from "@/components/review/QueueFilters";
 import { QueueTable } from "@/components/review/QueueTable";

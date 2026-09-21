@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth";
-import { ToastProvider } from "@/components/Toast";
+import { ToastProvider } from "@/components/ui";
 
 export const metadata: Metadata = {
   title: "Lead Discovery Radar",

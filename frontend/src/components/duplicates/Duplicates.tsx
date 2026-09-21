@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { SafeLink } from "@/components/SafeLink";
-import { useToast } from "@/components/Toast";
+import { useToast } from "@/components/ui";
 import { ApiError, decideMatchCandidate, getMatchCandidates, type MatchCandidate } from "@/lib/api";
 import { orUnknown, place, score } from "@/lib/format";
 
