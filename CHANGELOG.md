@@ -55,6 +55,45 @@ Format: `## [vX.Y.Z] - YYYY-MM-DD` followed by Added / Changed / Fixed.
 - `prefers-reduced-motion: reduce` switches off every transition and animation.
 - `components/Toast.tsx` moved to `components/ui/Toast.tsx`; its API is unchanged.
 
+### Fixed
+
+Five bugs from the first real production run, all traced from `logs/worker.log`.
+
+- **The scheduler thread no longer shares a database connection with job execution.**
+  The worker runs the scheduler in a daemon thread *and* forks a work horse for every
+  job, and both used the one engine — so a connection the scheduler had used was copied
+  into a child that then wrote on the same socket. psycopg names its prepared statements
+  `_pg3_N` per connection and counts them client-side, so the two collided
+  (`DuplicatePreparedStatement`, `InvalidSqlStatementName`): "scheduler tick failed"
+  every five minutes, and a real discovery run killed after four places. The scheduler
+  now has its own `NullPool` engine, a forked child disposes the connections it
+  inherited (`os.register_at_fork`, `close=False`), and prepared statements are off on
+  every engine.
+- **No job run can be left `running` or `queued` with no error.** `execute_job_run`
+  wrote every outcome through the session the handler had just been using, and the two
+  transitions bracketing the handler sat outside the try — so a broken connection either
+  left a finished run `running` for ever or rolled it back out of `running` to `queued`
+  with nothing on the queue. `running` is now committed before any work starts, a
+  handler failure is recorded in its own session first (so an alert it wrote survives),
+  and anything that escapes an attempt is written to the run on a brand-new session.
+  `queued → failed` joins the state machine for the runs that died before they started.
+- **The watchdog finishes stuck runs of every kind, including `scheduled:*`.** It only
+  looked at `running`; a run abandoned in `queued` was invisible to it and, since the
+  scheduler skips a job whose previous run has not finished, blocked that job for good —
+  one `scheduled:crm-sync` run stopped every later CRM sync for a day. Those are now
+  failed with "queue lost", checked against RQ rather than guessed from the clock.
+- **A discovery run broken partway through a page is retried instead of truncated.** The
+  run that stored 4 of 20 had the whole page in hand; it lost the other 16 to the crash
+  and was never retried. With the failure recorded properly the attempt retries, and
+  `store_raw` being an upsert means the retry ends with everything stored.
+- **A lost race on an opportunity no longer costs a business its classification.**
+  `upsert_opportunities` inserted everything it had not found in one flush, so a
+  `pending` row committed by anybody else in between violated
+  `uq_opportunities_pending_business_service`, aborted the transaction and threw the
+  business away ("classifying one business failed"). Each new row now goes in inside its
+  own savepoint; a conflict on that index means somebody opened the row first, so it is
+  taken over and updated. Any other integrity error is still raised.
+
 ## [v0.8.0] - 2026-09-20
 
 ### Added

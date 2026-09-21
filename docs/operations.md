@@ -95,13 +95,24 @@ Every execution is a job run of kind `scheduled:<name>`, visible on the Health p
 | Job | When | What |
 |---|---|---|
 | `crm-sync` | every minute | sends CRM leads whose undo window has closed |
-| `watchdog` | every 5 minutes | fails runs stuck in `running` > `WATCHDOG_STALE_MINUTES` ("worker lost"), re-evaluates the alert rules |
+| `watchdog` | every 5 minutes | fails runs stuck in `running` ("worker lost") or in `queued` with nothing on the queue ("queue lost") for > `WATCHDOG_STALE_MINUTES`, of every kind including `scheduled:*`; re-evaluates the alert rules |
 | `purge-expired` | daily `PURGE_AT` (03:00) | drops expired Places content, audit page text, raw AI output |
 | `backup` | daily `BACKUP_AT` (02:00) | `pg_dump` as above |
 | `backup-verify` | `BACKUP_VERIFY_CRON` (Sunday 04:00) | restore-and-check as above |
 
 A job's clock starts when the scheduler first sees it, so a restart never replays missed
-nights; a job whose previous run is still queued or running is not queued again.
+nights; a job whose previous run is still queued or running is not queued again. That last
+guard is why the watchdog has to finish stuck `scheduled:*` runs as well as ordinary ones:
+one run left un-finished stops its job for good, and in the v0.9.0 incident a single
+`scheduled:crm-sync` run held every later CRM sync for a day.
+
+**The scheduler thread has its own database engine** (`app/core/db.py`). It never shares a
+connection or a session with job execution, because RQ forks a child process for every job
+and a socket that reaches both processes is a corrupted socket. Two more guards sit beside
+it: a forked child drops the connections it inherited (`os.register_at_fork`), and psycopg's
+automatic prepared statements are off, so there are no per-connection `_pg3_N` names for two
+processes to collide over. If you add a background thread to the worker, give it
+`scheduler_session_scope()` or an engine of its own — never `session_scope()`.
 
 ## Health page and alerts
 
