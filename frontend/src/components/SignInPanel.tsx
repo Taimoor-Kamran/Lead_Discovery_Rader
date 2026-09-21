@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Badge, Button, Card, Input } from "@/components/ui";
 import { ApiError, getHealth, login, type Health } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { API_UNREACHABLE } from "@/lib/errors";
+import { apiUnreachable } from "@/lib/errors";
 import { homeFor } from "@/lib/roles";
 import { clearAccessToken } from "@/lib/session";
 
@@ -45,7 +45,7 @@ export function SignInPanel() {
       setPassword("");
       router.replace(homeFor(me.role));
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : API_UNREACHABLE);
+      setError(caught instanceof ApiError ? caught.message : apiUnreachable());
       clearAccessToken();
     } finally {
       setBusy(false);
@@ -103,7 +103,7 @@ export function SignInPanel() {
             </dd>
           </dl>
         ) : (
-          <p className="mt-2 max-w-measure text-base text-ink-soft">{API_UNREACHABLE}</p>
+          <p className="mt-2 max-w-measure text-base text-ink-soft">{apiUnreachable()}</p>
         )}
       </Card>
     </div>

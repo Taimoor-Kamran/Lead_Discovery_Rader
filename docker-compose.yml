@@ -86,6 +86,7 @@ services:
       args:
         # Inlined into the bundle at build time; changing it needs a rebuild.
         NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000/api/v1}
+        NEXT_PUBLIC_ENVIRONMENT: ${ENVIRONMENT:-local}
     ports:
       - "${WEB_PORT:-3000}:3000"
     depends_on:
