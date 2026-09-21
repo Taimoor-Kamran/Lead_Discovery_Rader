@@ -1,15 +1,19 @@
 """Review decisions outrank classification: suppression, cool-down, never overwrite approved."""
 
+import uuid
 from datetime import timedelta
+from decimal import Decimal
 
+import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.db import session_scope
 from app.modules.auth.models import Role, User
 from app.modules.compliance.models import SuppressionSource
 from app.modules.compliance.service import suppress_business
 from app.modules.opportunities import service
-from app.modules.opportunities.models import Opportunity, ReviewStatus
+from app.modules.opportunities.models import Opportunity, OpportunitySource, ReviewStatus
 from app.modules.review import service as review
 from app.modules.review.models import Decision
 from app.modules.review.schemas import ReviewRequest
@@ -154,3 +158,98 @@ def test_a_needs_enrichment_row_is_refreshed_in_place(db: Session) -> None:
     assert booking.review_status is ReviewStatus.needs_enrichment
     rows = list(db.scalars(select(Opportunity).where(Opportunity.business_id == business.id)))
     assert len(rows) == 1
+
+
+# --- a lost race must not cost the business its classification (spec v0.9.0) ------------
+
+
+def test_an_opportunity_another_writer_opened_first_is_updated_not_duplicated(
+    db: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`uq_opportunities_pending_business_service` is a partial unique index, not a hint.
+
+    In the v0.9.0 incident a `pending` row that was already there came back from the
+    flush as `duplicate key value violates unique constraint
+    "uq_opportunities_pending_business_service"`, which aborted the transaction and cost
+    the business its whole classification ("classifying one business failed" in
+    `logs/worker.log`). Reproduced in the one window where it can happen: a second
+    session commits the row after `pending_opportunities` has read and before the insert
+    goes in, which is exactly the shape of a lost race.
+    """
+    business = make_business(db)
+    make_audit(db, business)
+    db.commit()
+
+    real_read = service.pending_opportunities
+    intruder: dict[str, uuid.UUID] = {}
+
+    def read_then_let_somebody_else_in(
+        session: Session, business_id: uuid.UUID
+    ) -> dict[str, Opportunity]:
+        found = real_read(session, business_id)
+        if not intruder:
+            with session_scope() as other:
+                row = Opportunity(
+                    business_id=business_id,
+                    service="booking_setup",
+                    review_status=ReviewStatus.pending,
+                    source=OpportunitySource.rules,
+                    reason="opened by somebody else",
+                    evidence=[],
+                    confidence=Decimal("0.1"),
+                    score=Decimal("1"),
+                    score_components={},
+                    scoring_version="rival",
+                )
+                other.add(row)
+                other.flush()
+                intruder["id"] = row.id
+        return found
+
+    monkeypatch.setattr(service, "pending_opportunities", read_then_let_somebody_else_in)
+    outcome = service.classify(db, business, tools=make_tools("not json"), now=NOW)
+    monkeypatch.undo()
+    db.commit()
+
+    assert intruder, "the test never ran its rival insert, so it proved nothing"
+    assert outcome.created == 0 and outcome.updated == 1, "the row was taken over, not re-created"
+    rows = list(
+        db.scalars(
+            select(Opportunity).where(
+                Opportunity.business_id == business.id,
+                Opportunity.service == "booking_setup",
+            )
+        )
+    )
+    assert len(rows) == 1, "one open row per business and service, still"
+    assert rows[0].id == intruder["id"], "the row that won the race is the one we updated"
+    assert rows[0].scoring_version != "rival", "and it carries this classification's values"
+    assert rows[0].reason != "opened by somebody else"
+
+
+def test_a_pending_row_is_preferred_over_a_newer_needs_enrichment_one(db: Session) -> None:
+    """The unique index covers `pending`, so `pending` is the row an upsert must update."""
+    reviewer = make_user(db, Role.reviewer)
+    business = make_business(db)
+    make_audit(db, business)
+    [booking] = classify(db, business).values()
+    decide(db, booking, Decision.needs_enrichment, reviewer, note="check")
+    db.flush()
+
+    # A second, later row for the same service, still `pending`: only one may ever be.
+    later = Opportunity(
+        business_id=business.id,
+        service="booking_setup",
+        review_status=ReviewStatus.pending,
+        source=OpportunitySource.rules,
+        reason="the open one",
+        evidence=[],
+        confidence=Decimal("0.2"),
+        score=Decimal("2"),
+        score_components={},
+        scoring_version="older",
+    )
+    db.add(later)
+    db.commit()
+
+    assert service.pending_opportunities(db, business.id)["booking_setup"].id == later.id
