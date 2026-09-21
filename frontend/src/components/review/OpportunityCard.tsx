@@ -88,9 +88,12 @@ export function OpportunityCard({
           <h3 className="text-md font-semibold text-ink" title={opportunity.service}>
             {serviceLabel(opportunity.service)}
           </h3>
-          <Tooltip content={`Confidence ${percent(opportunity.confidence)} · raw score ${opportunity.score}`}>
+          <Tooltip
+            className="ml-auto"
+            content={`Confidence ${percent(opportunity.confidence)} · raw score ${opportunity.score}`}
+          >
             <span
-              className="ml-auto inline-flex items-baseline gap-1 font-mono text-md font-medium tabular-nums text-ink"
+              className="inline-flex items-baseline gap-1 font-mono text-md font-medium tabular-nums text-ink"
               title={`Confidence ${percent(opportunity.confidence)} · raw score ${opportunity.score}`}
               data-testid="score-chip"
             >

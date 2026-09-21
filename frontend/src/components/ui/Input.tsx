@@ -17,6 +17,9 @@ export type FieldShell = {
   /** Layout class for the wrapper; `className` on the control itself is `controlClassName`. */
   className?: string;
   controlClassName?: string;
+  /** For a control in a table cell, where the column header is the visible label. The
+   *  label still exists for a screen reader — it is never dropped, only hidden. */
+  labelHidden?: boolean;
 };
 
 /** Label, control, hint and error, wired together with ids. Used by every control below. */
@@ -26,12 +29,16 @@ export function Field({
   hint,
   error,
   className,
+  labelHidden = false,
   children,
   inline = false,
 }: FieldShell & { id: string; children: React.ReactNode; inline?: boolean }) {
   return (
     <div className={cx(inline ? "flex items-center gap-2" : "flex flex-col gap-1", className)}>
-      <label htmlFor={id} className={cx("text-sm font-medium text-ink-soft", inline && "order-2")}>
+      <label
+        htmlFor={id}
+        className={cx("text-sm font-medium text-ink-soft", inline && "order-2", labelHidden && "sr-only")}
+      >
         {label}
       </label>
       {children}
@@ -56,13 +63,13 @@ export function describedBy(id: string, hint: unknown, error: unknown): string |
 export type InputProps = Omit<React.InputHTMLAttributes<HTMLInputElement>, "className"> & FieldShell;
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
-  { label, hint, error, className, controlClassName, id: given, ...rest },
+  { label, hint, error, className, controlClassName, labelHidden, id: given, ...rest },
   ref,
 ) {
   const auto = useId();
   const id = given ?? auto;
   return (
-    <Field id={id} label={label} hint={hint} error={error} className={className}>
+    <Field id={id} label={label} hint={hint} error={error} className={className} labelHidden={labelHidden}>
       <input
         id={id}
         ref={ref}
@@ -78,13 +85,13 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
 export type TextareaProps = Omit<React.TextareaHTMLAttributes<HTMLTextAreaElement>, "className"> & FieldShell;
 
 export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function Textarea(
-  { label, hint, error, className, controlClassName, id: given, ...rest },
+  { label, hint, error, className, controlClassName, labelHidden, id: given, ...rest },
   ref,
 ) {
   const auto = useId();
   const id = given ?? auto;
   return (
-    <Field id={id} label={label} hint={hint} error={error} className={className}>
+    <Field id={id} label={label} hint={hint} error={error} className={className} labelHidden={labelHidden}>
       <textarea
         id={id}
         ref={ref}
@@ -100,13 +107,13 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function 
 export type SelectProps = Omit<React.SelectHTMLAttributes<HTMLSelectElement>, "className"> & FieldShell;
 
 export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select(
-  { label, hint, error, className, controlClassName, id: given, children, ...rest },
+  { label, hint, error, className, controlClassName, labelHidden, id: given, children, ...rest },
   ref,
 ) {
   const auto = useId();
   const id = given ?? auto;
   return (
-    <Field id={id} label={label} hint={hint} error={error} className={className}>
+    <Field id={id} label={label} hint={hint} error={error} className={className} labelHidden={labelHidden}>
       <select
         id={id}
         ref={ref}

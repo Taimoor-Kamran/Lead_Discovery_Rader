@@ -6,6 +6,6 @@ export function Card({
   padded = true,
   as: Tag = "section",
   ...rest
-}: React.HTMLAttributes<HTMLElement> & { padded?: boolean; as?: "section" | "div" | "article" | "aside" }) {
+}: React.HTMLAttributes<HTMLElement> & { padded?: boolean; as?: "section" | "div" | "article" | "aside" | "form" }) {
   return <Tag className={cx("rounded-lg border border-line bg-surface", padded && "p-4", className)} {...rest} />;
 }

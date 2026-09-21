@@ -2,8 +2,23 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { useToast } from "@/components/ui";
+import { ErrorNote } from "@/components/ErrorNote";
 import { SafeLink } from "@/components/SafeLink";
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  PageHeader,
+  Table,
+  TableWrap,
+  TBody,
+  Td,
+  Th,
+  THead,
+  Tr,
+  useToast,
+} from "@/components/ui";
 import {
   ApiError,
   downloadCrmExport,
@@ -16,6 +31,7 @@ import {
   type CrmStatus,
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { loadFailed } from "@/lib/errors";
 import { CRM_STATUS_LABELS, formatDateTime, place } from "@/lib/format";
 import { canManageCrm } from "@/lib/roles";
 
@@ -66,7 +82,7 @@ export function CrmDashboard() {
       setSynced(syncedPage.items);
       setError(null);
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : "Could not load the CRM status");
+      setError(caught instanceof ApiError ? caught.message : loadFailed("the CRM status"));
     }
   }, [manager]);
 
@@ -115,73 +131,77 @@ export function CrmDashboard() {
   const isCsv = status?.destination === "csv";
 
   return (
-    <div className="flex flex-col gap-4" data-testid="crm-dashboard">
-      <header className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-navy">CRM</h1>
-          <p className="text-sm text-slate-600">
-            Approved leads leave here — and only approved leads — once their undo window has closed.
-            {manager ? "" : " Read-only for your role."}
-          </p>
-        </div>
-        {manager ? (
-          <div className="flex flex-wrap gap-2">
-            <button type="button" className="btn-primary" disabled={busy} onClick={syncAll}>
-              Sync all due
-            </button>
-            {isCsv ? (
-              <>
-                <button type="button" className="btn-secondary" disabled={busy} onClick={() => exportCsv("new")}>
-                  Export CSV (new)
-                </button>
-                <button type="button" className="btn-secondary" disabled={busy} onClick={() => exportCsv("all")}>
-                  Export CSV (all)
-                </button>
-              </>
-            ) : null}
-          </div>
-        ) : null}
-      </header>
-      {error ? <p role="alert" className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</p> : null}
+    <div className="flex flex-col gap-5" data-testid="crm-dashboard">
+      <PageHeader
+        title="CRM"
+        description={`Approved leads leave here — and only approved leads — once their undo window has closed.${manager ? "" : " Read-only for your role."}`}
+        actions={
+          manager ? (
+            <>
+              <Button variant="primary" disabled={busy} onClick={syncAll}>
+                Sync all due
+              </Button>
+              {isCsv ? (
+                <>
+                  <Button disabled={busy} onClick={() => exportCsv("new")}>
+                    Export CSV (new)
+                  </Button>
+                  <Button disabled={busy} onClick={() => exportCsv("all")}>
+                    Export CSV (all)
+                  </Button>
+                </>
+              ) : null}
+            </>
+          ) : null
+        }
+      />
+      {error ? <ErrorNote>{error}</ErrorNote> : null}
 
       {status ? (
-        <section className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_2fr]" aria-label="Destination">
-          <div className="rounded-lg border border-slate-200 bg-white p-4 text-sm" data-testid="crm-destination">
-            <h2 className="text-lg font-semibold text-navy">
+        <section className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_2fr]" aria-label="Destination">
+          <Card data-testid="crm-destination">
+            <h2 className="text-md font-semibold text-ink">
               Destination: {status.destination}
               {status.demo ? " (demo)" : ""}
             </h2>
-            <p className={`mt-1 ${status.health.ok ? "text-teal-700" : "text-amber-900"}`} data-testid="crm-health">
-              {status.health.ok ? "Healthy" : "Needs attention"}
-              {status.health.message ? ` · ${status.health.message}` : ""}
+            <p className="mt-2" data-testid="crm-health">
+              <Badge tone={status.health.ok ? "ok" : "warn"}>
+                {status.health.ok ? "Healthy" : "Needs attention"}
+              </Badge>
+              {status.health.message ? (
+                <span className="ml-2 text-base text-ink-soft">{status.health.message}</span>
+              ) : null}
             </p>
-            <p className="mt-1 text-xs text-slate-600">
-              Auto-sync {status.auto_sync ? "on" : "off"} · waits {status.sync_delay_minutes} min after an approval
+            <p className="mt-2 text-sm text-ink-soft">
+              Auto-sync {status.auto_sync ? "on" : "off"}. Waits {status.sync_delay_minutes} minutes
+              after an approval.
             </p>
-            <dl className="mt-3 grid grid-cols-[8rem_1fr] gap-y-0.5 text-xs" data-testid="crm-counts">
+            <dl className="mt-3 grid grid-cols-[9rem_1fr] gap-y-1 text-base" data-testid="crm-counts">
               {COUNT_ORDER.map((key) => (
                 <div key={key} className="contents">
-                  <dt className="text-slate-500">{CRM_STATUS_LABELS[key] ?? key}</dt>
-                  <dd className="font-mono">{status.counts[key] ?? 0}</dd>
+                  <dt className="text-ink-soft">{CRM_STATUS_LABELS[key] ?? key}</dt>
+                  <dd className="font-mono tabular-nums">{status.counts[key] ?? 0}</dd>
                 </div>
               ))}
             </dl>
-          </div>
-          <div className="rounded-lg border border-slate-200 bg-white p-4 text-sm">
-            <h2 className="text-base font-semibold text-navy">Checks</h2>
-            <p className="text-xs text-slate-600">The same table <code>make crm-check</code> prints.</p>
-            <ul className="mt-2 max-h-72 overflow-auto text-xs" data-testid="crm-checks">
+          </Card>
+          <Card>
+            <h2 className="text-md font-semibold text-ink">Checks</h2>
+            <p className="text-sm text-ink-soft">
+              The same table <code className="font-mono">make crm-check</code> prints.
+            </p>
+            <ul className="mt-3 flex max-h-72 flex-col gap-1.5 overflow-auto text-sm" data-testid="crm-checks">
               {status.health.checks.map((check) => (
-                <li key={check.name} className="flex gap-2 py-0.5">
-                  <span className={check.ok ? "text-teal-700" : "text-amber-900"} aria-label={check.ok ? "ok" : "problem"}>
-                    {check.ok ? "OK" : "!!"}
-                  </span>
+                <li key={check.name} className="flex flex-wrap items-baseline gap-2">
+                  <Badge tone={check.ok ? "ok" : "warn"} aria-label={check.ok ? "ok" : "problem"}>
+                    {check.ok ? "OK" : "Problem"}
+                  </Badge>
                   <span className="font-medium">{check.name}</span>
-                  <span className="text-slate-600">{check.detail}</span>
+                  <span className="text-ink-soft">{check.detail}</span>
                 </li>
               ))}
             </ul>
-          </div>
+          </Card>
         </section>
       ) : null}
 
@@ -191,33 +211,41 @@ export function CrmDashboard() {
             title="Held"
             testId="crm-held"
             empty="Nothing is held."
+            emptyHint="A lead is held when the CRM refused it. Nothing is stuck."
             items={held}
             busy={busy}
             action={(lead) => (
-              <button type="button" className="btn-secondary !py-0.5" disabled={busy} onClick={() => retry(lead)}>
+              <Button size="sm" disabled={busy} onClick={() => retry(lead)}>
                 Retry
-              </button>
+              </Button>
             )}
           />
           <LeadTable
             title="Scheduled"
             testId="crm-scheduled"
-            empty="Nothing is waiting."
+            empty="Nothing waiting."
+            emptyHint="Approved leads appear here 30 minutes after approval."
             items={scheduled}
             busy={busy}
             action={(lead) => (
-              <button
-                type="button"
-                className="btn-secondary !py-0.5"
+              <Button
+                size="sm"
                 disabled={busy}
                 title="Skips the undo-window wait, never the human gate"
                 onClick={() => sendNow(lead)}
               >
                 Send now
-              </button>
+              </Button>
             )}
           />
-          <LeadTable title="In CRM" testId="crm-synced" empty="Nothing has been sent yet." items={synced} busy={busy} />
+          <LeadTable
+            title="In CRM"
+            testId="crm-synced"
+            empty="Nothing has been sent yet."
+            emptyHint="A lead lands here once its scheduled sync goes through."
+            items={synced}
+            busy={busy}
+          />
         </>
       ) : null}
     </div>
@@ -228,66 +256,84 @@ function LeadTable({
   title,
   testId,
   empty,
+  emptyHint,
   items,
   action,
 }: {
   title: string;
   testId: string;
   empty: string;
+  emptyHint?: string;
   items: CrmLead[];
   busy: boolean;
   action?: (lead: CrmLead) => React.ReactNode;
 }) {
   return (
-    <section className="rounded-lg border border-slate-200 bg-white" aria-label={title} data-testid={testId}>
-      <h2 className="border-b border-slate-100 px-4 py-2 text-base font-semibold text-navy">
-        {title} <span className="font-normal text-slate-500">({items.length})</span>
+    <section aria-label={title} data-testid={testId} className="flex flex-col gap-2">
+      <h2 className="text-md font-semibold text-ink">
+        {title} <span className="font-normal text-ink-soft">({items.length})</span>
       </h2>
-      {items.length ? (
-        <table className="w-full text-sm">
-          <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-600">
+      <TableWrap>
+        <Table minWidth="60rem">
+          <THead>
             <tr>
-              <th scope="col" className="px-3 py-2">Business</th>
-              <th scope="col" className="px-3 py-2">Services</th>
-              <th scope="col" className="px-3 py-2">Status</th>
-              <th scope="col" className="px-3 py-2">When</th>
-              <th scope="col" className="px-3 py-2">Attempts</th>
-              <th scope="col" className="px-3 py-2">Last error</th>
-              <th scope="col" className="px-3 py-2" />
+              <Th>Business</Th>
+              <Th>Services</Th>
+              <Th>Status</Th>
+              <Th>When</Th>
+              <Th numeric className="w-24">
+                Attempts
+              </Th>
+              <Th>Last error</Th>
+              <Th aria-label="Actions" />
             </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {items.map((lead) => (
-              <tr key={lead.id} className="align-top" data-testid="crm-row">
-                <td className="px-3 py-2">
-                  <Link href={`/review/${lead.business_id}`} className="font-medium text-navy hover:underline">
-                    {lead.business_name}
-                  </Link>
-                  <div className="text-xs text-slate-600">{place(lead.city, lead.state)}</div>
+          </THead>
+          <TBody>
+            {items.length ? (
+              items.map((lead) => (
+                <Tr key={lead.id} data-testid="crm-row">
+                  <Td>
+                    <Link
+                      href={`/review/${lead.business_id}`}
+                      className="rounded font-medium text-ink underline-offset-2 hover:text-accent hover:underline"
+                    >
+                      {lead.business_name}
+                    </Link>
+                    <div className="text-sm text-ink-soft">{place(lead.city, lead.state)}</div>
+                  </Td>
+                  <Td className="text-sm">{lead.services.join("; ") || "—"}</Td>
+                  <Td>
+                    {CRM_STATUS_LABELS[lead.status] ?? lead.status}
+                    {lead.external_url ? (
+                      <div>
+                        <SafeLink href={lead.external_url} className="text-sm">
+                          Open record
+                        </SafeLink>
+                      </div>
+                    ) : null}
+                  </Td>
+                  <Td className="text-sm text-ink-soft">
+                    {lead.status === "scheduled"
+                      ? `due ${formatDateTime(lead.due_at)}`
+                      : formatDateTime(lead.last_synced_at ?? lead.updated_at)}
+                  </Td>
+                  <Td numeric>{lead.attempts}</Td>
+                  <Td className="max-w-md text-sm text-warn" data-testid="crm-error">
+                    {lead.last_error ?? ""}
+                  </Td>
+                  <Td className="text-right">{action ? action(lead) : null}</Td>
+                </Tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan={7}>
+                  <EmptyState title={empty} description={emptyHint} />
                 </td>
-                <td className="px-3 py-2 text-xs">{lead.services.join("; ") || "—"}</td>
-                <td className="px-3 py-2">
-                  {CRM_STATUS_LABELS[lead.status] ?? lead.status}
-                  {lead.external_url ? (
-                    <>
-                      {" · "}
-                      <SafeLink href={lead.external_url} className="text-xs">Open record</SafeLink>
-                    </>
-                  ) : null}
-                </td>
-                <td className="px-3 py-2 text-xs text-slate-600">
-                  {lead.status === "scheduled" ? `due ${formatDateTime(lead.due_at)}` : formatDateTime(lead.last_synced_at ?? lead.updated_at)}
-                </td>
-                <td className="px-3 py-2 font-mono text-xs">{lead.attempts}</td>
-                <td className="max-w-md px-3 py-2 text-xs text-amber-900" data-testid="crm-error">{lead.last_error ?? ""}</td>
-                <td className="px-3 py-2 text-right">{action ? action(lead) : null}</td>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      ) : (
-        <p className="p-6 text-center text-sm text-slate-600">{empty}</p>
-      )}
+            )}
+          </TBody>
+        </Table>
+      </TableWrap>
     </section>
   );
 }

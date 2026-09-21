@@ -272,7 +272,7 @@ export function BusinessReview({ businessId }: { businessId: string }) {
           <AiSummaryBox ai={detail.ai} />
         </div>
 
-        <div className="order-1 flex min-w-0 flex-col gap-3 lg:order-2 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:self-start lg:overflow-y-auto">
+        <div className="order-1 flex min-w-0 flex-col gap-3 lg:order-2 lg:sticky lg:top-4 lg:self-start">
           <h2 className="text-md font-semibold text-ink">
             Opportunities <span className="font-normal text-ink-soft">({opportunities.length})</span>
           </h2>

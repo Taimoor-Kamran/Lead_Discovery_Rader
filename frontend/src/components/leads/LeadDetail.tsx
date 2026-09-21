@@ -2,15 +2,17 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { ErrorNote } from "@/components/ErrorNote";
 import { SafeLink } from "@/components/SafeLink";
-import { useToast } from "@/components/ui";
 import { CrmBadge } from "@/components/crm/CrmBadge";
 import { EvidenceList, type Evidence } from "@/components/review/EvidenceList";
 import { FindingList, type Finding } from "@/components/review/FindingList";
 import { PsiPanel } from "@/components/review/PsiPanel";
 import { ReasonLines } from "@/components/review/ReasonLines";
+import { Badge, Card, Chip, PageHeader, SkeletonLines, useToast } from "@/components/ui";
 import { ApiError, getLeadDetail, retryCrmLead, type LeadDetail as LeadDetailData } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { loadFailed } from "@/lib/errors";
 import { CRM_ACTION_LABELS, formatDateTime, formatPhone, orUnknown, percent, place, score } from "@/lib/format";
 import { auditStatusLabel, serviceLabel, sourceLabel } from "@/lib/labels";
 import { canManageCrm } from "@/lib/roles";
@@ -20,6 +22,10 @@ export const NOT_YOURS_MESSAGE = "This lead is not assigned to you.";
 /**
  * One approved lead, read-only: what the business is, why it is a lead, the evidence and
  * who approved it. No decisions here; those live on the review page.
+ *
+ * Reps print or PDF this before a call, so the page is built to print: the contact block
+ * is a letterhead at the top, the argument flows underneath, and the navigation, the CRM
+ * history and the screen-only chrome drop out (see the `@media print` block in globals.css).
  */
 export function LeadDetail({ opportunityId }: { opportunityId: string }) {
   const { user } = useAuth();
@@ -39,7 +45,7 @@ export function LeadDetail({ opportunityId }: { opportunityId: string }) {
         if (cancelled) return;
         if (caught instanceof ApiError && caught.status === 403) setError(NOT_YOURS_MESSAGE);
         else if (caught instanceof ApiError && caught.status === 404) setError("Lead not found.");
-        else setError(caught instanceof ApiError ? caught.message : "Could not load this lead");
+        else setError(caught instanceof ApiError ? caught.message : loadFailed("this lead"));
       });
     return () => {
       cancelled = true;
@@ -61,135 +67,168 @@ export function LeadDetail({ opportunityId }: { opportunityId: string }) {
 
   if (error) {
     return (
-      <p role="alert" className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800">
-        {error} · <Link href="/leads" className="underline">Back to leads</Link>
-      </p>
+      <ErrorNote>
+        {error}{" "}
+        <Link href="/leads" className="rounded font-medium text-accent underline underline-offset-2">
+          Back to leads
+        </Link>
+      </ErrorNote>
     );
   }
-  if (!detail) return <p className="text-sm text-slate-600">Loading…</p>;
+  if (!detail) return <SkeletonLines lines={6} className="max-w-measure" />;
 
   const { lead, business, audit, opportunity } = detail;
   const findings = (audit?.findings as Finding[] | undefined) ?? [];
   const approval = opportunity.history.find((d) => d.decision === "approve" && !d.undone_at);
-  const facts: [string, React.ReactNode][] = [
-    ["Location", place(business.city, business.state)],
-    ["Address", orUnknown(business.address_line1)],
-    ["Postal code", orUnknown(business.postal_code)],
-    ["Industry", orUnknown(business.industry)],
-    ["Public phone", <span key="phone" title={business.phone_e164 ?? undefined}>{formatPhone(business.phone_e164)}</span>],
-    ["Website", business.website ? <SafeLink key="site" href={business.website}>{business.website}</SafeLink> : "none"],
-    ["Status", business.business_status],
-  ];
 
   return (
-    <div className="flex flex-col gap-4" data-testid="lead-detail">
-      <header className="flex flex-wrap items-center gap-3">
-        <Link href="/leads" className="text-sm text-teal-700 underline underline-offset-2">
-          ← Leads
-        </Link>
-        <h1 className="text-xl font-semibold text-navy">{business.display_name}</h1>
-        <span className="text-sm text-slate-600">{place(business.city, business.state)}</span>
-        <span className="chip border-slate-300 bg-slate-50 text-navy" title={lead.service}>
-          {serviceLabel(lead.service)}
-        </span>
-        <span
-          className="chip border-navy bg-navy font-mono text-white"
-          title={`Confidence ${percent(opportunity.confidence)} · raw score ${lead.score}`}
-          data-testid="score-chip"
-        >
-          Score {score(lead.score)}
-        </span>
-        <CrmBadge crm={lead.crm} canRetry={crmManager} busy={busy} onRetry={retry} />
-      </header>
-
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(18rem,1fr)_minmax(24rem,1.6fr)_minmax(20rem,1.2fr)]">
-        <section className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4">
-          <h2 className="text-lg font-semibold text-navy">Business</h2>
-          <dl className="grid grid-cols-[7rem_1fr] gap-y-1 text-sm">
-            {facts.map(([label, value]) => (
-              <div key={label} className="contents">
-                <dt className="text-slate-500">{label}</dt>
-                <dd className="break-words">{value}</dd>
-              </div>
-            ))}
-          </dl>
-          <h2 className="mt-2 text-lg font-semibold text-navy">Approval</h2>
-          <dl className="grid grid-cols-[7rem_1fr] gap-y-1 text-sm" data-testid="approval">
-            <dt className="text-slate-500">Approved by</dt>
-            <dd>{lead.approved_by_email ?? "unknown"}</dd>
-            <dt className="text-slate-500">Approved at</dt>
-            <dd>{formatDateTime(lead.approved_at)}</dd>
-            <dt className="text-slate-500">Assigned rep</dt>
-            <dd>{lead.assigned_to_email ?? <span className="text-slate-500">unassigned</span>}</dd>
-            {approval?.note ? (
-              <>
-                <dt className="text-slate-500">Reviewer note</dt>
-                <dd className="whitespace-pre-wrap">“{approval.note}”</dd>
-              </>
-            ) : null}
-          </dl>
-        </section>
-
-        <section className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4">
-          <header className="flex flex-wrap items-center gap-2">
-            <h2 className="text-lg font-semibold text-navy">Why this is a lead</h2>
-            <span className="chip border-slate-300 bg-slate-100 text-slate-800" title={opportunity.source}>
-              {sourceLabel(opportunity.source)}
+    <div className="flex flex-col gap-5" data-testid="lead-detail">
+      <PageHeader
+        className="print-hide"
+        meta={
+          <Link href="/leads" className="rounded font-medium text-accent underline underline-offset-2">
+            ← Leads
+          </Link>
+        }
+        title={business.display_name}
+        description={place(business.city, business.state)}
+        actions={
+          <>
+            <Chip title={lead.service}>{serviceLabel(lead.service)}</Chip>
+            <span
+              className="font-mono text-md font-medium tabular-nums text-ink"
+              title={`Confidence ${percent(opportunity.confidence)} · raw score ${lead.score}`}
+              data-testid="score-chip"
+            >
+              Score {score(lead.score)}
             </span>
-          </header>
-          <ReasonLines
-            ruleReason={opportunity.rule_reason}
-            aiRationale={opportunity.ai_rationale}
-            fallback={opportunity.reason}
-          />
-          <h3 className="text-xs font-medium uppercase tracking-wide text-slate-500">Evidence</h3>
-          <EvidenceList items={(opportunity.evidence as Evidence[]) ?? []} />
-        </section>
+            <CrmBadge crm={lead.crm} canRetry={crmManager} busy={busy} onRetry={retry} />
+          </>
+        }
+      />
 
-        <section className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4">
-          <header className="flex items-baseline justify-between gap-2">
-            <h2 className="text-lg font-semibold text-navy">Website findings</h2>
+      {/* The letterhead: what a rep dials or types, first on screen and first on paper. */}
+      <Card className="print-break-avoid print-plain">
+        <h2 className="print-only text-md font-semibold">
+          {business.display_name} — {serviceLabel(lead.service)}
+        </h2>
+        <dl className="grid grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div>
+            <dt className="text-sm text-ink-soft">Public phone</dt>
+            <dd className="font-mono text-md text-ink" title={business.phone_e164 ?? undefined}>
+              {formatPhone(business.phone_e164)}
+            </dd>
+          </div>
+          <div className="min-w-0">
+            <dt className="text-sm text-ink-soft">Website</dt>
+            <dd className="break-words text-md">
+              {business.website ? <SafeLink href={business.website}>{business.website}</SafeLink> : "none"}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-sm text-ink-soft">Industry</dt>
+            <dd className="text-md">{orUnknown(business.industry)}</dd>
+          </div>
+          <div>
+            <dt className="text-sm text-ink-soft">Address</dt>
+            <dd>
+              {orUnknown(business.address_line1)}
+              <span className="block text-sm text-ink-soft">
+                {place(business.city, business.state)}
+                {business.postal_code ? ` ${business.postal_code}` : ""}
+              </span>
+            </dd>
+          </div>
+        </dl>
+      </Card>
+
+      <div className="print-flow grid grid-cols-1 gap-5 lg:grid-cols-2">
+        <Card className="print-break-avoid print-plain">
+          <header className="flex flex-wrap items-center gap-2">
+            <h2 className="text-md font-semibold text-ink">Why this is a lead</h2>
+            <Badge title={opportunity.source}>{sourceLabel(opportunity.source)}</Badge>
+          </header>
+          <div className="mt-3">
+            <ReasonLines
+              ruleReason={opportunity.rule_reason}
+              aiRationale={opportunity.ai_rationale}
+              fallback={opportunity.reason}
+            />
+          </div>
+          <h3 className="mb-1 mt-4 text-sm font-semibold text-ink">Evidence</h3>
+          <EvidenceList items={(opportunity.evidence as Evidence[]) ?? []} />
+        </Card>
+
+        <Card className="print-break-avoid print-plain">
+          <header className="flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="text-md font-semibold text-ink">Website findings</h2>
             {audit ? (
-              <span className="text-xs text-slate-500" title={audit.status}>
-                {auditStatusLabel(audit.status)} · {formatDateTime(audit.created_at)}
+              <span className="text-sm text-ink-soft" title={audit.status}>
+                {auditStatusLabel(audit.status)} {formatDateTime(audit.created_at)}
               </span>
             ) : null}
           </header>
           {audit ? (
             <>
-              <p className="text-xs text-slate-600">
+              <p className="mt-1 text-sm text-ink-soft">
                 Audited <SafeLink href={audit.url_audited}>{audit.url_audited}</SafeLink>
               </p>
-              <FindingList findings={findings} />
-              <h3 className="text-sm font-medium text-slate-700">PageSpeed</h3>
-              <PsiPanel psi={(audit.psi as Record<string, unknown> | null) ?? null} />
+              <div className="mt-3">
+                <FindingList findings={findings} />
+              </div>
+              <div className="print-hide mt-4 border-t border-line pt-3">
+                <h3 className="mb-2 text-base font-semibold text-ink">Speed</h3>
+                <PsiPanel psi={(audit.psi as Record<string, unknown> | null) ?? null} />
+              </div>
             </>
           ) : (
-            <p className="text-sm text-slate-600">This business has not been audited.</p>
+            <p className="mt-2 text-base text-ink-soft">This business has not been audited.</p>
           )}
-        </section>
+        </Card>
       </div>
 
-      <section className="rounded-lg border border-slate-200 bg-white p-4" aria-label="CRM sync history" data-testid="crm-history">
-        <h2 className="text-lg font-semibold text-navy">CRM sync history</h2>
-        {detail.crm_history.length ? (
-          <ul className="mt-2 flex flex-col gap-1 text-xs">
-            {detail.crm_history.map((attempt) => (
-              <li key={attempt.id} className="flex flex-wrap items-center gap-2" data-testid="crm-attempt">
-                <span className={attempt.status === "ok" ? "text-teal-700" : "text-amber-900"}>
-                  {attempt.status === "ok" ? "OK" : "Failed"}
-                </span>
-                <span className="font-medium">{CRM_ACTION_LABELS[attempt.action] ?? attempt.action}</span>
-                <span className="text-slate-500">{formatDateTime(attempt.created_at)}</span>
-                {attempt.http_status ? <span className="font-mono text-slate-500">HTTP {attempt.http_status}</span> : null}
-                {attempt.error ? <span className="w-full text-amber-900">{attempt.error}</span> : null}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="mt-1 text-sm text-slate-600">No sync attempt yet.</p>
-        )}
-      </section>
+      <div className="print-flow grid grid-cols-1 gap-5 lg:grid-cols-2">
+        <Card className="print-break-avoid print-plain">
+          <h2 className="text-md font-semibold text-ink">Approval</h2>
+          <dl className="mt-2 grid grid-cols-[8rem_1fr] gap-y-1.5 text-base" data-testid="approval">
+            <dt className="text-ink-soft">Approved by</dt>
+            <dd>{lead.approved_by_email ?? "unknown"}</dd>
+            <dt className="text-ink-soft">Approved at</dt>
+            <dd>{formatDateTime(lead.approved_at)}</dd>
+            <dt className="text-ink-soft">Assigned rep</dt>
+            <dd>{lead.assigned_to_email ?? <span className="text-ink-soft">unassigned</span>}</dd>
+            {approval?.note ? (
+              <>
+                <dt className="text-ink-soft">Reviewer note</dt>
+                <dd className="whitespace-pre-wrap">“{approval.note}”</dd>
+              </>
+            ) : null}
+          </dl>
+        </Card>
+
+        <Card className="print-hide" aria-label="CRM sync history" data-testid="crm-history">
+          <h2 className="text-md font-semibold text-ink">CRM sync history</h2>
+          {detail.crm_history.length ? (
+            <ul className="mt-2 flex flex-col gap-2 text-sm">
+              {detail.crm_history.map((attempt) => (
+                <li key={attempt.id} className="flex flex-wrap items-center gap-2" data-testid="crm-attempt">
+                  <Badge tone={attempt.status === "ok" ? "ok" : "warn"}>
+                    {attempt.status === "ok" ? "OK" : "Failed"}
+                  </Badge>
+                  <span className="font-medium">{CRM_ACTION_LABELS[attempt.action] ?? attempt.action}</span>
+                  <span className="text-ink-soft">{formatDateTime(attempt.created_at)}</span>
+                  {attempt.http_status ? (
+                    <span className="font-mono text-ink-soft">HTTP {attempt.http_status}</span>
+                  ) : null}
+                  {attempt.error ? <span className="w-full text-warn">{attempt.error}</span> : null}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-1 text-base text-ink-soft">No sync attempt yet.</p>
+          )}
+        </Card>
+      </div>
     </div>
   );
 }

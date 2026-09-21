@@ -32,6 +32,18 @@ const SIZES: Record<ButtonSize, string> = {
 };
 
 /**
+ * The one place the look of a button is decided. A `next/link` that has to *look* like a
+ * button (navigation, not an action) uses this rather than copying the classes.
+ */
+export function buttonClass({
+  variant = "secondary",
+  size = "md",
+  className,
+}: { variant?: ButtonVariant; size?: ButtonSize; className?: string } = {}): string {
+  return cx(BASE, VARIANTS[variant], SIZES[size], className);
+}
+
+/**
  * The only button in the app. A button says what happens ("Approve"), and the flow keeps
  * the word ("approved") — see docs/design.md.
  */
@@ -45,7 +57,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       type={type ?? "button"}
       disabled={disabled || loading}
       aria-busy={loading || undefined}
-      className={cx(BASE, VARIANTS[variant], SIZES[size], className)}
+      className={buttonClass({ variant, size, className })}
       {...rest}
     >
       {loading ? <Spinner /> : null}

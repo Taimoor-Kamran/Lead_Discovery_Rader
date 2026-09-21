@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
-import { Button } from "./Button";
+import { Button, buttonClass } from "./Button";
 
 describe("Button", () => {
   it("is a non-submitting button unless it says otherwise", () => {
@@ -38,6 +38,11 @@ describe("Button", () => {
     expect((button as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(button);
     expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it("hands the same look to a link that navigates instead of acting", () => {
+    expect(buttonClass({ variant: "primary" })).toContain("bg-accent");
+    expect(buttonClass()).toBe(buttonClass({ variant: "secondary", size: "md" }));
   });
 
   it("does not fire while disabled", () => {

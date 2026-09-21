@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
+import { SkeletonLines } from "@/components/ui";
 import { useAuth } from "@/lib/auth";
 import { homeFor } from "@/lib/roles";
 
@@ -13,5 +14,5 @@ export default function Home() {
     if (status === "anonymous") router.replace("/login");
     if (status === "authenticated" && user) router.replace(homeFor(user.role));
   }, [status, user, router]);
-  return <p className="p-6 text-sm text-slate-600">Loading…</p>;
+  return <SkeletonLines lines={3} className="max-w-measure p-6" />;
 }

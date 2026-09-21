@@ -1,9 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { ErrorNote } from "@/components/ErrorNote";
 import { SafeLink } from "@/components/SafeLink";
-import { useToast } from "@/components/ui";
+import {
+  Button,
+  Card,
+  EmptyState,
+  PageHeader,
+  SkeletonLines,
+  useToast,
+} from "@/components/ui";
 import { ApiError, decideMatchCandidate, getMatchCandidates, type MatchCandidate } from "@/lib/api";
+import { loadFailed } from "@/lib/errors";
 import { orUnknown, place, score } from "@/lib/format";
 
 export function Duplicates() {
@@ -19,7 +28,7 @@ export function Duplicates() {
       setItems((await getMatchCandidates()).items);
       setError(null);
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : "Could not load duplicates");
+      setError(caught instanceof ApiError ? caught.message : loadFailed("the duplicate pairs"));
     } finally {
       setLoading(false);
     }
@@ -45,65 +54,77 @@ export function Duplicates() {
 
   return (
     <div className="flex flex-col gap-4">
-      <header>
-        <h1 className="text-2xl font-semibold text-navy">Duplicates</h1>
-        <p className="text-sm text-slate-600">
-          Pairs the resolver would not decide on its own. Merge links the record to the
-          business; keep apart leaves them separate.
-        </p>
-      </header>
-      {error ? <p role="alert" className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</p> : null}
-      {loading ? <p className="text-sm text-slate-600">Loading…</p> : null}
+      <PageHeader
+        title="Duplicates"
+        description="Pairs the resolver would not decide on its own. Merge links the record to the business; keep apart leaves them separate."
+      />
+      {error ? <ErrorNote>{error}</ErrorNote> : null}
+      {loading ? <SkeletonLines lines={4} /> : null}
       {!loading && !items.length ? (
-        <p className="rounded border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-600">
-          No pending duplicate pairs.
-        </p>
+        <Card className="border-dashed">
+          <EmptyState
+            title="No pairs to decide."
+            description="The resolver merges what it is sure about on its own. A pair only lands here when it is not."
+          />
+        </Card>
       ) : null}
-      <ul className="flex flex-col gap-3">
+      <ul className="flex flex-col gap-4">
         {items.map((candidate) => (
-          <li key={candidate.id} className="rounded-lg border border-slate-200 bg-white p-4" data-testid="duplicate-pair">
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_1fr_14rem]">
-              <Side
-                title="New record"
-                subtitle={candidate.record?.source ?? "unknown source"}
-                name={candidate.record?.display_name}
-                place={candidate.record?.formatted_address}
-                phone={candidate.record?.phone}
-                website={candidate.record?.website}
-              />
-              <Side
-                title="Existing business"
-                subtitle={candidate.business ? place(candidate.business.city, candidate.business.state) : ""}
-                name={candidate.business?.display_name}
-                place={
-                  candidate.business
-                    ? [candidate.business.city, candidate.business.state, candidate.business.postal_code]
-                        .filter(Boolean)
-                        .join(", ")
-                    : null
-                }
-                phone={candidate.business?.phone_e164}
-                website={candidate.business?.website}
-              />
-              <div className="flex flex-col gap-2 text-sm">
-                <p className="font-mono">match score {score(Number(candidate.score))}</p>
-                <ul className="text-xs text-slate-600">
-                  {Object.entries(candidate.signals ?? {}).map(([key, value]) => (
-                    <li key={key}>
-                      {key}: {typeof value === "object" ? JSON.stringify(value) : String(value)}
-                    </li>
-                  ))}
-                </ul>
-                <div className="mt-auto flex gap-2">
-                  <button type="button" className="btn-primary" disabled={busy === candidate.id} onClick={() => decide(candidate, "merge")}>
-                    Merge
-                  </button>
-                  <button type="button" className="btn-secondary" disabled={busy === candidate.id} onClick={() => decide(candidate, "keep_apart")}>
-                    Keep apart
-                  </button>
+          <li key={candidate.id}>
+            <Card data-testid="duplicate-pair">
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_1fr_14rem]">
+                <Side
+                  title="New record"
+                  subtitle={candidate.record?.source ?? "unknown source"}
+                  name={candidate.record?.display_name}
+                  place={candidate.record?.formatted_address}
+                  phone={candidate.record?.phone}
+                  website={candidate.record?.website}
+                />
+                <Side
+                  title="Existing business"
+                  subtitle={candidate.business ? place(candidate.business.city, candidate.business.state) : ""}
+                  name={candidate.business?.display_name}
+                  place={
+                    candidate.business
+                      ? [candidate.business.city, candidate.business.state, candidate.business.postal_code]
+                          .filter(Boolean)
+                          .join(", ")
+                      : null
+                  }
+                  phone={candidate.business?.phone_e164}
+                  website={candidate.business?.website}
+                />
+                <div className="flex flex-col gap-3">
+                  <p>
+                    <span className="block text-sm text-ink-soft">Match score</span>
+                    <span className="font-mono text-md tabular-nums">{score(Number(candidate.score))}</span>
+                  </p>
+                  <dl className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-0.5 text-sm text-ink-soft">
+                    {Object.entries(candidate.signals ?? {}).map(([key, value]) => (
+                      <div key={key} className="contents">
+                        <dt>{key.replace(/_/g, " ")}</dt>
+                        <dd className="font-mono">
+                          {typeof value === "object" ? JSON.stringify(value) : String(value)}
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
+                  <div className="mt-auto flex gap-2">
+                    <Button
+                      variant="primary"
+                      disabled={busy === candidate.id}
+                      onClick={() => decide(candidate, "merge")}
+                    >
+                      Merge
+                    </Button>
+                    <Button disabled={busy === candidate.id} onClick={() => decide(candidate, "keep_apart")}>
+                      Keep apart
+                    </Button>
+                  </div>
                 </div>
               </div>
-            </div>
+            </Card>
           </li>
         ))}
       </ul>
@@ -127,18 +148,19 @@ function Side({
   website: string | null | undefined;
 }) {
   return (
-    <div>
-      <h2 className="text-xs font-medium uppercase tracking-wide text-slate-500">
-        {title} <span className="normal-case text-slate-400">· {subtitle}</span>
-      </h2>
-      <p className="mt-1 font-semibold text-navy">{orUnknown(name)}</p>
-      <dl className="mt-1 grid grid-cols-[5rem_1fr] gap-y-0.5 text-sm">
-        <dt className="text-slate-500">Address</dt>
-        <dd>{orUnknown(address)}</dd>
-        <dt className="text-slate-500">Phone</dt>
-        <dd>{orUnknown(phone)}</dd>
-        <dt className="text-slate-500">Website</dt>
-        <dd>{website ? <SafeLink href={website}>{website}</SafeLink> : "none"}</dd>
+    <div className="min-w-0">
+      <h3 className="text-sm font-medium text-ink-soft">
+        {title}
+        {subtitle ? <span className="ml-2 font-normal">{subtitle}</span> : null}
+      </h3>
+      <p className="mt-1 text-md font-semibold text-ink">{orUnknown(name)}</p>
+      <dl className="mt-2 grid grid-cols-[5rem_1fr] gap-y-1 text-base">
+        <dt className="text-ink-soft">Address</dt>
+        <dd className="break-words">{orUnknown(address)}</dd>
+        <dt className="text-ink-soft">Phone</dt>
+        <dd className="font-mono">{orUnknown(phone)}</dd>
+        <dt className="text-ink-soft">Website</dt>
+        <dd className="break-words">{website ? <SafeLink href={website}>{website}</SafeLink> : "none"}</dd>
       </dl>
     </div>
   );

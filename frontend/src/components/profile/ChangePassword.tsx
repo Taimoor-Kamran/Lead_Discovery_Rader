@@ -2,7 +2,7 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
-import { useToast } from "@/components/ui";
+import { Button, Card, Input, PageHeader, useToast } from "@/components/ui";
 import { ApiError, changePassword } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { homeFor, ROLE_LABELS } from "@/lib/roles";
@@ -49,33 +49,53 @@ export function ChangePassword() {
   }
 
   return (
-    <div className="mx-auto flex max-w-xl flex-col gap-4">
-      <header>
-        <h1 className="text-2xl font-semibold text-navy">Profile</h1>
-        {user ? <p className="text-sm text-slate-600">{user.email} · {ROLE_LABELS[user.role]}</p> : null}
-      </header>
+    <div className="mx-auto flex w-full max-w-xl flex-col gap-4">
+      <PageHeader title="Profile" description={user ? `${user.email} — ${ROLE_LABELS[user.role]}` : undefined} />
       {forced ? (
-        <p role="alert" data-testid="forced-notice" className="rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+        <p
+          role="alert"
+          data-testid="forced-notice"
+          className="rounded-lg border border-warn bg-warn-tint p-3 text-base text-ink"
+        >
           Your password was set by an administrator. Choose your own before doing anything else.
         </p>
       ) : null}
-      <form onSubmit={submit} className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4" aria-label="Change password">
-        <label className="flex flex-col gap-1 text-sm">
-          Current password
-          <input className="field" type="password" required autoComplete="current-password" value={current} onChange={(event) => setCurrent(event.target.value)} />
-        </label>
-        <label className="flex flex-col gap-1 text-sm">
-          New password
-          <input className="field" type="password" required minLength={MIN_PASSWORD_LENGTH} autoComplete="new-password" value={next} onChange={(event) => setNext(event.target.value)} />
-        </label>
-        <label className="flex flex-col gap-1 text-sm">
-          New password again
-          <input className="field" type="password" required autoComplete="new-password" value={again} onChange={(event) => setAgain(event.target.value)} />
-        </label>
-        <p className="text-xs text-slate-600">At least {MIN_PASSWORD_LENGTH} characters, not your email address, not a common password.</p>
-        {error ? <p role="alert" className="rounded border border-red-200 bg-red-50 p-2 text-sm text-red-800">{error}</p> : null}
-        <button type="submit" className="btn-primary self-start" disabled={busy}>Change password</button>
-      </form>
+      <Card as="form" onSubmit={submit} aria-label="Change password" className="flex flex-col gap-4">
+        <Input
+          label="Current password"
+          type="password"
+          required
+          autoComplete="current-password"
+          value={current}
+          onChange={(event) => setCurrent(event.target.value)}
+        />
+        <Input
+          label="New password"
+          type="password"
+          required
+          minLength={MIN_PASSWORD_LENGTH}
+          autoComplete="new-password"
+          hint={`At least ${MIN_PASSWORD_LENGTH} characters, not your email address, not a common password.`}
+          value={next}
+          onChange={(event) => setNext(event.target.value)}
+        />
+        <Input
+          label="New password again"
+          type="password"
+          required
+          autoComplete="new-password"
+          value={again}
+          onChange={(event) => setAgain(event.target.value)}
+        />
+        {error ? (
+          <p role="alert" className="rounded border border-risk bg-risk-tint p-2 text-base text-ink">
+            {error}
+          </p>
+        ) : null}
+        <Button type="submit" variant="primary" loading={busy} className="self-start">
+          Change password
+        </Button>
+      </Card>
     </div>
   );
 }

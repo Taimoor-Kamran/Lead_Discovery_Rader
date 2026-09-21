@@ -1,7 +1,7 @@
 /** The component layer. One implementation of each thing, used everywhere; see docs/design.md. */
 
 export { Badge, type BadgeTone } from "./Badge";
-export { Button, type ButtonProps, type ButtonSize, type ButtonVariant } from "./Button";
+export { Button, buttonClass, type ButtonProps, type ButtonSize, type ButtonVariant } from "./Button";
 export { Card } from "./Card";
 export { Chip } from "./Chip";
 export { cx } from "./cx";
