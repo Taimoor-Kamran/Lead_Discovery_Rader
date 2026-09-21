@@ -131,65 +131,156 @@ def follow_up(session: Session, run: JobRun) -> None:
         enqueue_classification_for_run(session, run.id, idempotency_key=f"classification:{run.id}")
 
 
+class _HandlerFailedError(Exception):
+    """A handler failed and its own session could not record it. Carried out to a new one."""
+
+    def __init__(self, cause: BaseException, attempt: int) -> None:
+        super().__init__(f"{type(cause).__name__}: {cause}")
+        self.cause = cause
+        self.attempt = attempt
+
+
+def _decide(
+    session: Session, run: JobRun, failure: _HandlerFailedError
+) -> tuple[JobRunStatus | None, int]:
+    """Fail the run, or queue a retry. Returns the terminal status, or `None` and a delay."""
+    settings = get_settings()
+    message = str(failure)
+    retryable = is_retryable(failure.cause)
+    if failure.attempt >= settings.job_max_attempts or not retryable:
+        transition(session, run, JobRunStatus.failed, error=message)
+        logger.error(
+            "job run failed permanently",
+            extra={
+                "job_run_id": str(run.id),
+                "attempts": failure.attempt,
+                "retryable": retryable,
+            },
+        )
+        return JobRunStatus.failed, 0
+
+    delay = backoff_seconds(failure.attempt, settings.job_backoff_base_seconds)
+    transition(session, run, JobRunStatus.queued, error=message)
+    logger.warning(
+        "job run failed, retrying",
+        extra={
+            "job_run_id": str(run.id),
+            "attempt": failure.attempt,
+            "retry_in_seconds": delay,
+        },
+    )
+    return None, delay
+
+
+def _one_attempt(run_id: uuid.UUID) -> tuple[JobRunStatus | None, int]:
+    """Run the job once. Returns its terminal status, or `None` and the seconds until a retry.
+
+    Raises `_HandlerFailedError` only when this session could not record the outcome
+    itself — an aborted transaction or a lost connection. That is decided here rather
+    than outside so that a handler which wrote something before it failed (an alert, a
+    partial result) keeps it: the failure and the handler's rows commit together.
+    """
+    with session_scope() as session:
+        run = get_job_run(session, run_id)
+        if run.is_terminal:
+            return run.status, 0
+        if run.cancel_requested and run.status is JobRunStatus.queued:
+            transition(session, run, JobRunStatus.cancelled)
+            return JobRunStatus.cancelled, 0
+
+        transition(session, run, JobRunStatus.running)
+        # Committed before any work starts. If the attempt dies from here on, the row on
+        # disk says `running` and the watchdog owns it; without this commit the rollback
+        # that follows a failure also undid the transition, putting the run back to
+        # `queued` with no RQ job behind it — invisible to the watchdog and, for a
+        # `scheduled:*` kind, blocking that job for ever (the v0.9.0 incident).
+        session.commit()
+        attempt = run.attempts
+
+        try:
+            # Looked up inside the try so an unknown kind fails the run through the
+            # normal path instead of leaving it stuck as `running`.
+            get_handler(run.kind)(session, run)
+        except JobCancelledError as exc:
+            transition(session, run, JobRunStatus.cancelled, error=str(exc))
+            logger.info("job run cancelled", extra={"job_run_id": str(run.id)})
+            return JobRunStatus.cancelled, 0
+        except Exception as exc:  # a handler failure is data, not a crash
+            failure = _HandlerFailedError(exc, attempt)
+            try:
+                return _decide(session, run, failure)
+            except Exception:
+                raise failure from exc
+
+        transition(session, run, JobRunStatus.done)
+        follow_up(session, run)
+        logger.info("job run done", extra={"job_run_id": str(run.id)})
+        return JobRunStatus.done, 0
+
+
+def _record_failure(
+    run_id: uuid.UUID, failure: _HandlerFailedError
+) -> tuple[JobRunStatus | None, int]:
+    """Write a handler failure in a session of its own, the attempt's having gone bad."""
+    with session_scope() as session:
+        run = get_job_run(session, run_id)
+        if run.is_terminal:
+            return run.status, 0
+        return _decide(session, run, failure)
+
+
+def _fail_run(run_id: uuid.UUID, exc: BaseException) -> JobRunStatus:
+    """The last resort: whatever broke, the run ends `failed` with the reason stored.
+
+    Reached when the attempt itself came apart — a dead connection, an aborted
+    transaction, a transition that could not be written. A brand-new session is used
+    because the one that failed cannot be trusted to run another statement. Nothing a
+    worker does may leave a run sitting in `running` or `queued` with no error: that is
+    a run nobody will ever finish, and for a `scheduled:*` kind it stops the scheduler
+    from ever queueing that job again.
+    """
+    message = f"{type(exc).__name__}: {exc}"
+    try:
+        with session_scope() as session:
+            run = get_job_run(session, run_id)
+            if run.is_terminal:
+                return run.status
+            transition(session, run, JobRunStatus.failed, error=message)
+    except Exception:
+        # The database is unreachable too. Say so and let RQ record the original: the
+        # watchdog finishes the run once the database is back.
+        logger.exception("could not record a failed job run", extra={"job_run_id": str(run_id)})
+        raise exc from None
+    logger.error(
+        "job run failed", extra={"job_run_id": str(run_id), "error": message}, exc_info=exc
+    )
+    return JobRunStatus.failed
+
+
 def execute_job_run(
     job_run_id: str | uuid.UUID, *, sleeper: Callable[[float], None] = time.sleep
 ) -> JobRunStatus:
     """Run one job run to a terminal status, retrying failures with exponential backoff.
 
+    Every exit from this function is terminal: `done`, `cancelled` or `failed`. Anything
+    that escapes an attempt is written to the run by `_fail_run` rather than being
+    allowed to leave it `running`.
+
     `sleeper` is injectable so tests can assert the backoff schedule without waiting.
     """
-    settings = get_settings()
     run_id = uuid.UUID(str(job_run_id))
-    max_attempts = settings.job_max_attempts
 
     while True:
-        with session_scope() as session:
-            run = get_job_run(session, run_id)
-            if run.is_terminal:
-                return run.status
-            if run.cancel_requested and run.status is JobRunStatus.queued:
-                transition(session, run, JobRunStatus.cancelled)
-                return JobRunStatus.cancelled
-
-            transition(session, run, JobRunStatus.running)
-            attempt = run.attempts
-
+        try:
+            status, delay = _one_attempt(run_id)
+        except _HandlerFailedError as failure:
             try:
-                # Looked up inside the try so an unknown kind fails the run through the
-                # normal path instead of leaving it stuck as `running`.
-                get_handler(run.kind)(session, run)
-            except JobCancelledError as exc:
-                transition(session, run, JobRunStatus.cancelled, error=str(exc))
-                logger.info("job run cancelled", extra={"job_run_id": str(run.id)})
-                return JobRunStatus.cancelled
-            except Exception as exc:  # a handler failure is data, not a crash
-                message = f"{type(exc).__name__}: {exc}"
-                if attempt >= max_attempts or not is_retryable(exc):
-                    transition(session, run, JobRunStatus.failed, error=message)
-                    logger.error(
-                        "job run failed permanently",
-                        extra={
-                            "job_run_id": str(run.id),
-                            "attempts": attempt,
-                            "retryable": is_retryable(exc),
-                        },
-                    )
-                    return JobRunStatus.failed
+                status, delay = _record_failure(run_id, failure)
+            except Exception as exc:
+                return _fail_run(run_id, exc)
+        except Exception as exc:
+            return _fail_run(run_id, exc)
 
-                delay = backoff_seconds(attempt, settings.job_backoff_base_seconds)
-                transition(session, run, JobRunStatus.queued, error=message)
-                logger.warning(
-                    "job run failed, retrying",
-                    extra={
-                        "job_run_id": str(run.id),
-                        "attempt": attempt,
-                        "retry_in_seconds": delay,
-                    },
-                )
-            else:
-                transition(session, run, JobRunStatus.done)
-                follow_up(session, run)
-                logger.info("job run done", extra={"job_run_id": str(run.id)})
-                return JobRunStatus.done
-
+        if status is not None:
+            return status
         sleeper(delay)

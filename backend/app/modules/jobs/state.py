@@ -1,9 +1,15 @@
 """The job-run state machine.
 
-    queued  → running | cancelled
+    queued  → running | cancelled | failed
     running → done | failed | cancelled | queued   (queued = a retry is scheduled)
 
 `done`, `failed` and `cancelled` are terminal. Every accepted transition writes an audit row.
+
+`queued → failed` exists so a run that never got to start can still be *finished*: the
+worker's last-resort handler and the watchdog both use it. Without it a run that died
+between being queued and being picked up stayed non-terminal for ever, and the scheduler
+— which skips a job whose previous run has not finished — never queued that job again
+(the v0.9.0 `scheduled:crm-sync` incident).
 """
 
 import uuid
@@ -19,7 +25,9 @@ from app.modules.jobs.models import TERMINAL_RUN_STATUSES, JobRun, JobRunStatus
 logger = get_logger("app.jobs.state")
 
 ALLOWED_TRANSITIONS: dict[JobRunStatus, frozenset[JobRunStatus]] = {
-    JobRunStatus.queued: frozenset({JobRunStatus.running, JobRunStatus.cancelled}),
+    JobRunStatus.queued: frozenset(
+        {JobRunStatus.running, JobRunStatus.cancelled, JobRunStatus.failed}
+    ),
     JobRunStatus.running: frozenset(
         {
             JobRunStatus.done,
