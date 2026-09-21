@@ -240,6 +240,24 @@ def load_demo_data_command(argv: list[str]) -> int:
     print(f"Classification: {pipeline.classification_run_id} ({status})")
     print(f"  {_counts(pipeline.classification_summary)}")
     print(f"  AI provider: {settings.resolved_ai_provider} (no network call was made)")
+
+    # Every one of these must be `done`. `execute_job_run` has one non-terminal exit —
+    # `running`, meaning another executor holds the run — and a command that printed it
+    # and then exited 0 would be inviting someone to query opportunities that were never
+    # classified. `reset-demo-data` has always checked; this walks three runs, not one.
+    unfinished = [
+        f"{name} ({run_status.value if run_status else 'unknown'})"
+        for name, run_status in (
+            ("resolution", pipeline.resolution_status),
+            ("audit", pipeline.audit_status),
+            ("classification", pipeline.classification_status),
+        )
+        if run_status is not JobRunStatus.done
+    ]
+    if unfinished:
+        print(f"Did not finish: {', '.join(unfinished)}. Check the worker logs.")
+        return 1
+
     print("Now try GET /api/v1/opportunities.")
     return 0
 

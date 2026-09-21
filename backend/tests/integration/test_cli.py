@@ -1,5 +1,8 @@
 """The operational commands: `sync-sources`, `purge-expired` and `places-smoke`."""
 
+import os
+import uuid
+from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 
 import httpx
@@ -9,15 +12,19 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app import cli
+from app.core.config import get_settings
+from app.modules.adapters import registry
 from app.modules.adapters.base import RawDoc
 from app.modules.adapters.google_places.adapter import GooglePlacesAdapter
 from app.modules.adapters.google_places.client import PLACES_BASE_URL, TEXT_SEARCH_PATH
+from app.modules.auth.models import Role
 from app.modules.businesses.models import Business
 from app.modules.discovery.models import DiscoveredRecord
 from app.modules.discovery.service import store_raw
+from app.modules.jobs.models import JobRunStatus
 from app.modules.normalization.schemas import BusinessStatus, NormalizedBusiness, WebsiteKind
 from app.modules.sources.models import Source
-from tests.conftest import places_fixture
+from tests.conftest import make_user, places_fixture
 
 SEARCH_URL = f"{PLACES_BASE_URL}{TEXT_SEARCH_PATH}"
 NOW = datetime(2026, 9, 19, 12, 0, tzinfo=UTC)
@@ -385,3 +392,67 @@ def test_recompute_businesses_says_so_when_there_is_nothing_to_do(
 ) -> None:
     assert cli.main(["recompute-businesses"]) == 0
     assert "no businesses to recompute" in capsys.readouterr().out
+
+
+@pytest.fixture
+def development() -> Iterator[None]:
+    """Run as a developer's machine would, where the demo commands are allowed.
+
+    The same dance as `test_demo_dataset.py`: the environment is restored by hand so the
+    settings cache is cleared *after* the variables are back, which `monkeypatch` does
+    not give us — a leaked `development` would switch the demo source on for every test
+    that ran afterwards.
+    """
+    previous = {name: os.environ.get(name) for name in ("APP_ENV", "ENVIRONMENT")}
+    os.environ.update({"APP_ENV": "development", "ENVIRONMENT": "development"})
+    get_settings.cache_clear()
+    registry.reload_builtins()
+    try:
+        yield
+    finally:
+        for name, value in previous.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
+        get_settings.cache_clear()
+        registry.reload_builtins()
+
+
+def test_load_demo_data_exits_non_zero_when_a_run_did_not_finish(
+    db: Session,
+    development: None,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """`execute_job_run` has one non-terminal exit; a demo command must not shrug at it.
+
+    Backing off on a run another executor already holds returns `running`, which is not
+    terminal (spec v0.9.0). `reset-demo-data` has always compared its status against
+    `done`, but `load-demo-data` walks three runs and printed their statuses without
+    reading them — so an unfinished one ended with "Now try GET /api/v1/opportunities"
+    and a green shell, over opportunities that were never classified.
+    """
+    from app.demo import loader
+
+    make_user(db, Role.admin)
+
+    def unfinished(result: loader.DemoLoadResult) -> loader.DemoPipelineResult:
+        return loader.DemoPipelineResult(
+            resolution_status=JobRunStatus.done,
+            resolution_summary={"processed": 30},
+            audit_run_id=uuid.uuid4(),
+            audit_status=JobRunStatus.done,
+            audit_summary={"audited": 30},
+            classification_run_id=uuid.uuid4(),
+            classification_status=JobRunStatus.running,
+            classification_summary={},
+        )
+
+    monkeypatch.setattr(loader, "run_pipeline", unfinished)
+
+    assert cli.main(["load-demo-data"]) == 1
+
+    printed = capsys.readouterr().out
+    assert "Did not finish: classification (running)" in printed
+    assert "Now try GET" not in printed, "nor may it invite a query over work that never ran"
