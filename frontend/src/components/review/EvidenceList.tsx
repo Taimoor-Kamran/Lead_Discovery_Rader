@@ -80,7 +80,7 @@ export function EvidenceList({ items }: { items: Evidence[] }) {
             </p>
           ) : null}
           {group.url ? (
-            <p className="mt-1 text-sm text-ink-soft">
+            <p className="print-hide mt-1 text-sm text-ink-soft">
               Source: <SafeLink href={group.url} />
             </p>
           ) : null}

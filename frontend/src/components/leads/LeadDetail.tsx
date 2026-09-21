@@ -112,7 +112,7 @@ export function LeadDetail({ opportunityId }: { opportunityId: string }) {
         <h2 className="print-only text-md font-semibold">
           {business.display_name} — {serviceLabel(lead.service)}
         </h2>
-        <dl className="grid grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">
+        <dl className="print-cols-4 grid grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">
           <div>
             <dt className="text-sm text-ink-soft">Public phone</dt>
             <dd className="font-mono text-md text-ink" title={business.phone_e164 ?? undefined}>
@@ -142,7 +142,7 @@ export function LeadDetail({ opportunityId }: { opportunityId: string }) {
         </dl>
       </Card>
 
-      <div className="print-flow grid grid-cols-1 gap-5 lg:grid-cols-2">
+      <div className="print-tight grid grid-cols-1 gap-5 lg:grid-cols-2">
         <Card className="print-break-avoid print-plain">
           <header className="flex flex-wrap items-center gap-2">
             <h2 className="text-md font-semibold text-ink">Why this is a lead</h2>
@@ -187,10 +187,10 @@ export function LeadDetail({ opportunityId }: { opportunityId: string }) {
         </Card>
       </div>
 
-      <div className="print-flow grid grid-cols-1 gap-5 lg:grid-cols-2">
+      <div className="print-tight grid grid-cols-1 gap-5 lg:grid-cols-2">
         <Card className="print-break-avoid print-plain">
           <h2 className="text-md font-semibold text-ink">Approval</h2>
-          <dl className="mt-2 grid grid-cols-[8rem_1fr] gap-y-1.5 text-base" data-testid="approval">
+          <dl className="print-dl mt-2 grid grid-cols-[8rem_1fr] gap-y-1.5 text-base" data-testid="approval">
             <dt className="text-ink-soft">Approved by</dt>
             <dd>{lead.approved_by_email ?? "unknown"}</dd>
             <dt className="text-ink-soft">Approved at</dt>

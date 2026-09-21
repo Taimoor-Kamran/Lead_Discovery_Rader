@@ -34,14 +34,18 @@ export function FindingList({ findings }: { findings: Finding[] }) {
               </span>
               <span className="text-sm text-ink-soft">{severityLabel(finding.severity)}</span>
             </p>
-            {finding.message ? <p className="mt-0.5 max-w-measure text-base text-ink-soft">{finding.message}</p> : null}
+            {finding.message ? (
+              <p className="print-terse mt-0.5 max-w-measure text-base text-ink-soft">{finding.message}</p>
+            ) : null}
             {finding.evidence_text ? (
               <blockquote className="mt-1 border-l-2 border-line pl-2 font-mono text-sm text-ink">
                 {finding.evidence_text}
               </blockquote>
             ) : null}
+            {/* On paper the URL is noise: every finding cites the same homepage, which the
+                letterhead already carries in full. */}
             {finding.evidence_url ? (
-              <p className="mt-1 text-sm text-ink-soft">
+              <p className="print-hide mt-1 text-sm text-ink-soft">
                 Evidence: <SafeLink href={finding.evidence_url} />
               </p>
             ) : null}

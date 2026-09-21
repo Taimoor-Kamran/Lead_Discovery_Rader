@@ -181,18 +181,54 @@
 @media print {
   @page {
     size: A4 portrait;
-    margin: 12mm;
+    margin: 10mm;
   }
 
   html,
   body {
     background: #fff !important;
     color: #000;
-    font-size: 10pt;
+    /* One page is the target: a rep reads this next to a phone, not at a desk. */
+    font-size: 8pt;
+    line-height: 1.3;
+  }
+
+  /* Paper is narrower than the `lg` breakpoint, so a screen-only column rule never fires
+     on it. These say what the layout is on paper: two columns side by side, and the
+     contact letterhead across four, which is what keeps the page to one sheet. */
+  .print-tight {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    align-items: start;
+    gap: 4mm !important;
+  }
+
+  .print-tight > * {
+    padding: 2.5mm !important;
+  }
+
+  .print-cols-4 {
+    display: grid !important;
+    grid-template-columns: repeat(4, 1fr) !important;
+    gap: 3mm !important;
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-size: 10pt !important;
+    margin: 0 0 1mm !important;
   }
 
   .print-hide {
     display: none !important;
+  }
+
+  /* The page is the sheet: no shell gutters, no centring width, no leftover margins. */
+  main {
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: none !important;
   }
 
   .print-only {
@@ -216,16 +252,22 @@
     max-width: none !important;
   }
 
+  /* The audit's own sentence mostly restates the finding's name; on paper the name, the
+     severity and the quote from the site are what a rep reads out. */
+  .print-terse {
+    display: none !important;
+  }
+
   .print-break-avoid {
     break-inside: avoid;
     page-break-inside: avoid;
   }
 
-  /* A URL is worth printing in full; a link that only shows its host is not. */
-  .print-url::after {
-    content: " (" attr(href) ")";
-    font-size: 8pt;
-    word-break: break-all;
+  /* A definition list in a narrow printed column: let the term take what it needs on one
+     line rather than wrapping "Approved by" over two. */
+  .print-dl {
+    grid-template-columns: max-content 1fr !important;
+    column-gap: 3mm !important;
   }
 
   a {

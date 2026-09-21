@@ -25,7 +25,7 @@ export function SafeLink({
       target="_blank"
       rel="noopener noreferrer"
       className={cx(
-        "print-url rounded font-mono text-accent underline underline-offset-2 hover:text-accent-strong",
+        "rounded font-mono text-accent underline underline-offset-2 hover:text-accent-strong",
         className,
       )}
     >
