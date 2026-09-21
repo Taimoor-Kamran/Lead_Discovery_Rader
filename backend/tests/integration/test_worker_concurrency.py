@@ -91,6 +91,7 @@ def test_psycopg_engines_are_built_with_prepared_statements_off(db: Session) -> 
     with session_scope() as app_session, scheduler_session_scope() as scheduler_session:
         for session in (app_session, scheduler_session):
             driver_connection = session.connection().connection.driver_connection
+            assert driver_connection is not None
             assert driver_connection.prepare_threshold is None
 
 

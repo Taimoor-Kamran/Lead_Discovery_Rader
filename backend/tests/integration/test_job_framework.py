@@ -14,6 +14,7 @@ from app.modules.audit.models import AuditLog
 from app.modules.auth.models import User
 from app.modules.jobs.models import JobRun, JobRunStatus
 from app.modules.jobs.service import DEMO_JOB_KIND, DISCOVERY_JOB_KIND, enqueue_run
+from app.modules.jobs.state import transition
 from app.workers import tasks
 from tests.conftest import auth_headers, geo_payload
 
@@ -315,14 +316,13 @@ def test_a_run_whose_own_bookkeeping_crashes_still_ends_failed(
     the scheduler, which skips a job whose previous run has not finished, never queued a
     CRM sync again. Now the last-resort handler records it and the run is terminal.
     """
-    real = tasks.transition
 
     def fail_on_done(session: Session, run: JobRun, target: JobRunStatus, **kwargs: Any) -> JobRun:
         if target is JobRunStatus.done:
             raise RuntimeError('prepared statement "_pg3_0" already exists')
-        return real(session, run, target, **kwargs)
+        return transition(session, run, target, **kwargs)
 
-    monkeypatch.setattr(tasks, "transition", fail_on_done)
+    monkeypatch.setattr("app.workers.tasks.transition", fail_on_done)
     run = enqueue_run(db, search_job_id=None, kind=DEMO_JOB_KIND, actor_id=sales_user.id)
 
     assert tasks.execute_job_run(run.id, sleeper=sleeper) is JobRunStatus.failed
