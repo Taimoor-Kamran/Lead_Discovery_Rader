@@ -69,7 +69,11 @@ all traced from `logs/worker.log`.
   every five minutes, and a real discovery run killed after four places. The scheduler
   now has its own `NullPool` engine, a forked child disposes the connections it
   inherited (`os.register_at_fork`, `close=False`), and prepared statements are off on
-  every engine.
+  every engine. *Verified in production:* the last `scheduler tick failed` and the last
+  `DuplicatePreparedStatement` are both 2026-09-21T21:24:02Z, 43 minutes before the
+  fixed worker started (22:07:59Z); none since, where before they landed on every
+  five-minute tick. The scheduler is live across that gap — `scheduled:crm-sync` 48 runs
+  done, `scheduled:watchdog` 36.
 - **No job run can be left `running` or `queued` with no error.** `execute_job_run`
   wrote every outcome through the session the handler had just been using, and the two
   transitions bracketing the handler sat outside the try — so a broken connection either
@@ -83,6 +87,10 @@ all traced from `logs/worker.log`.
   scheduler skips a job whose previous run has not finished, blocked that job for good —
   one `scheduled:crm-sync` run stopped every later CRM sync for a day. Those are now
   failed with "queue lost", checked against RQ rather than guessed from the clock.
+  *Verified in production:* that same run, `910e22fd-741f-45f9-bf4a-92155576e2e5`, had
+  been `queued` for 23 h 51 m; the fixed worker's watchdog failed it at
+  2026-09-21T22:08:00Z with "queue lost" (`attempts=0` — it never started), one second
+  after the worker came up, and `crm-sync` has run every minute since.
 - **A discovery run broken partway through a page is retried instead of truncated.** The
   run that stored 4 of 20 had the whole page in hand; it lost the other 16 to the crash
   and was never retried. With the failure recorded properly the attempt retries, and
