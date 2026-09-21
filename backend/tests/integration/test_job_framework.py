@@ -1,6 +1,7 @@
 """The job framework: enqueue, run, retry with backoff, cancel, idempotency."""
 
 import uuid
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -12,10 +13,19 @@ from app.core.config import get_settings
 from app.core.db import session_scope
 from app.modules.audit.models import AuditLog
 from app.modules.auth.models import User
-from app.modules.jobs.models import JobRun, JobRunStatus
-from app.modules.jobs.service import DEMO_JOB_KIND, DISCOVERY_JOB_KIND, enqueue_run
+from app.modules.jobs.models import TERMINAL_RUN_STATUSES, JobRun, JobRunStatus
+from app.modules.jobs.service import (
+    AUDIT_JOB_KIND,
+    CLASSIFICATION_JOB_KIND,
+    DEMO_JOB_KIND,
+    DISCOVERY_JOB_KIND,
+    RESOLUTION_JOB_KIND,
+    enqueue_run,
+)
 from app.modules.jobs.state import transition
 from app.workers import tasks
+from app.workers.scheduled import WORKER_LOST
+from app.workers.scheduler import JOB_WATCHDOG, SCHEDULED_KIND_PREFIX
 from tests.conftest import auth_headers, geo_payload
 
 ALWAYS_FAILS = "always-fails"
@@ -409,3 +419,101 @@ def test_a_second_executor_of_a_running_run_leaves_it_alone(
     assert stored.result_summary == {"businesses": 29}, "nor discard what the first produced"
     assert stored.error is None
     assert stored.attempts == 1, "and must not count as an attempt of its own"
+
+
+def test_a_second_executor_hands_the_run_to_the_watchdog_not_to_rq(
+    db: Session, sales_user: User, fake_redis: Any, sleeper: RecordingSleeper
+) -> None:
+    """The one non-terminal exit from `execute_job_run`, and the net under it (spec v0.9.0).
+
+    Backing off on an already-`running` run returns `running`, which is *not* terminal,
+    so RQ marks its job complete for a run this call does not own. That is only safe
+    because somebody else does own it — and if that somebody has died, the run is left
+    `running` with no RQ job behind it, which is exactly the shape `stale_runs` exists
+    to catch. Asserted here rather than reasoned about, because the alternative to the
+    watchdog picking it up is a run nobody ever finishes.
+    """
+    run = enqueue_run(db, search_job_id=None, kind=DEMO_JOB_KIND, actor_id=sales_user.id)
+    transition(db, run, JobRunStatus.running)
+    run.started_at = datetime.now(UTC) - timedelta(minutes=45)
+    db.commit()
+    run_id = run.id
+
+    status = tasks.execute_job_run(run_id, sleeper=sleeper)
+
+    assert status is JobRunStatus.running
+    assert status not in TERMINAL_RUN_STATUSES, "the one exception to 'every exit is terminal'"
+    db.expire_all()
+    stored = db.get(JobRun, run_id)
+    assert stored is not None
+    assert stored.status is JobRunStatus.running, "the backing-off executor touches nothing"
+    assert stored.error is None
+    assert stored.attempts == 1, "backing off is not an attempt of its own"
+    assert not sleeper.delays, "nor a retry"
+
+    watchdog = enqueue_run(db, search_job_id=None, kind=f"{SCHEDULED_KIND_PREFIX}{JOB_WATCHDOG}")
+    assert tasks.execute_job_run(watchdog.id) is JobRunStatus.done
+
+    db.expire_all()
+    stored = db.get(JobRun, run_id)
+    assert stored is not None
+    assert stored.status is JobRunStatus.failed, "the watchdog finishes what the back-off left"
+    assert stored.error == WORKER_LOST
+
+
+def test_the_normal_path_still_dispatches_every_link_to_a_worker(
+    client: TestClient, db: Session, sales_user: User, fake_redis: Any
+) -> None:
+    """The inverse of the double-dispatch bug: `dispatch=True` is still the default.
+
+    `dispatch=False` now threads through `enqueue_run`, `follow_up` and
+    `execute_job_run`, so every call site carries a dispatch decision. A missed one, or a
+    default flipped the wrong way, makes a run that is created and never executed —
+    silent, where `running -> running` was loud, and invisible until the watchdog fails
+    it half an hour later. So this walks the real path end to end: the API hands the
+    discovery run to RQ, a worker takes it off, and each `follow_up` link puts the next
+    run on the queue for that same worker to find.
+
+    `SimpleWorker` is the real `rq` worker minus the fork — it deserializes the queued
+    job and calls `execute_job_run` itself, so the dispatch being asserted is RQ's, not
+    a stand-in for it. Burst mode keeps draining while the chain adds to the queue.
+    """
+    from rq import SimpleWorker
+
+    from app.core.redis import get_queue
+
+    chain = [DISCOVERY_JOB_KIND, RESOLUTION_JOB_KIND, AUDIT_JOB_KIND, CLASSIFICATION_JOB_KIND]
+    worked: list[str] = []
+
+    def record_it(session: Session, run: JobRun) -> None:
+        worked.append(run.kind)
+        tasks.checkpoint(session, run, done=run.progress_total or 0)
+
+    replaced = {kind: tasks.unregister_handler(kind) for kind in chain}
+    for kind in chain:
+        tasks.register_handler(kind, record_it)
+    try:
+        job_id = make_search_job(client, sales_user)
+        response = client.post(
+            f"/api/v1/search-jobs/{job_id}/run", headers=auth_headers(client, sales_user)
+        )
+        assert response.status_code == 202
+        run_id = response.json()["id"]
+
+        queue = get_queue()
+        assert queue.get_job_ids() == [run_id], "the API must hand the run to RQ, not run it here"
+
+        SimpleWorker([queue], connection=fake_redis).work(burst=True)
+    finally:
+        for kind, previous in replaced.items():
+            tasks.unregister_handler(kind)
+            if previous is not None:
+                tasks.register_handler(kind, previous)
+
+    assert worked == chain, "every link must reach the worker through the queue"
+    db.expire_all()
+    statuses = {
+        row.kind: row.status for row in db.scalars(select(JobRun).where(JobRun.kind.in_(chain)))
+    }
+    assert statuses == dict.fromkeys(chain, JobRunStatus.done)
+    assert queue.get_job_ids() == [], "and the chain ends with nothing left waiting"
