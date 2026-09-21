@@ -2,6 +2,7 @@ import { AiLabel } from "@/components/AiLabel";
 import { Card, Disclosure } from "@/components/ui";
 import type { AISummary } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
+import { industryLabel } from "@/lib/labels";
 
 /**
  * The model's summary — labelled, muted and last in the argument, because it is the only
@@ -26,8 +27,8 @@ export function AiSummaryBox({ ai }: { ai: AISummary | null | undefined }) {
       </p>
       <dl className="mt-3 grid grid-cols-[9rem_1fr] gap-y-1 text-sm text-ink-soft">
         <dt>Industry (AI)</dt>
-        <dd>
-          {ai.industry ?? "unknown"}
+        <dd title={ai.industry ?? undefined}>
+          {industryLabel(ai.industry)}
           {ai.industry_matches_listing === false ? " — does not match the listing" : ""}
         </dd>
         <dt>Buying intent</dt>

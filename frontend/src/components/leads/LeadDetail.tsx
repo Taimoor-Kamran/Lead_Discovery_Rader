@@ -14,7 +14,7 @@ import { ApiError, getLeadDetail, retryCrmLead, type LeadDetail as LeadDetailDat
 import { useAuth } from "@/lib/auth";
 import { loadFailed } from "@/lib/errors";
 import { CRM_ACTION_LABELS, formatDateTime, formatPhone, orUnknown, percent, place, score } from "@/lib/format";
-import { auditStatusLabel, serviceLabel, sourceLabel } from "@/lib/labels";
+import { auditStatusLabel, industryLabel, serviceLabel, sourceLabel } from "@/lib/labels";
 import { canManageCrm } from "@/lib/roles";
 
 export const NOT_YOURS_MESSAGE = "This lead is not assigned to you.";
@@ -127,7 +127,9 @@ export function LeadDetail({ opportunityId }: { opportunityId: string }) {
           </div>
           <div>
             <dt className="text-sm text-ink-soft">Industry</dt>
-            <dd className="text-md">{orUnknown(business.industry)}</dd>
+            <dd className="text-md" title={business.industry ?? undefined}>
+              {industryLabel(business.industry)}
+            </dd>
           </div>
           <div>
             <dt className="text-sm text-ink-soft">Address</dt>

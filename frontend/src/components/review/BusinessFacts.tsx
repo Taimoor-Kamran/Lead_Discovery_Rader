@@ -4,6 +4,22 @@ import { SafeLink } from "@/components/SafeLink";
 import { Card, Disclosure, Table, TBody, Td, Th, THead, Tr } from "@/components/ui";
 import type { ReviewDetail } from "@/lib/api";
 import { formatDateTime, formatPhone, orUnknown, place } from "@/lib/format";
+import { businessStatusLabel, industryLabel, websiteKindLabel } from "@/lib/labels";
+
+/**
+ * A code the API speaks, read in plain words, with the code itself one hover away so a
+ * reviewer can still match what they see to the API. Nothing is guessed: a missing code
+ * reads "unknown" and carries no tooltip.
+ */
+function Coded({
+  code,
+  label,
+}: {
+  code: string | null | undefined;
+  label: (code: string | null | undefined) => string;
+}) {
+  return <span title={code ?? undefined}>{label(code)}</span>;
+}
 
 /**
  * Who the business is, as survivorship settled it, with the provenance one click away.
@@ -20,12 +36,18 @@ export function BusinessFacts({ detail }: { detail: ReviewDetail }) {
       </span>,
     ],
     ["Website", business.website ? <SafeLink href={business.website}>{business.website}</SafeLink> : "none"],
-    ["Industry", orUnknown(business.industry)],
+    ["Industry", <Coded key="industry" code={business.industry} label={industryLabel} />],
     ["Location", place(business.city, business.state)],
     ["Address", orUnknown(business.address_line1)],
     ["Postal code", orUnknown(business.postal_code)],
-    ["Website kind", business.website_kind],
-    ["Status", business.business_status],
+    [
+      "Website kind",
+      <Coded key="website_kind" code={business.website_kind} label={websiteKindLabel} />,
+    ],
+    [
+      "Status",
+      <Coded key="business_status" code={business.business_status} label={businessStatusLabel} />,
+    ],
   ];
 
   return (
@@ -39,7 +61,7 @@ export function BusinessFacts({ detail }: { detail: ReviewDetail }) {
           {detail.suppressions[0]?.reason ? ` (${detail.suppressions[0].reason})` : ""}.
         </p>
       ) : null}
-      <dl className="grid grid-cols-[8rem_1fr] gap-x-4 gap-y-1.5 text-base">
+      <dl className="grid grid-cols-[8rem_1fr] gap-x-4 gap-y-1.5 text-base" data-testid="business-facts">
         {rows.map(([label, value]) => (
           <div key={label} className="contents">
             <dt className="text-ink-soft">{label}</dt>

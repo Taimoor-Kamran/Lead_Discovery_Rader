@@ -17,7 +17,7 @@ import {
 } from "@/components/ui";
 import type { QueueItem } from "@/lib/api";
 import { formatDateTime, percent, place, score } from "@/lib/format";
-import { auditStatusLabel, findingLabel, serviceLabel } from "@/lib/labels";
+import { auditStatusLabel, findingLabel, industryLabel, serviceLabel } from "@/lib/labels";
 
 type Props = {
   items: QueueItem[];
@@ -115,7 +115,9 @@ export function QueueTable({
                     </div>
                   ) : null}
                 </Td>
-                <Td className="text-ink-soft">{item.industry ?? "unknown"}</Td>
+                <Td className="text-ink-soft" title={item.industry ?? undefined}>
+                  {industryLabel(item.industry)}
+                </Td>
                 <Td>
                   <ul className="flex flex-wrap gap-1">
                     {item.opportunities.map((opportunity) => (
