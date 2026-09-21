@@ -42,7 +42,14 @@ Format: `## [vX.Y.Z] - YYYY-MM-DD` followed by Added / Changed / Fixed.
 - Every screen was refitted: denser tables with the score as the rightmost column in
   tabular figures, skeletons instead of "Loading…", empty states that name the next
   action, and errors that state a cause and a fix ("Couldn't reach the API. Check that
-  the api container is running (`make prod-ps`).").
+  the api container is running (`make ps`)."). That fix names the stack the build belongs
+  to — `make ps` in a development build, `make prod-ps` in a production one — from the new
+  `NEXT_PUBLIC_ENVIRONMENT` build arg, which compose fills from `ENVIRONMENT`.
+- **Codes are read, not shown.** Industry, website kind and business status join services,
+  findings and severities in `lib/labels.ts`: the facts panel says *Plumbing*, *Own
+  website* and *Open* where it used to print `plumbing`, `own_site` and `operational`,
+  with the raw code kept in the element's tooltip. The field-provenance table still shows
+  stored values verbatim, because that table is about the values themselves.
 - Sentence case throughout: no tracked-out all-caps labels, no eyebrows above headings,
   and no `·`-joined meta strings — the health metrics read as sentences now.
 - `prefers-reduced-motion: reduce` switches off every transition and animation.

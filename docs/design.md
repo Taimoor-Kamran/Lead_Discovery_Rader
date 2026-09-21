@@ -223,7 +223,17 @@ guesses. Reviewers are the only people who see both words.
   - My leads: *"No leads yet. A reviewer assigns leads to you."*
   - CRM: *"Nothing waiting. Approved leads appear here 30 minutes after approval."*
 - Errors state the cause **and** the fix, e.g. *"Couldn't reach the API. Check that the api
-  container is running (`make prod-ps`)."*
+  container is running (`make ps`)."* The command names the stack the build belongs to — a
+  development build says `make ps`, a production build says `make prod-ps` — because a fix that
+  names the wrong stack is worse than no fix at all. `lib/errors.ts` reads
+  `NEXT_PUBLIC_ENVIRONMENT`, which compose fills from the project's `ENVIRONMENT` as a build
+  arg. **Not** `NODE_ENV`: both stacks run the same production Next image, so it reads
+  "production" after a plain `make up` too.
+- **Codes are read, not shown.** Anything the API speaks as a code — industry, website kind,
+  business status, service, finding, severity — is rendered through `lib/labels.ts` (`plumbing` →
+  *Plumbing*, `own_site` → *Own website*, `operational` → *Open*), with the raw code kept in the
+  element's `title` so a reviewer can still match the screen to the API. The exception is the
+  field-provenance table, which is *about* the stored values and so shows them verbatim.
 
 ## What was rejected, and why
 
