@@ -57,7 +57,7 @@ Format: `## [vX.Y.Z] - YYYY-MM-DD` followed by Added / Changed / Fixed.
 
 ### Fixed
 
-Six bugs from the first real production run and the `make e2e` smoke that followed,
+Seven bugs from the first real production run and the `make e2e` smoke that followed,
 all traced from `logs/worker.log`.
 
 - **The scheduler thread no longer shares a database connection with job execution.**
@@ -107,6 +107,12 @@ all traced from `logs/worker.log`.
   redelivers a job when a worker dies, and judging an abandoned run is the watchdog's job.
   `running → running` remains forbidden in the state machine — it caught a real
   double-execution, and permitting it would only hide the next one.
+- **`make load-demo-data` exits non-zero when one of its runs did not finish.** Backing
+  off on an already-`running` run is the one non-terminal exit from `execute_job_run`,
+  and the command printed all three of its run statuses without reading any of them — so
+  an unfinished run still ended with "Now try GET /api/v1/opportunities" and a green
+  shell, over opportunities that were never classified. It now names what did not finish
+  and returns 1, as `reset-demo-data` always has.
 
 ## [v0.8.0] - 2026-09-20
 
