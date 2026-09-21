@@ -57,7 +57,8 @@ Format: `## [vX.Y.Z] - YYYY-MM-DD` followed by Added / Changed / Fixed.
 
 ### Fixed
 
-Five bugs from the first real production run, all traced from `logs/worker.log`.
+Six bugs from the first real production run and the `make e2e` smoke that followed,
+all traced from `logs/worker.log`.
 
 - **The scheduler thread no longer shares a database connection with job execution.**
   The worker runs the scheduler in a daemon thread *and* forks a work horse for every
@@ -92,7 +93,20 @@ Five bugs from the first real production run, all traced from `logs/worker.log`.
   `uq_opportunities_pending_business_service`, aborted the transaction and threw the
   business away ("classifying one business failed"). Each new row now goes in inside its
   own savepoint; a conflict on that index means somebody opened the row first, so it is
-  taken over and updated. Any other integrity error is still raised.
+  taken over and updated. Any other integrity error is still raised. (The "anybody else"
+  turned out to be the sixth bug below, not the connection bug above.)
+- **A job run now has exactly one executor.** `reset-demo-data` and `load-demo-data`
+  queued their runs to RQ *and* executed them in the CLI process, so the worker claimed
+  the same rows. The second claimant raised `A job run cannot go from 'running' to
+  'running'` and then wrote `failed`, with an empty `result_summary`, over work the first
+  had already committed — which broke `make e2e` at its first step, and which is what was
+  really creating the duplicate opportunities above. `enqueue_run` now takes
+  `dispatch=False` for a caller that will execute the run itself, and `follow_up` carries
+  that decision down the discovery → resolution → audit → classification chain. Separately,
+  an attempt that finds a run already `running` backs off instead of raising: RQ
+  redelivers a job when a worker dies, and judging an abandoned run is the watchdog's job.
+  `running → running` remains forbidden in the state machine — it caught a real
+  double-execution, and permitting it would only hide the next one.
 
 ## [v0.8.0] - 2026-09-20
 
