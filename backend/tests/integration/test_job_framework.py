@@ -367,3 +367,45 @@ def test_the_running_transition_survives_a_later_rollback(
     stored = db.get(JobRun, run.id)
     assert stored is not None and stored.status is JobRunStatus.failed
     assert stored.started_at is not None
+
+
+def test_a_second_executor_of_a_running_run_leaves_it_alone(
+    db: Session, sales_user: User, sleeper: RecordingSleeper
+) -> None:
+    """A run has one executor; the one that arrives second must not touch it (spec v0.9.0).
+
+    RQ redelivers a job when a worker dies, and `reset-demo-data` used to queue a run and
+    also execute it — so two executors claimed the same row. The second one raised
+    `A job run cannot go from 'running' to 'running'`, and the last-resort handler then
+    wrote `failed`, with an empty `result_summary`, over work the first had already
+    committed. That is the shape reproduced here: the second call runs while the first
+    is mid-handler, in a session of its own, which is all a separate worker process is
+    from the row's point of view.
+
+    Adjudicating a run left `running` by a dead worker is the watchdog's job — it has the
+    stale-run limit to judge it by, and an attempt that has just walked in does not.
+    """
+    kind = "claimed-twice"
+    second: dict[str, JobRunStatus] = {}
+
+    def claim_it_again_midway(session: Session, run: JobRun) -> None:
+        run.progress_total = 1
+        second["status"] = tasks.execute_job_run(run.id, sleeper=sleeper)
+        run.result_summary = {"businesses": 29}
+        tasks.checkpoint(session, run, done=1)
+
+    tasks.register_handler(kind, claim_it_again_midway)
+    try:
+        run = enqueue_run(db, search_job_id=None, kind=kind, actor_id=sales_user.id)
+        assert tasks.execute_job_run(run.id, sleeper=sleeper) is JobRunStatus.done
+    finally:
+        tasks.unregister_handler(kind)
+
+    assert second["status"] is JobRunStatus.running, "the second executor backs off"
+    db.expire_all()
+    stored = db.get(JobRun, run.id)
+    assert stored is not None
+    assert stored.status is JobRunStatus.done, "the second executor must not fail the run"
+    assert stored.result_summary == {"businesses": 29}, "nor discard what the first produced"
+    assert stored.error is None
+    assert stored.attempts == 1, "and must not count as an attempt of its own"

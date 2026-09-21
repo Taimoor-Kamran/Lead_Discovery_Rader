@@ -61,6 +61,7 @@ def enqueue_resolution(
     *,
     actor_id: uuid.UUID | None = None,
     idempotency_key: str | None = None,
+    dispatch: bool = True,
 ) -> JobRun:
     """Queue a resolution run for one discovery run.
 
@@ -81,6 +82,7 @@ def enqueue_resolution(
         kind=RESOLUTION_JOB_KIND,
         actor_id=actor_id,
         idempotency_key=idempotency_key,
+        dispatch=dispatch,
         params={"parent_run_id": str(parent.id)},
     )
 

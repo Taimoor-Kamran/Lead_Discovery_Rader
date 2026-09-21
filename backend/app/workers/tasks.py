@@ -107,28 +107,38 @@ for _kind, _handler in _SCHEDULED_HANDLERS.items():
     register_handler(_kind, _handler)
 
 
-def follow_up(session: Session, run: JobRun) -> None:
+def follow_up(session: Session, run: JobRun, *, dispatch: bool = True) -> None:
     """Queue whatever a finished run implies: discovery → resolution → audit → classification.
 
     Each key is derived from the run that triggered it, so a retried or re-requested run
     never leaves a second follow-up behind.
+
+    `dispatch=False` creates the next run without putting it on the queue, for a caller
+    walking the pipeline itself (`make load-demo-data`). The rule it serves is the one
+    below: one run, one executor.
     """
     if run.kind == DISCOVERY_JOB_KIND:
         from app.modules.resolution.service import enqueue_resolution
 
-        enqueue_resolution(session, run.id, idempotency_key=f"resolution:{run.id}")
+        enqueue_resolution(
+            session, run.id, idempotency_key=f"resolution:{run.id}", dispatch=dispatch
+        )
         return
 
     if run.kind == RESOLUTION_JOB_KIND:
         from app.modules.audit_web.service import enqueue_audits_for_run
 
-        enqueue_audits_for_run(session, run.id, idempotency_key=f"audit:{run.id}")
+        enqueue_audits_for_run(
+            session, run.id, idempotency_key=f"audit:{run.id}", dispatch=dispatch
+        )
         return
 
     if run.kind == AUDIT_JOB_KIND:
         from app.modules.opportunities.service import enqueue_classification_for_run
 
-        enqueue_classification_for_run(session, run.id, idempotency_key=f"classification:{run.id}")
+        enqueue_classification_for_run(
+            session, run.id, idempotency_key=f"classification:{run.id}", dispatch=dispatch
+        )
 
 
 class _HandlerFailedError(Exception):
@@ -172,7 +182,9 @@ def _decide(
     return None, delay
 
 
-def _one_attempt(run_id: uuid.UUID) -> tuple[JobRunStatus | None, int]:
+def _one_attempt(
+    run_id: uuid.UUID, *, dispatch_follow_up: bool = True
+) -> tuple[JobRunStatus | None, int]:
     """Run the job once. Returns its terminal status, or `None` and the seconds until a retry.
 
     Raises `_HandlerFailedError` only when this session could not record the outcome
@@ -183,6 +195,19 @@ def _one_attempt(run_id: uuid.UUID) -> tuple[JobRunStatus | None, int]:
     with session_scope() as session:
         run = get_job_run(session, run_id)
         if run.is_terminal:
+            return run.status, 0
+        if run.status is JobRunStatus.running:
+            # Somebody else is already running this. RQ redelivers a job when a worker
+            # dies, and `make load-demo-data` used to queue a run *and* execute it, so
+            # two executors claimed the same row: one of them then wrote `failed` over
+            # work the other had already committed. Whoever arrives second backs off
+            # here. Adjudicating a run left `running` by a dead worker belongs to the
+            # watchdog, which has the stale-run limit to judge it by; an attempt that
+            # has just found it cannot tell a dead worker from a live one.
+            logger.warning(
+                "job run is already running; leaving it to the executor that claimed it",
+                extra={"job_run_id": str(run.id), "kind": run.kind},
+            )
             return run.status, 0
         if run.cancel_requested and run.status is JobRunStatus.queued:
             transition(session, run, JobRunStatus.cancelled)
@@ -213,7 +238,7 @@ def _one_attempt(run_id: uuid.UUID) -> tuple[JobRunStatus | None, int]:
                 raise failure from exc
 
         transition(session, run, JobRunStatus.done)
-        follow_up(session, run)
+        follow_up(session, run, dispatch=dispatch_follow_up)
         logger.info("job run done", extra={"job_run_id": str(run.id)})
         return JobRunStatus.done, 0
 
@@ -258,21 +283,27 @@ def _fail_run(run_id: uuid.UUID, exc: BaseException) -> JobRunStatus:
 
 
 def execute_job_run(
-    job_run_id: str | uuid.UUID, *, sleeper: Callable[[float], None] = time.sleep
+    job_run_id: str | uuid.UUID,
+    *,
+    sleeper: Callable[[float], None] = time.sleep,
+    dispatch_follow_up: bool = True,
 ) -> JobRunStatus:
     """Run one job run to a terminal status, retrying failures with exponential backoff.
 
-    Every exit from this function is terminal: `done`, `cancelled` or `failed`. Anything
-    that escapes an attempt is written to the run by `_fail_run` rather than being
-    allowed to leave it `running`.
+    Every exit is terminal — `done`, `cancelled` or `failed` — with one exception:
+    `running`, meaning another executor holds this run and this call did nothing. Anything
+    that escapes an attempt is written to the run by `_fail_run` rather than being allowed
+    to leave it `running`.
 
     `sleeper` is injectable so tests can assert the backoff schedule without waiting.
+    `dispatch_follow_up=False` keeps the next run in the chain off the queue, for a caller
+    that is walking the pipeline itself.
     """
     run_id = uuid.UUID(str(job_run_id))
 
     while True:
         try:
-            status, delay = _one_attempt(run_id)
+            status, delay = _one_attempt(run_id, dispatch_follow_up=dispatch_follow_up)
         except _HandlerFailedError as failure:
             try:
                 status, delay = _record_failure(run_id, failure)

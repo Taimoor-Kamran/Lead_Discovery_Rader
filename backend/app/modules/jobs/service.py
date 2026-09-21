@@ -383,11 +383,18 @@ def enqueue_run(
     idempotency_key: str | None = None,
     progress_total: int = 0,
     params: dict[str, Any] | None = None,
+    dispatch: bool = True,
 ) -> JobRun:
     """Create a `queued` job run and hand it to RQ.
 
     An `idempotency_key` that has been used before returns the original run instead of
     creating a second one.
+
+    `dispatch=False` creates the run but does **not** put it on the queue, for a caller
+    that is going to execute it itself (the demo commands). A run must have exactly one
+    executor: queue it *and* run it and two processes race over the same row, which is
+    what broke `make e2e` and what produced the duplicate-opportunity errors in
+    `logs/worker.log` (spec v0.9.0).
     """
     if idempotency_key:
         existing = session.scalars(
@@ -433,6 +440,13 @@ def enqueue_run(
         },
     )
     session.commit()
+
+    if not dispatch:
+        logger.info(
+            "job run created for its caller to execute",
+            extra={"job_run_id": str(run.id), "kind": kind},
+        )
+        return run
 
     # Import here: the worker entrypoint imports this module, so a module-level import
     # would be circular.

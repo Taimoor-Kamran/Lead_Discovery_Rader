@@ -341,6 +341,7 @@ def enqueue_audits_for_run(
     *,
     actor_id: uuid.UUID | None = None,
     idempotency_key: str | None = None,
+    dispatch: bool = True,
 ) -> JobRunType:
     """Queue an audit run for the businesses one resolution run touched.
 
@@ -361,6 +362,7 @@ def enqueue_audits_for_run(
         kind=AUDIT_JOB_KIND,
         actor_id=actor_id,
         idempotency_key=idempotency_key,
+        dispatch=dispatch,
         params={"parent_run_id": str(parent.id)},
     )
 
