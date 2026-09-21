@@ -25,7 +25,7 @@ endif
         reset-password crm-check crm-bootstrap-airtable \
         prod-up prod-down prod-logs prod-ps backup restore backup-verify audit \
         lint format typecheck test test-unit check check-backend check-frontend \
-        frontend-install frontend-lint frontend-typecheck frontend-test \
+        frontend-install frontend-lint frontend-typecheck frontend-test screenshots \
         api-types api-types-check e2e clean FORCE
 
 help: ## Show this help
@@ -240,3 +240,10 @@ clean: ## Remove caches and build output
 	rm -rf $(BACKEND)/.pytest_cache $(BACKEND)/.mypy_cache $(BACKEND)/.ruff_cache
 	rm -rf $(FRONTEND)/.next
 	find $(BACKEND) -name '__pycache__' -type d -prune -exec rm -rf {} +
+
+# Needs the demo stack up with demo data. Signs in as ADMIN_EMAIL and writes one PNG per
+# screen at 1280 px (spec v0.9.0's before/after review); see docs/design.md.
+screenshots: env ## Screenshot every screen at 1280 px: make screenshots OUT=docs/design/after
+	@if [ -z "$(OUT)" ]; then echo "usage: make screenshots OUT=docs/design/after"; exit 2; fi
+	$(PNPM) exec playwright install chromium
+	@cd $(FRONTEND) && set -a && . ../.env && set +a && node scripts/screenshots.mjs $(abspath $(OUT))
