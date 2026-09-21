@@ -265,7 +265,10 @@ export function BusinessReview({ businessId }: { businessId: string }) {
       />
 
       {/* Two columns, not three panels: the case on the left, the decision on the right. */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.55fr)_minmax(21rem,1fr)]">
+      <div
+        data-testid="review-columns"
+        className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.55fr)_minmax(21rem,1fr)]"
+      >
         <div className="order-2 flex min-w-0 flex-col gap-5 lg:order-1">
           <BusinessFacts detail={detail} />
           <AuditPanel detail={detail} />

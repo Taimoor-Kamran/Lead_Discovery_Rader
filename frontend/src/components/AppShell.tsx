@@ -54,15 +54,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </nav>
           {user ? (
             <div className="ml-auto flex items-center gap-3">
+              {/* The email and the role are text, not a link: a link would take their words
+                  into its accessible name and collide with the navigation above. */}
+              <span className="text-right leading-tight" data-testid="whoami">
+                <span className="block text-sm text-on-ink">{user.email}</span>
+                <span className="block text-xs text-on-ink-soft">{ROLE_LABELS[user.role]}</span>
+              </span>
               <Link
                 href="/profile"
                 data-testid="profile-link"
-                className="rounded text-right leading-tight hover:underline"
+                className="rounded text-sm text-on-ink-soft underline underline-offset-2 hover:text-on-ink"
               >
-                <span className="block text-sm text-on-ink" data-testid="whoami">
-                  {user.email}
-                  <span className="block text-xs font-normal text-on-ink-soft">{ROLE_LABELS[user.role]}</span>
-                </span>
+                Profile
               </Link>
               <Button size="sm" onClick={onSignOut}>
                 Sign out

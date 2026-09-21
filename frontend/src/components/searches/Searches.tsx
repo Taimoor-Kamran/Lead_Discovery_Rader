@@ -12,6 +12,7 @@ import {
   Input,
   PageHeader,
   Select,
+  SkeletonTableRows,
   Table,
   TableWrap,
   TBody,
@@ -56,6 +57,7 @@ export function Searches() {
   const [sources, setSources] = useState<SourceRead[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [name, setName] = useState("");
   const [industry, setIndustry] = useState("");
   const [mode, setMode] = useState<GeoMode>("place");
@@ -73,6 +75,8 @@ export function Searches() {
       setError(null);
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : loadFailed("the searches"));
+    } finally {
+      setLoading(false);
     }
   }, []);
 
@@ -316,6 +320,7 @@ export function Searches() {
             </tr>
           </THead>
           <TBody>
+            {loading && !items.length ? <SkeletonTableRows rows={3} columns={6} /> : null}
             {items.length ? (
               items.map((item) => (
                 <Tr key={item.id} data-testid="search-row">
@@ -353,7 +358,7 @@ export function Searches() {
                   </Td>
                 </Tr>
               ))
-            ) : (
+            ) : loading ? null : (
               <tr>
                 <td colSpan={6}>
                   <EmptyState

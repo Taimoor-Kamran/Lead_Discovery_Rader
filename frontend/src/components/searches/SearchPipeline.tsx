@@ -3,7 +3,16 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { ErrorNote } from "@/components/ErrorNote";
-import { Badge, type BadgeTone, Button, buttonClass, Card, PageHeader, useToast } from "@/components/ui";
+import {
+  Badge,
+  type BadgeTone,
+  Button,
+  buttonClass,
+  Card,
+  PageHeader,
+  SkeletonLines,
+  useToast,
+} from "@/components/ui";
 import { EstimatePanel } from "@/components/searches/EstimatePanel";
 import { confirmRerun, ranRecently } from "@/components/searches/rerun";
 import { describeGeo } from "@/components/searches/Searches";
@@ -136,6 +145,15 @@ export function SearchPipeline({ searchJobId }: { searchJobId: string }) {
       {mayRun ? <EstimatePanel estimate={estimate} /> : null}
 
       <ol className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4" aria-label="Pipeline">
+        {!pipeline
+          ? [0, 1, 2, 3].map((placeholder) => (
+              <li key={placeholder}>
+                <Card className="h-full">
+                  <SkeletonLines lines={3} />
+                </Card>
+              </li>
+            ))
+          : null}
         {(pipeline?.stages ?? []).map((stage) => (
           <li key={stage.stage} data-testid={`stage-${stage.stage}`}>
             <Card className="h-full">

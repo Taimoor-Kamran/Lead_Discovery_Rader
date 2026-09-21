@@ -41,9 +41,13 @@ colour, a raw font size or a raw radius.
 |---|---|---|
 | `--ink` | `#101826` | primary text, top bar |
 | `--ink-soft` | `#475467` | secondary text, labels, table headers |
+| `--ink-raised` | `#1C2534` | the active navigation item on the top bar |
+| `--on-ink-soft` | `#C8CDD6` | the role under the account email, idle nav items |
 | `--paper` | `#FBFAF8` | app background |
 | `--surface` | `#FFFFFF` | cards, table rows, inputs |
+| `--surface-sunken` | `#F4F3F1` | table headers, hovered rows, quiet panels |
 | `--line` | `#E4E7EC` | borders, rules, dividers |
+| `--scrim` | `rgb(16 24 38 / 0.4)` | behind a modal dialog; the one translucent value |
 | `--accent` | `#0F766E` | primary actions, active nav, focus ring, links |
 | `--accent-strong` | `#0B5C55` | hover/active of a primary action |
 | `--accent-tint` | `#E9F3F2` | the one accent-tinted surface (selected row) |
@@ -63,27 +67,34 @@ luminance formula. `frontend/src/lib/contrast.ts` implements the formula and
 `frontend/src/lib/contrast.test.ts` asserts every row, so a later token change cannot silently
 drop below the floor. Floor: **4.5:1** for body text, **3:1** for text ≥ 21 px.
 
-| Foreground | Background | Ratio | Floor | Pass |
-|---|---|---|---|---|
-| `--ink` | `--paper` | 17.05 | 4.5 | ✅ |
-| `--ink` | `--surface` | 17.79 | 4.5 | ✅ |
-| `--ink-soft` | `--paper` | 7.37 | 4.5 | ✅ |
-| `--ink-soft` | `--surface` | 7.69 | 4.5 | ✅ |
-| `--accent` | `--surface` | 5.47 | 4.5 | ✅ |
-| `--accent` | `--paper` | 5.25 | 4.5 | ✅ |
-| `--surface` | `--accent` | 5.47 | 4.5 | ✅ |
-| `--surface` | `--accent-strong` | 7.85 | 4.5 | ✅ |
-| `--surface` | `--ink` | 17.79 | 4.5 | ✅ |
-| `--ink` | `--accent-tint` | 15.16 | 4.5 | ✅ |
-| `--warn` | `--surface` | 5.43 | 4.5 | ✅ |
-| `--warn` | `--warn-tint` | 4.86 | 4.5 | ✅ |
-| `--ink` | `--warn-tint` | 15.94 | 4.5 | ✅ |
-| `--risk` | `--surface` | 6.57 | 4.5 | ✅ |
-| `--risk` | `--risk-tint` | 5.92 | 4.5 | ✅ |
-| `--ink` | `--risk-tint` | 16.03 | 4.5 | ✅ |
-| `--ok` | `--surface` | 5.41 | 4.5 | ✅ |
-| `--ok` | `--ok-tint` | 4.89 | 4.5 | ✅ |
-| `--ink` | `--ok-tint` | 16.08 | 4.5 | ✅ |
+| Foreground | Background | Ratio | Floor | Pass | Where |
+|---|---|---|---|---|---|
+| `--ink` | `--paper` | 17.05 | 4.5 | ✅ | body text on the app background |
+| `--ink` | `--surface` | 17.79 | 4.5 | ✅ | body text on a card or a table row |
+| `--ink` | `--surface-sunken` | 16.04 | 4.5 | ✅ | text on a table header or a sunken panel |
+| `--ink-soft` | `--paper` | 7.37 | 4.5 | ✅ | secondary text on the app background |
+| `--ink-soft` | `--surface` | 7.69 | 4.5 | ✅ | labels and meta on a card |
+| `--ink-soft` | `--surface-sunken` | 6.93 | 4.5 | ✅ | table header labels |
+| `--accent` | `--surface` | 5.47 | 4.5 | ✅ | links and ghost actions on a card |
+| `--accent` | `--paper` | 5.25 | 4.5 | ✅ | links on the app background |
+| `--accent` | `--surface-sunken` | 4.94 | 4.5 | ✅ | a link inside a sunken panel |
+| `--accent` | `--accent-tint` | 4.84 | 4.5 | ✅ | an accent badge |
+| `--surface` | `--accent` | 5.47 | 4.5 | ✅ | the label of a primary button |
+| `--surface` | `--accent-strong` | 7.85 | 4.5 | ✅ | a primary button, hovered |
+| `--surface` | `--ink` | 17.79 | 4.5 | ✅ | the top bar and the skip link |
+| `--surface` | `--ink-raised` | 15.40 | 4.5 | ✅ | the active navigation item |
+| `--on-ink-soft` | `--ink` | 11.15 | 4.5 | ✅ | the role under the account email |
+| `--on-ink-soft` | `--ink-raised` | 9.65 | 4.5 | ✅ | a hovered navigation item |
+| `--ink` | `--accent-tint` | 15.73 | 4.5 | ✅ | a selected table row |
+| `--warn` | `--surface` | 5.43 | 4.5 | ✅ | a medium-severity word on a card |
+| `--warn` | `--warn-tint` | 4.86 | 4.5 | ✅ | a warning badge or banner |
+| `--ink` | `--warn-tint` | 15.94 | 4.5 | ✅ | the message of a warning banner |
+| `--risk` | `--surface` | 6.57 | 4.5 | ✅ | an error message or a danger button |
+| `--risk` | `--risk-tint` | 5.92 | 4.5 | ✅ | a risk badge or an error banner |
+| `--ink` | `--risk-tint` | 16.03 | 4.5 | ✅ | the message of an error banner |
+| `--ok` | `--surface` | 5.41 | 4.5 | ✅ | a success word on a card |
+| `--ok` | `--ok-tint` | 4.89 | 4.5 | ✅ | a success badge |
+| `--ink` | `--ok-tint` | 16.08 | 4.5 | ✅ | the message of a success toast |
 
 `--line` is never a text colour; it only draws 1 px rules, so it is not in the table.
 
@@ -148,6 +159,7 @@ One implementation each, in `frontend/src/components/ui/`, each with a test in t
 | `Tabs` | roving focus, arrow keys, `aria-selected`, `role="tablist"` |
 | `Disclosure` | `aria-expanded`, `aria-controls`, animates only opacity |
 | `Tooltip` | hover **and** focus, Esc dismisses, `aria-describedby`; never the only place a fact lives |
+| `buttonClass()` | the same look for a `next/link` that navigates rather than acts |
 | `Skeleton` | fixed-height blocks matching the real content, so nothing shifts when data lands |
 | `EmptyState` | heading, one sentence, and the next action as a link or button |
 | `PageHeader` | `h1`, one sentence of description, and an actions slot |
@@ -247,10 +259,19 @@ No page ever scrolls horizontally: a table that does not fit scrolls inside its 
 - Landmarks: one `<header>`, one `<nav aria-label="Main">`, one `<main id="main">`, and exactly
   one `<h1>` per page; headings never skip a level.
 - `axe-core` runs over login, review queue, review detail, leads, lead detail, CRM, searches
-  and health in `frontend/src/test/axe.test.tsx`; **zero** serious or critical violations.
+  and health in `frontend/src/test/axe.test.tsx`; **zero** serious or critical violations. Two
+  tests there prove the harness catches a real violation, so a green run means something.
+  Colour contrast is not judged by axe — jsdom computes no colours — but by the table above.
 - Colour never carries meaning alone; every severity and status also carries its word.
 
 ## Screenshots
 
 `docs/design/before/` and `docs/design/after/`, one PNG per screen at 1280 px, captured with
-`frontend/scripts/screenshots.mjs` (`make screenshots OUT=…`) against the demo stack.
+`frontend/scripts/screenshots.mjs` (`make screenshots OUT=…`) against the demo stack. Thirteen
+files for twelve screens: `/searches` and `/searches/{id}` are one line in the spec but two
+screens.
+
+The three criteria a screenshot cannot show were measured against the running stack instead:
+no page scrolls sideways at 1280, 1024 or 768 px; `/leads/{id}` prints to one A4 page with no
+navigation on it; and with `prefers-reduced-motion: reduce` no element still declares a
+transition or an animation.

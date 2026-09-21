@@ -10,6 +10,8 @@ import {
   Card,
   EmptyState,
   PageHeader,
+  SkeletonLines,
+  SkeletonTableRows,
   Table,
   TableWrap,
   TBody,
@@ -67,6 +69,7 @@ export function CrmDashboard() {
   const [synced, setSynced] = useState<CrmLead[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     try {
@@ -83,6 +86,8 @@ export function CrmDashboard() {
       setError(null);
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : loadFailed("the CRM status"));
+    } finally {
+      setLoading(false);
     }
   }, [manager]);
 
@@ -157,6 +162,17 @@ export function CrmDashboard() {
       />
       {error ? <ErrorNote>{error}</ErrorNote> : null}
 
+      {!status && loading ? (
+        <section className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_2fr]" aria-label="Destination">
+          <Card>
+            <SkeletonLines lines={6} />
+          </Card>
+          <Card>
+            <SkeletonLines lines={4} />
+          </Card>
+        </section>
+      ) : null}
+
       {status ? (
         <section className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_2fr]" aria-label="Destination">
           <Card data-testid="crm-destination">
@@ -208,6 +224,7 @@ export function CrmDashboard() {
       {manager ? (
         <>
           <LeadTable
+            loading={loading}
             title="Held"
             testId="crm-held"
             empty="Nothing is held."
@@ -221,6 +238,7 @@ export function CrmDashboard() {
             )}
           />
           <LeadTable
+            loading={loading}
             title="Scheduled"
             testId="crm-scheduled"
             empty="Nothing waiting."
@@ -239,6 +257,7 @@ export function CrmDashboard() {
             )}
           />
           <LeadTable
+            loading={loading}
             title="In CRM"
             testId="crm-synced"
             empty="Nothing has been sent yet."
@@ -258,6 +277,7 @@ function LeadTable({
   empty,
   emptyHint,
   items,
+  loading = false,
   action,
 }: {
   title: string;
@@ -266,6 +286,7 @@ function LeadTable({
   emptyHint?: string;
   items: CrmLead[];
   busy: boolean;
+  loading?: boolean;
   action?: (lead: CrmLead) => React.ReactNode;
 }) {
   return (
@@ -289,6 +310,7 @@ function LeadTable({
             </tr>
           </THead>
           <TBody>
+            {loading && !items.length ? <SkeletonTableRows rows={2} columns={7} /> : null}
             {items.length ? (
               items.map((lead) => (
                 <Tr key={lead.id} data-testid="crm-row">
@@ -324,7 +346,7 @@ function LeadTable({
                   <Td className="text-right">{action ? action(lead) : null}</Td>
                 </Tr>
               ))
-            ) : (
+            ) : loading ? null : (
               <tr>
                 <td colSpan={7}>
                   <EmptyState title={empty} description={emptyHint} />

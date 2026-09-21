@@ -3,6 +3,51 @@
 All notable changes, one section per merged spec. Newest first.
 Format: `## [vX.Y.Z] - YYYY-MM-DD` followed by Added / Changed / Fixed.
 
+## [v0.9.0] - 2026-09-21
+
+### Added
+
+- **Design tokens** (`frontend/src/app/globals.css`): colour, type, space, radius,
+  elevation and motion as CSS variables. `tailwind.config.ts` **replaces** Tailwind's
+  palette, type scale, radii and shadows with them, so `bg-slate-50`, `text-2xl` and
+  `rounded-xl` no longer exist and a component cannot reach past the system.
+- **Self-hosted typefaces**: Public Sans (UI) and IBM Plex Mono (evidence, URLs, scores
+  and IDs) as latin subsets under `frontend/public/fonts`, `font-display: swap`. No font
+  CDN, so the Content-Security-Policy keeps `font-src 'self'`.
+- **Component layer** (`frontend/src/components/ui/`): Button, Input, Select, Checkbox,
+  Textarea, Table (sortable headers, tabular numerals, its own scroll container), Card,
+  Badge, SeverityDot, Chip, Dialog (focus trap, Esc, focus restored), Toast, Tabs
+  (arrow keys), Disclosure, Tooltip, Skeleton, EmptyState, PageHeader, Pagination — one
+  implementation each, each with a test.
+- **Accessibility**: a skip-to-content link, one visible focus ring everywhere, real
+  landmarks and one `h1` per page, and `src/test/axe.test.tsx` running axe-core over
+  login, the queue, review detail, leads, lead detail, CRM, searches and health with
+  zero serious or critical violations.
+- **Print stylesheet for `/leads/[opportunityId]`**: one A4 page, no navigation, the
+  phone and website as a letterhead, the evidence underneath.
+- **Guard tests**: `src/test/tokens.test.ts` (no raw hex, off-scale size, off-system
+  radius, stale palette class, all-caps label or `·`-joined string in any component, and
+  `globals.css` agrees with `src/lib/tokens.ts`) and `src/lib/contrast.test.ts` (all 26
+  token pairs the UI sets text on clear WCAG AA).
+- `docs/design.md` — tokens, type scale, component inventory, the two-column review
+  rationale, the opportunity/lead vocabulary rule and what was rejected and why.
+  `docs/design/before` and `docs/design/after` hold a screenshot of every screen at
+  1280 px; `make screenshots OUT=…` regenerates them.
+
+### Changed
+
+- **Review detail is a two-column argument** instead of three equal panels: who the
+  business is, what the audit found as one severity-ranked list (not six stacked cards)
+  and the AI summary on the left; the decision column, sticky, on the right.
+- Every screen was refitted: denser tables with the score as the rightmost column in
+  tabular figures, skeletons instead of "Loading…", empty states that name the next
+  action, and errors that state a cause and a fix ("Couldn't reach the API. Check that
+  the api container is running (`make prod-ps`).").
+- Sentence case throughout: no tracked-out all-caps labels, no eyebrows above headings,
+  and no `·`-joined meta strings — the health metrics read as sentences now.
+- `prefers-reduced-motion: reduce` switches off every transition and animation.
+- `components/Toast.tsx` moved to `components/ui/Toast.tsx`; its API is unchanged.
+
 ## [v0.8.0] - 2026-09-20
 
 ### Added

@@ -264,7 +264,10 @@ test("admin creates a user who must change their password; the searches page fol
     for (const stage of ["discovery", "resolution", "audit", "classification"]) {
       await expect(page.getByTestId(`stage-${stage}`).getByTestId("stage-status")).toHaveText("done");
     }
-    await expect(page.getByTestId("count-discovery-stored_new")).not.toHaveText("0");
+    // `stored_new` is only non-zero the first time a stack loads the demo fixture; a later
+    // `make load-demo-data` updates the same records instead, so it says 0 on any dev
+    // machine that has loaded them before. `fetched` counts what the run read either way.
+    await expect(page.getByTestId("count-discovery-fetched")).not.toHaveText("0");
     await expect(page.getByTestId("review-link")).toHaveAttribute("href", /\/review\?city=/);
     await page.getByTestId("review-link").click();
     await expect(page).toHaveURL(/\/review\?city=/);
