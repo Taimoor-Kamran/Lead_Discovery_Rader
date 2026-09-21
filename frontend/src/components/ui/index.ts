@@ -12,7 +12,7 @@ export { Checkbox, CONTROL, Field, Input, Select, Textarea } from "./Input";
 export { PageHeader } from "./PageHeader";
 export { Pagination } from "./Pagination";
 export { SeverityDot, type Severity } from "./SeverityDot";
-export { Skeleton, SkeletonLines, SkeletonRows } from "./Skeleton";
+export { Skeleton, SkeletonLines, SkeletonRows, SkeletonTableRows } from "./Skeleton";
 export { Table, TableWrap, TBody, Td, Th, THead, Tr, type SortDirection } from "./Table";
 export { Tabs, type TabOption } from "./Tabs";
 export { ToastProvider, useToast, type Toast } from "./Toast";

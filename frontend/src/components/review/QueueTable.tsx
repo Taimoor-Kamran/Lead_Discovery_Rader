@@ -1,10 +1,23 @@
 "use client";
 
 import Link from "next/link";
+import { SafeLink } from "@/components/SafeLink";
+import {
+  Badge,
+  Chip,
+  cx,
+  SkeletonTableRows,
+  Table,
+  TableWrap,
+  TBody,
+  Td,
+  Th,
+  THead,
+  Tr,
+} from "@/components/ui";
 import type { QueueItem } from "@/lib/api";
 import { formatDateTime, percent, place, score } from "@/lib/format";
 import { auditStatusLabel, findingLabel, serviceLabel } from "@/lib/labels";
-import { SafeLink } from "@/components/SafeLink";
 
 type Props = {
   items: QueueItem[];
@@ -14,90 +27,103 @@ type Props = {
   canSelect: boolean;
   /** With "Show weak signals" on, the checkboxes are always visible; otherwise on hover. */
   showWeak?: boolean;
+  /** First load: skeleton rows keep the table its full height so nothing jumps. */
+  loading?: boolean;
+  /** What to say when there is nothing — always with the reviewer's next action. */
+  empty?: React.ReactNode;
 };
 
-const SOURCE_STYLE: Record<string, string> = {
-  rules: "border-slate-300 bg-slate-100 text-slate-800",
-  ai: "border-amber-300 bg-amber-50 text-amber-900",
-  "rules+ai": "border-teal-300 bg-teal-50 text-teal-700",
-};
-
-const AUDIT_STYLE: Record<string, string> = {
-  done: "text-teal-700",
-  skipped: "text-slate-500",
-  robots_blocked: "text-amber-700",
-  unreachable: "text-red-700",
-  failed: "text-red-700",
+/** An audit outcome is a status, so it gets a badge tone rather than a bare colour. */
+const AUDIT_TONE: Record<string, "neutral" | "ok" | "warn" | "risk"> = {
+  done: "ok",
+  skipped: "neutral",
+  robots_blocked: "warn",
+  unreachable: "risk",
+  failed: "risk",
 };
 
 /** Hidden until the row is hovered or the box is focused or ticked; never removed from the page. */
 const HOVER_ONLY = "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 checked:opacity-100";
+const BOX = "h-4 w-4 shrink-0 rounded-sm border-line accent-accent";
 
-/** The queue: one row per business, city and state next to the name, service chips. */
-export function QueueTable({ items, selected, onToggle, onToggleBusiness, canSelect, showWeak = false }: Props) {
+/** The queue: one row per business, city and state under the name, the score on the right. */
+export function QueueTable({
+  items,
+  selected,
+  onToggle,
+  onToggleBusiness,
+  canSelect,
+  showWeak = false,
+  loading = false,
+  empty,
+}: Props) {
   const checkboxClass = showWeak ? "" : HOVER_ONLY;
-  if (!items.length) {
-    return (
-      <p className="rounded border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-600">
-        Nothing to review with these filters.
-      </p>
-    );
-  }
+  const columns = canSelect ? 7 : 6;
   return (
-    <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-      <table className="w-full min-w-[960px] text-sm">
-        <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-600">
+    <TableWrap>
+      <Table minWidth="60rem">
+        <THead>
           <tr>
-            {canSelect ? <th scope="col" className="w-8 px-3 py-2" /> : null}
-            <th scope="col" className="px-3 py-2">Business</th>
-            <th scope="col" className="px-3 py-2">Industry</th>
-            <th scope="col" className="px-3 py-2">Opportunities</th>
-            <th scope="col" className="px-3 py-2">Audit</th>
-            <th scope="col" className="px-3 py-2">Top findings</th>
-            <th scope="col" className="w-20 px-3 py-2 text-right">Score</th>
+            {canSelect ? <Th className="w-8" aria-label="Select" /> : null}
+            <Th>Business</Th>
+            <Th>Industry</Th>
+            <Th>Opportunities</Th>
+            <Th>Audit</Th>
+            <Th>Top findings</Th>
+            <Th numeric className="w-20">
+              Score
+            </Th>
           </tr>
-        </thead>
-        <tbody className="divide-y divide-slate-100">
+        </THead>
+        <TBody>
+          {loading && !items.length ? <SkeletonTableRows rows={6} columns={columns} /> : null}
+          {!loading && !items.length ? (
+            <tr>
+              <td colSpan={columns}>{empty}</td>
+            </tr>
+          ) : null}
           {items.map((item) => {
             const allSelected =
-              item.opportunities.length > 0 &&
-              item.opportunities.every((o) => selected.has(o.id));
+              item.opportunities.length > 0 && item.opportunities.every((o) => selected.has(o.id));
+            const anySelected = item.opportunities.some((o) => selected.has(o.id));
             return (
-              <tr key={item.business_id} className="group align-top hover:bg-slate-50" data-testid="queue-row">
+              <Tr key={item.business_id} selected={anySelected} data-testid="queue-row">
                 {canSelect ? (
-                  <td className="px-3 py-2">
+                  <Td>
                     <input
                       type="checkbox"
                       aria-label={`Select every opportunity of ${item.display_name}`}
                       checked={allSelected}
                       onChange={() => onToggleBusiness(item)}
-                      className={checkboxClass}
+                      className={cx(BOX, checkboxClass)}
                     />
-                  </td>
+                  </Td>
                 ) : null}
-                <td className="px-3 py-2">
+                <Td>
                   <Link
                     href={`/review/${item.business_id}`}
-                    className="font-medium text-navy underline-offset-2 hover:underline"
+                    className="rounded font-medium text-ink underline-offset-2 hover:text-accent hover:underline"
                   >
                     {item.display_name}
                   </Link>
-                  <div className="text-xs text-slate-600" data-testid="queue-place">
+                  <div className="text-sm text-ink-soft" data-testid="queue-place">
                     {place(item.city, item.state)}
                   </div>
                   {item.website ? (
-                    <div className="text-xs">
+                    <div className="text-sm">
                       <SafeLink href={item.website} />
                     </div>
                   ) : null}
-                </td>
-                <td className="px-3 py-2 text-slate-700">{item.industry ?? "unknown"}</td>
-                <td className="px-3 py-2">
+                </Td>
+                <Td className="text-ink-soft">{item.industry ?? "unknown"}</Td>
+                <Td>
                   <ul className="flex flex-wrap gap-1">
                     {item.opportunities.map((opportunity) => (
                       <li key={opportunity.id}>
-                        <label
-                          className={`chip cursor-pointer ${SOURCE_STYLE[opportunity.source] ?? ""}`}
+                        <Chip
+                          as="label"
+                          interactive={canSelect}
+                          className={cx(opportunity.weak && "border-warn")}
                           title={`${opportunity.service} · confidence ${percent(opportunity.confidence)} · source ${opportunity.source}`}
                           data-testid="service-chip"
                         >
@@ -107,53 +133,56 @@ export function QueueTable({ items, selected, onToggle, onToggleBusiness, canSel
                               aria-label={`Select ${serviceLabel(opportunity.service)} for ${item.display_name}`}
                               checked={selected.has(opportunity.id)}
                               onChange={() => onToggle(opportunity.id)}
-                              className={`mr-1 ${checkboxClass}`}
+                              className={cx(BOX, checkboxClass)}
                             />
                           ) : null}
                           <span className="font-medium">{serviceLabel(opportunity.service)}</span>
-                          <span className="text-slate-600">Score {score(opportunity.score)}</span>
-                          {opportunity.weak ? <span className="text-amber-700">weak</span> : null}
-                        </label>
+                          <span className="font-mono text-xs text-ink-soft">
+                            Score {score(opportunity.score)}
+                          </span>
+                        </Chip>
                       </li>
                     ))}
                   </ul>
                   {item.weak_hidden > 0 ? (
-                    <p className="mt-1 text-xs text-slate-500" data-testid="weak-hidden">
+                    <p className="mt-1 text-sm text-ink-soft" data-testid="weak-hidden">
                       {item.weak_hidden} weak signal{item.weak_hidden === 1 ? "" : "s"} hidden
                     </p>
                   ) : null}
-                </td>
-                <td className="px-3 py-2">
+                </Td>
+                <Td>
                   {item.latest_audit ? (
-                    <div>
-                      <span className={AUDIT_STYLE[item.latest_audit.status] ?? ""} title={item.latest_audit.status}>
+                    <>
+                      <Badge tone={AUDIT_TONE[item.latest_audit.status] ?? "neutral"} title={item.latest_audit.status}>
                         {auditStatusLabel(item.latest_audit.status)}
-                      </span>
-                      <div className="text-xs text-slate-500">
+                      </Badge>
+                      <div className="mt-1 text-sm text-ink-soft">
                         {formatDateTime(item.latest_audit.audited_at)}
                       </div>
-                    </div>
+                    </>
                   ) : (
-                    <span className="text-slate-500">not audited</span>
+                    <span className="text-ink-soft">not audited</span>
                   )}
-                </td>
-                <td className="px-3 py-2">
+                </Td>
+                <Td>
                   <ul className="flex flex-wrap gap-1">
                     {item.latest_audit?.top_findings.map((code) => (
-                      <li key={code} className="chip border-slate-200 bg-slate-50 text-slate-700" title={code}>
-                        {findingLabel(code)}
+                      <li key={code}>
+                        <Chip className="text-sm" title={code}>
+                          {findingLabel(code)}
+                        </Chip>
                       </li>
                     ))}
                   </ul>
-                </td>
-                <td className="px-3 py-2 text-right font-mono" title={`raw ${item.top_score}`}>
+                </Td>
+                <Td numeric title={`raw ${item.top_score}`}>
                   {score(item.top_score)}
-                </td>
-              </tr>
+                </Td>
+              </Tr>
             );
           })}
-        </tbody>
-      </table>
-    </div>
+        </TBody>
+      </Table>
+    </TableWrap>
   );
 }

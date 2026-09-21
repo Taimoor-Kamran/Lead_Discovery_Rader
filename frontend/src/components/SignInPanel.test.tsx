@@ -22,7 +22,10 @@ describe("SignInPanel", () => {
   it("shows API health on load", async () => {
     routeFetch({ "GET /health": HEALTH });
     renderWithProviders(<SignInPanel />, { user: null, status: "anonymous" });
-    await waitFor(() => expect(screen.getByTestId("health").textContent).toContain("status ok"));
+    // v0.9.0: the health line became a definition list instead of a `·`-joined string.
+    await waitFor(() => expect(screen.getByTestId("health").textContent).toContain("Database"));
+    expect(screen.getByTestId("health").textContent).toContain("Redis");
+    expect(screen.getByTestId("health").querySelectorAll("dd")).toHaveLength(3);
   });
 
   it("signs in, holds the token in memory only and goes to the role's home", async () => {

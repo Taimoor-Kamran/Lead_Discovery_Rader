@@ -3,7 +3,17 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useToast } from "@/components/ui";
+import { ErrorNote } from "@/components/ErrorNote";
+import {
+  Badge,
+  Button,
+  Card,
+  Chip,
+  EmptyState,
+  PageHeader,
+  SkeletonLines,
+  useToast,
+} from "@/components/ui";
 import { AiSummaryBox } from "@/components/review/AiSummaryBox";
 import { AuditPanel } from "@/components/review/AuditPanel";
 import { BusinessFacts } from "@/components/review/BusinessFacts";
@@ -25,7 +35,8 @@ import {
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { CONFLICT_MESSAGE, QUEUE_ORDER_KEY } from "@/lib/review";
-import { score } from "@/lib/format";
+import { loadFailed } from "@/lib/errors";
+import { place, score } from "@/lib/format";
 import { serviceLabel } from "@/lib/labels";
 import { canDecide, canPickAssignee } from "@/lib/roles";
 
@@ -56,7 +67,7 @@ export function BusinessReview({ businessId }: { businessId: string }) {
       setDetail(await getReviewDetail(businessId));
       setError(null);
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : "Could not load this business");
+      setError(caught instanceof ApiError ? caught.message : loadFailed("this business"));
     }
   }, [businessId]);
 
@@ -186,81 +197,103 @@ export function BusinessReview({ businessId }: { businessId: string }) {
 
   if (error) {
     return (
-      <p role="alert" className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800">
-        {error} · <Link href="/review" className="underline">Back to the queue</Link>
-      </p>
+      <ErrorNote>
+        {error}{" "}
+        <Link href="/review" className="rounded font-medium text-accent underline underline-offset-2">
+          Back to the queue
+        </Link>
+      </ErrorNote>
     );
   }
-  if (!detail) return <p className="text-sm text-slate-600">Loading…</p>;
+  if (!detail) {
+    // The shape of the page, so nothing jumps when the business arrives.
+    return (
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.55fr)_minmax(21rem,1fr)]">
+        <SkeletonLines lines={8} />
+        <SkeletonLines lines={5} />
+      </div>
+    );
+  }
 
   const dncTarget = opportunities.find((o) => OPEN_STATUSES.has(o.review_status));
 
   return (
-    <div className="flex flex-col gap-4">
-      <header className="flex flex-wrap items-center gap-3">
-        <Link href="/review" className="text-sm text-teal-700 underline underline-offset-2">
-          ← Queue
-        </Link>
-        <h1 className="text-xl font-semibold text-navy">{detail.business.display_name}</h1>
-        <span className="text-sm text-slate-600">
-          {openCount} open opportunit{openCount === 1 ? "y" : "ies"}
-        </span>
-        <div className="ml-auto flex items-center gap-2">
-          <button type="button" className="btn-secondary" onClick={goPrevious} disabled={!previousId}>
-            ← Previous
-          </button>
-          <button type="button" className="btn-secondary" onClick={goNext}>
-            Next →
-          </button>
-          <button type="button" className="btn-secondary" onClick={() => setHelp(true)} aria-label="Keyboard shortcuts">
-            ?
-          </button>
-          {decider ? (
-            <button
-              type="button"
-              className="btn-danger"
-              disabled={!dncTarget || detail.suppressed || busy}
-              title={
-                detail.suppressed
-                  ? "Already suppressed"
-                  : dncTarget
-                    ? undefined
-                    : "No open opportunity to decide on; an admin can suppress the business directly"
-              }
-              onClick={() => dncTarget && setPending({ decision: "do_not_contact", opportunity: dncTarget })}
-            >
-              Do not contact
-            </button>
-          ) : null}
-        </div>
-      </header>
+    <div className="flex flex-col gap-5">
+      <PageHeader
+        meta={
+          <Link href="/review" className="rounded font-medium text-accent underline underline-offset-2">
+            ← Queue
+          </Link>
+        }
+        title={
+          <span className="flex flex-wrap items-center gap-3">
+            {detail.business.display_name}
+            <span className="text-base font-normal text-ink-soft">
+              {place(detail.business.city, detail.business.state)}
+            </span>
+            {detail.suppressed ? <Badge tone="risk">Do not contact</Badge> : null}
+          </span>
+        }
+        description={`${openCount} open opportunit${openCount === 1 ? "y" : "ies"} to decide on.`}
+        actions={
+          <>
+            <Button onClick={goPrevious} disabled={!previousId}>
+              ← Previous
+            </Button>
+            <Button onClick={goNext}>Next →</Button>
+            <Button variant="ghost" onClick={() => setHelp(true)} aria-label="Keyboard shortcuts">
+              ?
+            </Button>
+            {decider ? (
+              <Button
+                variant="danger"
+                disabled={!dncTarget || detail.suppressed || busy}
+                title={
+                  detail.suppressed
+                    ? "Already suppressed"
+                    : dncTarget
+                      ? undefined
+                      : "No open opportunity to decide on; an admin can suppress the business directly"
+                }
+                onClick={() => dncTarget && setPending({ decision: "do_not_contact", opportunity: dncTarget })}
+              >
+                Do not contact
+              </Button>
+            ) : null}
+          </>
+        }
+      />
 
-      {openOpportunities.length ? (
-        <nav
-          aria-label="Open opportunities"
-          className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
-          data-testid="open-summary"
-        >
-          <span className="text-slate-600">Open:</span>
-          {openOpportunities.map((opportunity) => (
-            <a
-              key={opportunity.id}
-              href={`#${opportunityAnchor(opportunity.id)}`}
-              className="chip border-slate-300 bg-slate-50 text-navy hover:border-teal-600"
-              title={`${opportunity.service} · jump to this opportunity`}
-            >
-              <span className="font-medium">{serviceLabel(opportunity.service)}</span>
-              <span className="text-slate-600">Score {score(opportunity.score)}</span>
-            </a>
-          ))}
-        </nav>
-      ) : null}
-
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(18rem,1fr)_minmax(20rem,1.2fr)_minmax(24rem,1.6fr)]">
-        <BusinessFacts detail={detail} />
-        <AuditPanel detail={detail} />
-        <div className="flex flex-col gap-3">
+      {/* Two columns, not three panels: the case on the left, the decision on the right. */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.55fr)_minmax(21rem,1fr)]">
+        <div className="order-2 flex min-w-0 flex-col gap-5 lg:order-1">
+          <BusinessFacts detail={detail} />
+          <AuditPanel detail={detail} />
           <AiSummaryBox ai={detail.ai} />
+        </div>
+
+        <div className="order-1 flex min-w-0 flex-col gap-3 lg:order-2 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:self-start lg:overflow-y-auto">
+          <h2 className="text-md font-semibold text-ink">
+            Opportunities <span className="font-normal text-ink-soft">({opportunities.length})</span>
+          </h2>
+
+          {openOpportunities.length ? (
+            <nav
+              aria-label="Open opportunities"
+              className="flex flex-wrap items-center gap-2"
+              data-testid="open-summary"
+            >
+              {openOpportunities.map((opportunity) => (
+                <a key={opportunity.id} href={`#${opportunityAnchor(opportunity.id)}`} className="rounded">
+                  <Chip interactive title={`${opportunity.service} · jump to this opportunity`}>
+                    <span className="font-medium">{serviceLabel(opportunity.service)}</span>
+                    <span className="font-mono text-xs text-ink-soft">Score {score(opportunity.score)}</span>
+                  </Chip>
+                </a>
+              ))}
+            </nav>
+          ) : null}
+
           {opportunities.length ? (
             opportunities.map((opportunity, index) => (
               <OpportunityCard
@@ -275,9 +308,12 @@ export function BusinessReview({ businessId }: { businessId: string }) {
               />
             ))
           ) : (
-            <p className="rounded border border-dashed border-slate-300 bg-white p-4 text-sm text-slate-600">
-              No opportunities for this business.
-            </p>
+            <Card className="border-dashed">
+              <EmptyState
+                title="No opportunities for this business."
+                description="Nothing was found to sell here. It will come back if a later audit finds something."
+              />
+            </Card>
           )}
         </div>
       </div>

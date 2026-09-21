@@ -33,3 +33,20 @@ export function SkeletonLines({ lines = 3, className }: { lines?: number; classN
     </div>
   );
 }
+
+/** The same idea inside a table, where only rows and cells are valid children. */
+export function SkeletonTableRows({ rows = 5, columns = 4 }: { rows?: number; columns?: number }) {
+  return (
+    <>
+      {Array.from({ length: rows }).map((_, row) => (
+        <tr key={row} data-testid="skeleton-row">
+          {Array.from({ length: columns }).map((_, column) => (
+            <td key={column} className="px-3 py-3">
+              <Skeleton className={cx("h-4", column === 0 ? "w-40" : "w-full")} />
+            </td>
+          ))}
+        </tr>
+      ))}
+    </>
+  );
+}

@@ -1,85 +1,82 @@
 "use client";
 
-import { useState } from "react";
+import { SafeLink } from "@/components/SafeLink";
+import { Card, Disclosure, Table, TBody, Td, Th, THead, Tr } from "@/components/ui";
 import type { ReviewDetail } from "@/lib/api";
 import { formatDateTime, formatPhone, orUnknown, place } from "@/lib/format";
-import { SafeLink } from "@/components/SafeLink";
 
-/** Left column: the business as survivorship shows it, with the provenance behind it. */
+/**
+ * Who the business is, as survivorship settled it, with the provenance one click away.
+ * The two things a rep acts on — the phone and the website — lead the list.
+ */
 export function BusinessFacts({ detail }: { detail: ReviewDetail }) {
   const business = detail.business;
-  const [showProvenance, setShowProvenance] = useState(false);
   const shown = business.field_values.filter((value) => value.is_displayed);
   const rows: [string, React.ReactNode][] = [
+    [
+      "Public phone",
+      <span key="phone" className="font-mono" title={business.phone_e164 ?? undefined}>
+        {formatPhone(business.phone_e164)}
+      </span>,
+    ],
+    ["Website", business.website ? <SafeLink href={business.website}>{business.website}</SafeLink> : "none"],
+    ["Industry", orUnknown(business.industry)],
     ["Location", place(business.city, business.state)],
     ["Address", orUnknown(business.address_line1)],
     ["Postal code", orUnknown(business.postal_code)],
-    ["Industry", orUnknown(business.industry)],
-    ["Public phone", <span key="phone" title={business.phone_e164 ?? undefined}>{formatPhone(business.phone_e164)}</span>],
-    [
-      "Website",
-      business.website ? <SafeLink href={business.website}>{business.website}</SafeLink> : "none",
-    ],
     ["Website kind", business.website_kind],
     ["Status", business.business_status],
   ];
 
   return (
-    <section className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4">
-      <header>
-        <h2 className="text-lg font-semibold text-navy">{business.display_name}</h2>
-        <p className="text-sm text-slate-600">{place(business.city, business.state)}</p>
-        {detail.suppressed ? (
-          <p className="mt-2 rounded border border-red-200 bg-red-50 p-2 text-sm text-red-900" role="status">
-            Do not contact: this business is suppressed
-            {detail.suppressions[0]?.reason ? ` (${detail.suppressions[0].reason})` : ""}.
-          </p>
-        ) : null}
-      </header>
-      <dl className="grid grid-cols-[7rem_1fr] gap-y-1 text-sm">
+    <Card className="print-break-avoid print-plain">
+      {detail.suppressed ? (
+        <p
+          className="mb-3 rounded border border-risk bg-risk-tint p-2 text-base text-ink"
+          role="status"
+        >
+          Do not contact: this business is suppressed
+          {detail.suppressions[0]?.reason ? ` (${detail.suppressions[0].reason})` : ""}.
+        </p>
+      ) : null}
+      <dl className="grid grid-cols-[8rem_1fr] gap-x-4 gap-y-1.5 text-base">
         {rows.map(([label, value]) => (
           <div key={label} className="contents">
-            <dt className="text-slate-500">{label}</dt>
+            <dt className="text-ink-soft">{label}</dt>
             <dd className="break-words">{value}</dd>
           </div>
         ))}
       </dl>
-      <button
-        type="button"
-        className="btn-secondary self-start"
-        aria-expanded={showProvenance}
-        onClick={() => setShowProvenance((current) => !current)}
-      >
-        {showProvenance ? "Hide" : "Show"} field provenance ({shown.length})
-      </button>
-      {showProvenance ? (
-        <table className="w-full text-xs">
-          <thead className="text-left text-slate-500">
-            <tr>
-              <th scope="col" className="py-1">Field</th>
-              <th scope="col" className="py-1">Value</th>
-              <th scope="col" className="py-1">Source</th>
-              <th scope="col" className="py-1">Observed</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {shown.map((value) => (
-              <tr key={`${value.field}-${value.discovered_record_id}`}>
-                <td className="py-1 pr-2 font-mono">{value.field}</td>
-                <td className="py-1 pr-2 break-all">{value.value ?? "null"}</td>
-                <td className="py-1 pr-2">{value.source}</td>
-                <td className="py-1">{formatDateTime(value.observed_at)}</td>
+      <div className="print-hide mt-4">
+        <Disclosure summary={(open) => `${open ? "Hide" : "Show"} field provenance (${shown.length})`}>
+          <Table minWidth="30rem" className="text-sm">
+            <THead>
+              <tr>
+                <Th>Field</Th>
+                <Th>Value</Th>
+                <Th>Source</Th>
+                <Th>Observed</Th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      ) : null}
-      {business.records.length ? (
-        <p className="text-xs text-slate-500">
-          {business.records.length} source record{business.records.length === 1 ? "" : "s"}:{" "}
-          {business.records.map((record) => record.source).join(", ")}
-        </p>
-      ) : null}
-    </section>
+            </THead>
+            <TBody>
+              {shown.map((value) => (
+                <Tr key={`${value.field}-${value.discovered_record_id}`}>
+                  <Td className="font-mono">{value.field}</Td>
+                  <Td className="break-all font-mono">{value.value ?? "null"}</Td>
+                  <Td>{value.source}</Td>
+                  <Td className="text-ink-soft">{formatDateTime(value.observed_at)}</Td>
+                </Tr>
+              ))}
+            </TBody>
+          </Table>
+          {business.records.length ? (
+            <p className="mt-2 text-sm text-ink-soft">
+              {business.records.length} source record{business.records.length === 1 ? "" : "s"}:{" "}
+              {business.records.map((record) => record.source).join(", ")}
+            </p>
+          ) : null}
+        </Disclosure>
+      </div>
+    </Card>
   );
 }

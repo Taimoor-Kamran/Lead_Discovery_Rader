@@ -2,8 +2,10 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import { Badge, Button, Card, Input } from "@/components/ui";
 import { ApiError, getHealth, login, type Health } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { API_UNREACHABLE } from "@/lib/errors";
 import { homeFor } from "@/lib/roles";
 import { clearAccessToken } from "@/lib/session";
 
@@ -43,7 +45,7 @@ export function SignInPanel() {
       setPassword("");
       router.replace(homeFor(me.role));
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : "Could not reach the API");
+      setError(caught instanceof ApiError ? caught.message : API_UNREACHABLE);
       clearAccessToken();
     } finally {
       setBusy(false);
@@ -51,56 +53,59 @@ export function SignInPanel() {
   }
 
   return (
-    <section className="flex flex-col gap-6">
-      <form
-        onSubmit={onSubmit}
-        className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4"
-      >
-        <label className="flex flex-col gap-1 text-sm">
-          Email
-          <input
+    <div className="flex flex-col gap-4">
+      <Card>
+        <form onSubmit={onSubmit} className="flex flex-col gap-4">
+          <Input
+            label="Email"
             type="email"
             name="email"
             required
             autoComplete="username"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
-            className="field"
           />
-        </label>
-        <label className="flex flex-col gap-1 text-sm">
-          Password
-          <input
+          <Input
+            label="Password"
             type="password"
             name="password"
             required
             autoComplete="current-password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
-            className="field"
           />
-        </label>
-        <button type="submit" disabled={busy} className="btn-primary justify-center">
-          {busy ? "Signing in…" : "Sign in"}
-        </button>
-        {error ? (
-          <p role="alert" className="text-sm text-red-600">
-            {error}
-          </p>
-        ) : null}
-      </form>
+          <Button type="submit" variant="primary" loading={busy} loadingLabel="Signing in…">
+            Sign in
+          </Button>
+          {error ? (
+            <p role="alert" className="text-base text-risk">
+              {error}
+            </p>
+          ) : null}
+        </form>
+      </Card>
 
-      <div className="rounded-lg border border-slate-200 bg-white p-4 text-sm" data-testid="health">
-        <h2 className="font-medium">API health</h2>
+      <Card data-testid="health">
+        <h2 className="text-md font-semibold text-ink">API health</h2>
         {health ? (
-          <p className="mt-1 text-slate-600">
-            status {health.status} · db {health.db ? "ok" : "down"} · redis{" "}
-            {health.redis ? "ok" : "down"}
-          </p>
+          <dl className="mt-2 grid grid-cols-[7rem_1fr] gap-y-1 text-base">
+            <dt className="text-ink-soft">Status</dt>
+            <dd>
+              <Badge tone={health.status === "ok" ? "ok" : "risk"}>{health.status}</Badge>
+            </dd>
+            <dt className="text-ink-soft">Database</dt>
+            <dd>
+              <Badge tone={health.db ? "ok" : "risk"}>{health.db ? "ok" : "down"}</Badge>
+            </dd>
+            <dt className="text-ink-soft">Redis</dt>
+            <dd>
+              <Badge tone={health.redis ? "ok" : "risk"}>{health.redis ? "ok" : "down"}</Badge>
+            </dd>
+          </dl>
         ) : (
-          <p className="mt-1 text-slate-600">unreachable</p>
+          <p className="mt-2 max-w-measure text-base text-ink-soft">{API_UNREACHABLE}</p>
         )}
-      </div>
-    </section>
+      </Card>
+    </div>
   );
 }

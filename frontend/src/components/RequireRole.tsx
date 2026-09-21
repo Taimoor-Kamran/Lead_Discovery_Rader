@@ -1,10 +1,12 @@
 "use client";
 
+import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
+import { EmptyState, SkeletonLines } from "@/components/ui";
 import type { Role } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { homeFor } from "@/lib/roles";
+import { homeFor, ROLE_LABELS } from "@/lib/roles";
 
 /**
  * Gate a page on the session and the role. Anonymous visitors go to `/login`; a signed-in
@@ -30,25 +32,34 @@ export function RequireRole({
   }, [status, forced, router]);
 
   if (status === "loading") {
-    return <p className="p-6 text-sm text-slate-600">Loading…</p>;
+    // The shape of a page, not a spinner: nothing jumps when the session resolves.
+    return <SkeletonLines lines={4} className="max-w-measure" />;
   }
   if (status === "anonymous" || !user) {
-    return <p className="p-6 text-sm text-slate-600">Redirecting to sign in…</p>;
+    return <p className="text-base text-ink-soft">Taking you to sign in…</p>;
   }
   if (forced) {
-    return <p className="p-6 text-sm text-slate-600" data-testid="forced-change">You must change your password first…</p>;
+    return (
+      <p className="text-base text-ink-soft" data-testid="forced-change">
+        Change your password first…
+      </p>
+    );
   }
   if (!roles.includes(user.role)) {
     return (
-      <div className="p-6" role="alert">
-        <h1 className="text-lg font-semibold">Not available for your role</h1>
-        <p className="mt-1 text-sm text-slate-600">
-          Your account ({user.role}) cannot open this page.{" "}
-          <a href={homeFor(user.role)} className="text-teal-700 underline">
-            Go to your home page
-          </a>
-          .
-        </p>
+      <div role="alert">
+        <EmptyState
+          title="Not available for your role"
+          description={`A ${ROLE_LABELS[user.role].toLowerCase()} account cannot open this page. Nothing is wrong — this page belongs to another part of the team.`}
+          action={
+            <Link
+              href={homeFor(user.role)}
+              className="rounded font-medium text-accent underline underline-offset-2"
+            >
+              Go to your home page
+            </Link>
+          }
+        />
       </div>
     );
   }

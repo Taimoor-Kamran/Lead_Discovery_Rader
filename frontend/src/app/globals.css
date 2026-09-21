@@ -59,6 +59,10 @@
 
   --ink: #101826;
   --ink-soft: #475467;
+  /* The top bar is the one ink surface: a raised step for the active nav item, and a
+     softened white for the secondary line of the account block. */
+  --ink-raised: #1c2534;
+  --on-ink-soft: #c8cdd6;
   --paper: #fbfaf8;
   --surface: #ffffff;
   --surface-sunken: #f4f3f1;
