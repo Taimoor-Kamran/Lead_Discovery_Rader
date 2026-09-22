@@ -897,6 +897,8 @@ def test_no_contact_data_beyond_the_business_fields_reaches_a_lead(
         "top_evidence",
         "rule_reason",
         "ai_rationale",
+        # Source codes, not people: which registry rows the business was built from.
+        "sources",
         "crm",
     }
     # The CRM block is about the record, never about a person.

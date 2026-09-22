@@ -624,6 +624,11 @@ export interface paths {
         /**
          * List Leads
          * @description Approved, unsuppressed opportunities. A sales rep sees only their own.
+         *
+         *     `discovered_within_days=N` keeps only businesses **first found within N days** — the
+         *     earliest `discovered_at` of the records behind the business, not the last time a source
+         *     handed the same record over again. It composes with every other filter with AND, and is
+         *     re-applied on each page, so a cursor never widens the window.
          */
         get: operations["list_leads_api_v1_leads_get"];
         put?: never;
@@ -801,6 +806,11 @@ export interface paths {
         /**
          * Review Queue
          * @description Businesses with open opportunities, best score first. Weak signals hidden by default.
+         *
+         *     `discovered_within_days=N` keeps only businesses **first found within N days** — the
+         *     earliest `discovered_at` of the records behind the business, not the last time a source
+         *     handed the same record over again. It composes with every other filter with AND, and is
+         *     re-applied on each page, so a cursor never widens the window.
          */
         get: operations["review_queue_api_v1_review_queue_get"];
         put?: never;
@@ -2277,6 +2287,8 @@ export interface components {
          *     and who approved it. A sales rep may only open a lead assigned to them.
          */
         LeadDetail: {
+            /** Ai Enabled */
+            ai_enabled: boolean;
             audit: components["schemas"]["WebsiteAuditDetail"] | null;
             business: components["schemas"]["BusinessDetail"];
             /**
@@ -2285,7 +2297,10 @@ export interface components {
              */
             crm_history: components["schemas"]["CrmSyncAttemptRead"][];
             lead: components["schemas"]["LeadRead"];
+            linked_profiles: components["schemas"]["LinkedProfilesRead"];
             opportunity: components["schemas"]["ReviewOpportunity"];
+            /** Sources */
+            sources: components["schemas"]["SourceRecordRead"][];
         };
         /**
          * LeadRead
@@ -2335,6 +2350,8 @@ export interface components {
             service: string;
             /** Service Name */
             service_name: string;
+            /** Sources */
+            sources: string[];
             /** State */
             state: string | null;
             /** Top Evidence */
@@ -2343,6 +2360,28 @@ export interface components {
             } | null;
             /** Website */
             website: string | null;
+        };
+        /**
+         * LinkedProfileRead
+         * @description A social profile the business links to **from its own homepage**.
+         *
+         *     The v0.4.0 audit records which platforms the homepage points at. No profile is ever
+         *     fetched, and this is never a source: `page_url` on the block below is the page the
+         *     links were read on, so the screen can say so. `url` is null when the audit's evidence
+         *     does not yield a link we would let a browser open — never a guess.
+         */
+        LinkedProfileRead: {
+            /** Platform */
+            platform: string;
+            /** Url */
+            url: string | null;
+        };
+        /** LinkedProfilesRead */
+        LinkedProfilesRead: {
+            /** Page Url */
+            page_url: string | null;
+            /** Profiles */
+            profiles: components["schemas"]["LinkedProfileRead"][];
         };
         /** LinkedRecordRead */
         LinkedRecordRead: {
@@ -2713,6 +2752,8 @@ export interface components {
             latest_audit: components["schemas"]["QueueAudit"] | null;
             /** Opportunities */
             opportunities: components["schemas"]["QueueOpportunity"][];
+            /** Sources */
+            sources: string[];
             /** State */
             state: string | null;
             /** Top Score */
@@ -2829,10 +2870,15 @@ export interface components {
          */
         ReviewDetail: {
             ai: components["schemas"]["AISummaryRead"] | null;
+            /** Ai Enabled */
+            ai_enabled: boolean;
             audit: components["schemas"]["WebsiteAuditDetail"] | null;
             business: components["schemas"]["BusinessDetail"];
+            linked_profiles: components["schemas"]["LinkedProfilesRead"];
             /** Opportunities */
             opportunities: components["schemas"]["ReviewOpportunity"][];
+            /** Sources */
+            sources: components["schemas"]["SourceRecordRead"][];
             /** Suppressed */
             suppressed: boolean;
             /** Suppressions */
@@ -3128,6 +3174,35 @@ export interface components {
             kind: components["schemas"]["SourceKind"];
             /** Name */
             name: string;
+        };
+        /**
+         * SourceRecordRead
+         * @description One discovered record a business was built from: the answer to "where did you get
+         *     my details?", in the words a prospect asks it in.
+         *
+         *     `code` is what the API and the `sources` table call it (`google_places`); `name` is the
+         *     operator-facing name on the source row. The screen reads its own label from
+         *     `lib/labels.ts` and keeps `code` in the tooltip.
+         */
+        SourceRecordRead: {
+            /** Code */
+            code: string;
+            /**
+             * Discovered At
+             * Format: date-time
+             */
+            discovered_at: string;
+            /**
+             * Last Seen At
+             * Format: date-time
+             */
+            last_seen_at: string;
+            /** Name */
+            name: string;
+            /** Source Record Id */
+            source_record_id: string;
+            /** Source Url */
+            source_url: string | null;
         };
         /** SourceUpdate */
         SourceUpdate: {
@@ -4391,6 +4466,7 @@ export interface operations {
                 service?: string | null;
                 assigned_to?: string | null;
                 city?: string | null;
+                discovered_within_days?: number | null;
                 limit?: number;
                 cursor?: string | null;
             };
@@ -4700,6 +4776,7 @@ export interface operations {
                 min_score?: number | null;
                 include_weak?: boolean;
                 q?: string | null;
+                discovered_within_days?: number | null;
                 limit?: number;
                 cursor?: string | null;
             };

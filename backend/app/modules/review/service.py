@@ -47,6 +47,7 @@ from app.modules.crm.schemas import CrmLeadStatusRead
 from app.modules.opportunities import service as opportunities
 from app.modules.opportunities.catalogue import SERVICES
 from app.modules.opportunities.models import Opportunity, OpportunitySource, ReviewStatus
+from app.modules.review import provenance
 from app.modules.review.models import Decision, ReviewDecision
 from app.modules.review.schemas import (
     NOT_A_FIT_REASON_CODES,
@@ -661,11 +662,17 @@ def review_queue(
     min_score: float | None = None,
     include_weak: bool = False,
     q: str | None = None,
+    discovered_within_days: int | None = None,
     limit: int = DEFAULT_LIMIT,
     cursor: str | None = None,
     settings: Settings | None = None,
+    now: datetime | None = None,
 ) -> Page[QueueItem]:
-    """Businesses with at least one open opportunity, strongest first, suppressed ones out."""
+    """Businesses with at least one open opportunity, strongest first, suppressed ones out.
+
+    `discovered_within_days` narrows to businesses **first found** within that many days —
+    see `provenance.discovered_within` for why that is not "last seen".
+    """
     config = settings or get_settings()
     if status not in QUEUE_STATUSES:
         raise ValidationFailedError(
@@ -715,6 +722,7 @@ def review_queue(
                 func.lower(func.coalesce(Business.domain, "")).like(pattern),
             )
         )
+    stmt = provenance.discovered_within(stmt, discovered_within_days, now=now)
     if cursor:
         score_after, id_after = _decode_queue_cursor(cursor)
         stmt = stmt.where(
@@ -732,6 +740,7 @@ def review_queue(
     business_ids = [row[0].id for row in rows]
     open_rows = _open_opportunities(session, business_ids, status)
     latest = audits.latest_audits(session, business_ids)
+    sources = provenance.source_codes(session, business_ids)
     items = [
         _queue_item(
             business,
@@ -739,6 +748,7 @@ def review_queue(
             int(weak_hidden),
             open_rows.get(business.id, []),
             latest.get(business.id),
+            sources.get(business.id, []),
             weak=weak,
             include_weak=include_weak,
         )
@@ -768,6 +778,7 @@ def _queue_item(
     weak_hidden: int,
     rows: list[Opportunity],
     latest: WebsiteAudit | None,
+    sources: list[str],
     *,
     weak: Decimal,
     include_weak: bool,
@@ -806,6 +817,7 @@ def _queue_item(
             for row in shown
         ],
         weak_hidden=weak_hidden,
+        sources=sources,
     )
 
 
@@ -897,6 +909,9 @@ def review_detail(
         suppressions=[compliance.read(item, business.display_name) for item in active],
         undo_window_minutes=config.review_undo_window_minutes,
         weak_confidence=float(weak),
+        sources=provenance.source_records(session, business.id),
+        linked_profiles=provenance.linked_profiles(latest),
+        ai_enabled=config.ai_enabled,
     )
 
 
@@ -1027,10 +1042,16 @@ def list_leads(
     service: str | None = None,
     assigned_to: uuid.UUID | None = None,
     city: str | None = None,
+    discovered_within_days: int | None = None,
     limit: int = DEFAULT_LIMIT,
     cursor: str | None = None,
+    now: datetime | None = None,
 ) -> Page[LeadRead]:
-    """Approved and not suppressed. A sales rep only ever sees what is assigned to them."""
+    """Approved and not suppressed. A sales rep only ever sees what is assigned to them.
+
+    `discovered_within_days` narrows to businesses **first found** within that many days —
+    see `provenance.discovered_within` for why that is not "last seen".
+    """
     stmt: Select[Any] = (
         select(Opportunity, Business)
         .join(Business, Business.id == Opportunity.business_id)
@@ -1044,6 +1065,7 @@ def list_leads(
         stmt = stmt.where(Opportunity.service == service)
     if city:
         stmt = stmt.where(func.lower(Business.city) == city.lower())
+    stmt = provenance.discovered_within(stmt, discovered_within_days, now=now)
     if cursor:
         after_at, after_id = _decode_lead_cursor(cursor)
         stmt = stmt.where(
@@ -1063,9 +1085,17 @@ def list_leads(
     people = _emails(session, [o.decided_by for o, _ in rows] + [o.assigned_to for o, _ in rows])
     outputs = _ai_outputs(session, [o for o, _ in rows])
     crm_blocks = crm.status_blocks(session, [business.id for _, business in rows])
+    sources = provenance.source_codes(session, [business.id for _, business in rows])
     return Page[LeadRead](
         items=[
-            _lead(opportunity, business, people, outputs, crm_blocks.get(business.id))
+            _lead(
+                opportunity,
+                business,
+                people,
+                outputs,
+                crm_blocks.get(business.id),
+                sources.get(business.id, []),
+            )
             for opportunity, business in rows
         ],
         next_cursor=next_cursor,
@@ -1110,8 +1140,18 @@ def lead_detail(
     crm_block = crm.status_blocks(session, [business.id]).get(business.id)
     return LeadDetail(
         crm_history=crm.attempts_for(session, crm_block.id) if crm_block is not None else [],
-        lead=_lead(row, business, people, outputs, crm_block),
+        lead=_lead(
+            row,
+            business,
+            people,
+            outputs,
+            crm_block,
+            provenance.source_codes(session, [business.id]).get(business.id, []),
+        ),
         business=businesses.detail(session, business),
+        sources=provenance.source_records(session, business.id),
+        linked_profiles=provenance.linked_profiles(latest),
+        ai_enabled=config.ai_enabled,
         audit=audits.detail(latest, include_page_text=False) if latest is not None else None,
         opportunity=_review_opportunity(
             session,
@@ -1133,7 +1173,9 @@ def _lead(
     people: dict[uuid.UUID, str],
     outputs: dict[uuid.UUID, dict[str, Any]],
     crm_block: CrmLeadStatusRead | None = None,
+    sources: list[str] | None = None,
 ) -> LeadRead:
+    """`sources` is the business's distinct source codes, for the leads list's column."""
     rule_reason, ai_rationale = split_reason(opportunity, _output_of(opportunity, outputs))
     return LeadRead(
         opportunity_id=opportunity.id,
@@ -1157,6 +1199,7 @@ def _lead(
         top_evidence=opportunity.evidence[0] if opportunity.evidence else None,
         rule_reason=rule_reason,
         ai_rationale=ai_rationale,
+        sources=sources or [],
         crm=crm_block,
     )
 

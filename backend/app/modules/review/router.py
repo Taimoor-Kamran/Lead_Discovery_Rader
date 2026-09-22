@@ -28,6 +28,10 @@ review_router = APIRouter(prefix="/opportunities", tags=["review"])
 decisions_router = APIRouter(prefix="/review-decisions", tags=["review"])
 leads_router = APIRouter(prefix="/leads", tags=["review"])
 
+# The widest "found within" window either list accepts: ten years, which is a bound on the
+# parameter rather than a product decision. The UI offers 1, 3, 7 and 30 days.
+MAX_RECENCY_DAYS = 3650
+
 # Blueprint slide 7. Reading the queue: everyone who checks or exports the machine's work.
 # Deciding: reviewers (and admins, who pass every `require_role`). Sales reps see leads.
 QueueReader = Annotated[
@@ -49,10 +53,17 @@ def review_queue(
     min_score: Annotated[float | None, Query(ge=0.0, le=1.0)] = None,
     include_weak: Annotated[bool, Query()] = False,
     q: Annotated[str | None, Query(max_length=200)] = None,
+    discovered_within_days: Annotated[int | None, Query(ge=1, le=MAX_RECENCY_DAYS)] = None,
     limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
     cursor: Annotated[str | None, Query()] = None,
 ) -> Page[QueueItem]:
-    """Businesses with open opportunities, best score first. Weak signals hidden by default."""
+    """Businesses with open opportunities, best score first. Weak signals hidden by default.
+
+    `discovered_within_days=N` keeps only businesses **first found within N days** — the
+    earliest `discovered_at` of the records behind the business, not the last time a source
+    handed the same record over again. It composes with every other filter with AND, and is
+    re-applied on each page, so a cursor never widens the window.
+    """
     return service.review_queue(
         session,
         status=status,
@@ -63,6 +74,7 @@ def review_queue(
         min_score=min_score,
         include_weak=include_weak,
         q=q,
+        discovered_within_days=discovered_within_days,
         limit=limit,
         cursor=cursor,
     )
@@ -103,16 +115,24 @@ def list_leads(
     service_key: Annotated[str | None, Query(alias="service")] = None,
     assigned_to: Annotated[uuid.UUID | None, Query()] = None,
     city: Annotated[str | None, Query()] = None,
+    discovered_within_days: Annotated[int | None, Query(ge=1, le=MAX_RECENCY_DAYS)] = None,
     limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
     cursor: Annotated[str | None, Query()] = None,
 ) -> Page[LeadRead]:
-    """Approved, unsuppressed opportunities. A sales rep sees only their own."""
+    """Approved, unsuppressed opportunities. A sales rep sees only their own.
+
+    `discovered_within_days=N` keeps only businesses **first found within N days** — the
+    earliest `discovered_at` of the records behind the business, not the last time a source
+    handed the same record over again. It composes with every other filter with AND, and is
+    re-applied on each page, so a cursor never widens the window.
+    """
     return service.list_leads(
         session,
         actor=actor,
         service=service_key,
         assigned_to=assigned_to,
         city=city,
+        discovered_within_days=discovered_within_days,
         limit=limit,
         cursor=cursor,
     )
