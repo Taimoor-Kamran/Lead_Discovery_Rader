@@ -165,6 +165,14 @@ One implementation each, in `frontend/src/components/ui/`, each with a test in t
 | `PageHeader` | `h1`, one sentence of description, and an actions slot |
 | `Pagination` | the "load more" / count row under a table |
 
+Two page-level blocks live in `frontend/src/components/review/` rather than in `ui/`, because
+they carry wording that is part of what they mean:
+
+| Component | Notes |
+|---|---|
+| `SourceProvenance` | "Where this came from": one entry per discovered record, plus the profiles the business's own homepage links to, under wording that attributes them to that homepage |
+| `SourceCell` | the same sources, compact, for a list row |
+
 ## The review detail layout
 
 **Before:** three columns of equal weight — business facts, website audit, and a stack of
@@ -219,7 +227,10 @@ guesses. Reviewers are the only people who see both words.
 - Empty states name the next action:
   - Review queue (nothing at all): *"Nothing to review. Run a search to find businesses."* with
     a link to Searches. With filters applied it stays *"Nothing to review with these filters."*
-    — the reviewer's next action there is to widen the filters, not to run a search.
+    — the reviewer's next action there is to widen the filters, not to run a search. With a
+    **Found within** window applied it names the window instead — *"Nothing was first found in
+    the last 24 hours."* — and offers both ways forward, *Show any time* and Searches, because
+    "nothing recently" and "nothing at all" call for different next moves.
   - My leads: *"No leads yet. A reviewer assigns leads to you."*
   - CRM: *"Nothing waiting. Approved leads appear here 30 minutes after approval."*
 - Errors state the cause **and** the fix, e.g. *"Couldn't reach the API. Check that the api
@@ -230,10 +241,36 @@ guesses. Reviewers are the only people who see both words.
   arg. **Not** `NODE_ENV`: both stacks run the same production Next image, so it reads
   "production" after a plain `make up` too.
 - **Codes are read, not shown.** Anything the API speaks as a code — industry, website kind,
-  business status, service, finding, severity — is rendered through `lib/labels.ts` (`plumbing` →
-  *Plumbing*, `own_site` → *Own website*, `operational` → *Open*), with the raw code kept in the
-  element's `title` so a reviewer can still match the screen to the API. The exception is the
-  field-provenance table, which is *about* the stored values and so shows them verbatim.
+  business status, service, finding, severity, source, social platform, buying intent,
+  classification status — is rendered through `lib/labels.ts` (`plumbing` → *Plumbing*,
+  `own_site` → *Own website*, `operational` → *Open*, `google_places` → *Google Places*), with
+  the raw code kept in the element's `title` so a reviewer can still match the screen to the
+  API. The exception is the field-provenance table, which is *about* the stored values and so
+  shows them verbatim.
+
+  Two guards hold this, and both are stated as the **rule** rather than as a list of known-bad
+  spellings — v0.9.0's grep for `·` missed a `join("; ")`, which is the same defect in wording
+  the grep did not know:
+
+  - `backend/tests/unit/test_label_coverage.py` — every code the backend can emit (the adapter
+    registry, the social-platform signatures, every enum) has an entry in `lib/labels.ts`;
+  - `frontend/src/test/labels.test.tsx` — every snake_case value in the payload a page was given
+    must not appear in that page's rendered prose, and **no single text node may contain two
+    values of the same multi-valued field**, which fails any separator alike. Each guard has a
+    test that it fails on the defect it exists to catch.
+
+- **A list is rendered as elements, never joined into a sentence.** The AI summary's unknowns
+  are `<li>`s, a business's sources are `<li>`s, and the queue's source column is a list. A
+  reader has to be able to tell where one value ends.
+
+- **"Where this came from" answers a sales question, not a developer's.** The block on review
+  detail and lead detail names each source in words, links to the source record and gives both
+  when it was first found and when it was last seen again — one entry per contributing
+  discovered record, not one per survivorship winner. Profiles the business's own homepage
+  links to sit under their own heading, *Linked from their website*, with the page they were
+  read on and the sentence "None of these profiles was opened or read". That wording is not
+  decoration: a prospect who sees "Facebook" on their record will ask whether their Facebook
+  page was read, and the answer has to be visible before they ask.
 
 ## What was rejected, and why
 

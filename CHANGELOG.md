@@ -3,6 +3,63 @@
 All notable changes, one section per merged spec. Newest first.
 Format: `## [vX.Y.Z] - YYYY-MM-DD` followed by Added / Changed / Fixed.
 
+## [v0.10.0] - 2026-09-22
+
+### Added
+
+- **"Where this came from"** on the review detail and lead detail pages: the source named
+  in plain words (*Google Places*, not `google_places`, with the code in the tooltip), a
+  link to the source record, when it was first found and when it was last seen again —
+  one entry per contributing discovered record, so a business built from two records
+  answers for both rather than only for the survivorship winner.
+- **Profiles linked from the business's own website**, under that heading, from the
+  `social_links` check the v0.4.0 audit already records. Each platform is named and linked
+  where the stored evidence yields a link; the block says which page the links were read on
+  and that none of the profiles was opened. No social-media source was added, and none is
+  ever fetched.
+- **A source column** on the review queue and the leads list, and `sources` on
+  `GET /review-queue`, `GET /leads` and both detail endpoints.
+- **`lib/labels.ts` gains source, social-platform, buying-intent and AI-status labels.**
+  `backend/tests/unit/test_label_coverage.py` fails when a registered source — or any enum
+  the API emits — has no wording, so a new adapter cannot silently ship a raw code.
+- **A "Found within" filter** (24 hours · 3 days · 7 days · 30 days · Any time) on both
+  lists, backed by `discovered_within_days` on `GET /review-queue` and `GET /leads`. It
+  measures the business's **earliest** `discovered_at` — "first found within N days", not
+  "last seen" — composes with every other filter and is re-applied on each page, so a
+  cursor never widens the window. An empty result under a narrow window says so and names
+  the next action instead of showing a blank table.
+- **Rules-only as a supported configuration.** `AI_PROVIDER=disabled` is explicitly allowed
+  in production by `app/core/startup.py` (the allowlist is `openai` and `disabled`), with a
+  test per rule so it cannot be tidied into the refusal list next to `fake`. With it off the
+  UI shows no AI furniture — no summary box, no rationale line, no AI details disclosure —
+  `/admin/health` and the search cost estimate report *AI is off* rather than 0 calls
+  against an unused budget, and a rules-only opportunity's badge reads **Rules**. An
+  opportunity stored while the model was on keeps its recorded *Rules + AI* badge, because
+  rewriting that would be inventing provenance. No AI code was removed;
+  `AI_PROVIDER=openai` behaves exactly as before, and both directions are tested.
+- **Guard tests stated as rules, not as lists of known-bad spellings**
+  (`frontend/src/test/labels.test.tsx`): every snake_case value in the API response is
+  collected from the payload and must not appear in the page's visible prose, and no single
+  text node may hold two values of the same multi-valued field — which fails `join("; ")`,
+  `join(" · ")` and any other separator alike. Each guard has a test that it fails on the
+  defect it is meant to catch. `backend/tests/unit/test_outbound_hosts.py` freezes the set
+  of hosts the source code names, so a new outbound host cannot appear without a decision.
+
+### Changed
+
+- The AI summary's **unknowns** render as a list instead of a semicolon-joined run-on, and
+  **buying intent** and the **classification status** are read in words with the code in the
+  tooltip (both carried over from v0.9.0).
+- `.env.prod.example` now ships `AI_PROVIDER=disabled`; `docs/operations.md` has a section on
+  running without the AI layer and on turning it on later.
+- `CLAUDE.md`: a box whose verification is manual may only be ticked by the human who
+  performed it.
+
+### Fixed
+
+- `buying_intent` rendered as the raw code `none_detected` on the review detail page,
+  breaking v0.9.0's own "codes are read, not shown" rule.
+
 ## [v0.9.0] - 2026-09-21
 
 ### Added

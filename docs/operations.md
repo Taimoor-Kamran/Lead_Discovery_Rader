@@ -43,6 +43,31 @@ Every `make` target takes `PROD=1` to point at it (`make migrate PROD=1`, `make 
 Demo data, demo users and the fake CRM/AI providers do not exist in production: the
 commands refuse (`APP_ENV is 'production' … refused`) and the settings are rejected at start.
 
+## The AI layer is optional
+
+`AI_PROVIDER=disabled` is the **MVP default**, and `.env.prod.example` ships with it. It is a
+supported production configuration in its own right, not a degraded one: `app/core/startup.py`
+allows exactly `openai` and `disabled` in production and refuses everything else, and there is
+a test per rule so `disabled` cannot be tidied into the refusal list beside `fake`.
+
+With it off:
+
+- the deterministic rules produce the opportunities, exactly as they have since v0.5.0.
+  A classification run still finishes `done`, with `ai_calls 0`;
+- nothing is sent to any model, and nothing is spent;
+- the UI shows no AI furniture — no AI summary box, no AI rationale line, no AI provenance
+  disclosure — and an opportunity produced by a rules-only run carries the badge **Rules**.
+  An opportunity stored back when the model was on keeps its recorded **Rules + AI** badge:
+  that claim did come from both, and rewriting it would be inventing provenance;
+- **Health** reports *AI is off* instead of 0 calls against a budget nobody is using, and the
+  search cost estimate says the same.
+
+To turn the model on: set `OPENAI_API_KEY`, `AI_TRIAGE_MODEL` and `AI_ESCALATION_MODEL`, set
+`AI_PROVIDER=openai`, put a monthly spend limit on the key in the OpenAI dashboard, run
+`make ai-smoke` once, then `make prod-up`. Nothing else changes, and switching back to
+`disabled` is the same edit in reverse — no data is lost either way, because no AI code is
+removed and every stored classification stays where it is.
+
 ## Where data lives
 
 - The database: the `radar-prod_postgres-data-prod` volume. `make down PROD=1 ARGS=-v` deletes

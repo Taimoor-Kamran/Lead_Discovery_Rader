@@ -43,11 +43,21 @@ test("reviewer approves a lead, the rep sees it, do-not-contact removes a busine
     await expect(chip).toHaveCount(1);
     await expect(chip).toContainText(/Score \d{1,3}$/);
     await expect(row).not.toContainText("website_design");
+    // v0.10.0: the source column names the source in words, never as its code.
+    await expect(row.getByTestId("source-cell")).toContainText("Demo fixture");
+    await expect(row).not.toContainText("demo_fixture");
     await row.getByRole("link", { name: /Barton Creek/ }).click();
     await expect(page.getByRole("heading", { level: 1 })).toContainText(BARTON);
     await expect(page.getByTestId("ai-label").first()).toBeVisible();
     await expect(page.getByTestId("open-summary")).toContainText("Website redesign");
     await expect(page.getByText("(512) 555-0102")).toBeVisible();
+
+    // v0.10.0: "where did you get my details?", answerable without a developer table.
+    const provenance = page.getByTestId("source-provenance");
+    await expect(provenance).toContainText("Where this came from");
+    await expect(provenance.getByTestId("source-name").first()).toHaveText("Demo fixture");
+    await expect(provenance).toContainText("First found");
+    await expect(provenance).not.toContainText("demo_fixture");
 
     const card = page.getByTestId("opportunity-card").filter({ hasText: "Website redesign" });
     await expect(card.getByTestId("rule-reason")).toBeVisible();
@@ -78,6 +88,8 @@ test("reviewer approves a lead, the rep sees it, do-not-contact removes a busine
     await expect(page.getByTestId("approval")).toContainText("reviewer@example.com");
     await expect(page.getByTestId("approval")).toContainText("rep1@example.com");
     await expect(page.getByTestId("finding").first()).toBeVisible();
+    // The same answer, on the page a rep has open when a prospect asks (v0.10.0 §1).
+    await expect(page.getByTestId("source-provenance")).toContainText("Where this came from");
     await expect(page.getByTestId("lead-detail").getByRole("button")).toHaveCount(0);
     await page.getByRole("link", { name: "← Leads" }).click();
     await expect(page).toHaveURL(/\/leads$/);
@@ -100,6 +112,26 @@ test("reviewer approves a lead, the rep sees it, do-not-contact removes a busine
     await page.goto("/review");
     await page.getByLabel("Search").fill(name);
     await expect(page.getByText("Nothing to review with these filters.")).toBeVisible();
+    await signOut(page);
+  });
+
+  await test.step("the Found within filter narrows the queue and says so when nothing is left", async () => {
+    await signIn(page, "reviewer@example.com");
+    await expect(page.getByTestId("queue-row").first()).toBeVisible();
+
+    // How old the demo records are depends on when this machine first loaded them, so the
+    // assertion is on the *behaviour*: a 24-hour window either leaves rows or says, in
+    // words, that nothing was found that recently — never a blank table.
+    await page.getByLabel("Found within").selectOption("1");
+    await expect(
+      page
+        .getByTestId("queue-row")
+        .first()
+        .or(page.getByText("Nothing was first found in the last 24 hours.")),
+    ).toBeVisible();
+
+    await page.getByLabel("Found within").selectOption("");
+    await expect(page.getByTestId("queue-row").first()).toBeVisible();
     await signOut(page);
   });
 
