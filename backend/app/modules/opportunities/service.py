@@ -457,7 +457,9 @@ def _attempt_tier(
                 tokens_in=tokens_in,
                 tokens_out=tokens_out,
                 est_cost_usd=result.cost if result.calls else None,
-                latency_ms=latency,
+                # A failed call still took time; without its own latency the row read 0
+                # for every one of the production 400s (spec v0.9.0).
+                latency_ms=latency + exc.latency_ms,
                 error=str(exc),
                 now=now,
             )

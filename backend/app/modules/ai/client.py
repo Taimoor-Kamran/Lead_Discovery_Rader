@@ -42,12 +42,25 @@ class LLMResult:
 
 
 class LLMError(Exception):
-    """The provider did not answer usefully. `retryable` says whether trying again could help."""
+    """The provider did not answer usefully. `retryable` says whether trying again could help.
 
-    def __init__(self, message: str, *, retryable: bool = False, status_code: int | None = None):
+    `latency_ms` is how long the failed call took. A failure costs real time — it is a
+    timeout, or a round trip that ended in a 400 — and recording it as 0 makes a run that
+    spent a minute failing look instant (spec v0.9.0, the production 400s).
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        retryable: bool = False,
+        status_code: int | None = None,
+        latency_ms: int = 0,
+    ):
         super().__init__(message)
         self.retryable = retryable
         self.status_code = status_code
+        self.latency_ms = latency_ms
 
 
 class LLMClient(Protocol):
