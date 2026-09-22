@@ -122,6 +122,29 @@ all traced from `logs/worker.log`.
   shell, over opportunities that were never classified. It now names what did not finish
   and returns 1, as `reset-demo-data` always has.
 
+Found later, during real-data testing, and **recorded here pending a decision on where it
+belongs** — it is not part of the design pass, and specs/v0.9.0.md Part G recommends a
+spec of its own:
+
+- **Every real classification call was rejected with a 400.** `OpenAIClient` sent
+  `temperature=0`, which this model family refuses: *"Unsupported value: 'temperature'
+  does not support 0 with this model. Only the default (1) value is supported."* One
+  production run classified 18 businesses with `ai_errors: 14`, `ai_calls: 0` and
+  `est_cost_usd: 0` — nothing was billed because nothing reached the model. `temperature`
+  is now omitted rather than pinned to the default, and a test asserts the request body
+  carries neither it nor `max_tokens`. No output cap was added: the client never sent
+  one, so `max_tokens` was never the problem, and too low a cap truncates a strict-schema
+  answer mid-JSON. **Consequence:** classification output is no longer nudged towards
+  determinism. The `input_hash` reuse cache keys and hits exactly as before, but a hit now
+  pins the first answer rather than approximating a fresh one; the guardrails, which strip
+  unsupported claims, become the load-bearing defence and their trim rate will vary run to
+  run; the strict JSON schema still fixes the answer's shape. See Part G for the detail.
+- **A provider error now records why it failed, and how long it took.** All 14 failures
+  stored only `OpenAI answered 400: BadRequestError` with `latency_ms` 0 — the response
+  body naming the offending parameter was discarded, and the elapsed time lived only on
+  the success path. `LLMError` now carries the provider's `message`, `param` and `code`
+  (truncated) and the failed call's latency, and both reach the `ai_classifications` row.
+
 ## [v0.8.0] - 2026-09-20
 
 ### Added
