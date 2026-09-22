@@ -19,7 +19,7 @@ from app.modules.businesses.models import Business
 from app.modules.jobs.models import JobRun, JobRunStatus
 from app.modules.normalization.schemas import BusinessStatus, WebsiteKind
 from app.modules.opportunities import service
-from app.modules.opportunities.models import Opportunity, ReviewStatus
+from app.modules.opportunities.models import Opportunity, OpportunitySource, ReviewStatus
 from app.modules.opportunities.service import CLASSIFICATION_JOB_KIND, ClassificationTools
 from app.modules.opportunities.worker import run_classification
 from app.workers import tasks
@@ -504,6 +504,37 @@ def test_one_failing_business_never_fails_the_run(
     assert summary["ai_errors"] == 1
     assert set(opportunities_of(db, good)) == {"booking_setup"}
     assert opportunities_of(db, bad) == {}
+
+
+def test_a_rules_only_run_finishes_done_with_no_ai_calls(
+    db: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`AI_PROVIDER=disabled` is a supported configuration, not a degraded run (v0.10.0 §3).
+
+    The run reaches `done`, the summary records `ai_calls 0`, and every business still gets
+    the opportunities the deterministic rules found — with `source = rules`, which is what
+    makes the review page's badge read *Rules* with nothing hidden or rewritten.
+    """
+    tools = ClassificationTools(llm=None, budget=None, settings=Settings(), provider="disabled")
+    monkeypatch.setattr(ClassificationTools, "build", classmethod(lambda cls, **_: tools))
+    businesses = [make_business(db, name=f"B{i}") for i in range(2)]
+    parent = audit_run(db, businesses)
+    run = service.enqueue_classification_for_run(db, parent.id)
+
+    assert tasks.execute_job_run(run.id) is JobRunStatus.done
+    db.expire_all()
+
+    summary = (db.get(JobRun, run.id) or run).result_summary or {}
+    assert summary["businesses"] == 2
+    assert summary["ai_calls"] == 0
+    assert summary["ai_errors"] == 0
+    assert summary["opportunities_created"] == 2
+    for business in businesses:
+        rows = opportunities_of(db, business)
+        assert set(rows) == {"booking_setup"}
+        assert rows["booking_setup"].source is OpportunitySource.rules
+        [classification] = classifications_of(db, business)
+        assert classification.status.value == "skipped_disabled"
 
 
 def test_exceeding_the_daily_budget_skips_ai_but_finishes_the_run(
