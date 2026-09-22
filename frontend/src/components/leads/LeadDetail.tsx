@@ -9,6 +9,7 @@ import { EvidenceList, type Evidence } from "@/components/review/EvidenceList";
 import { FindingList, type Finding } from "@/components/review/FindingList";
 import { PsiPanel } from "@/components/review/PsiPanel";
 import { ReasonLines } from "@/components/review/ReasonLines";
+import { SourceProvenance } from "@/components/review/SourceProvenance";
 import { Badge, Card, Chip, PageHeader, SkeletonLines, useToast } from "@/components/ui";
 import { ApiError, getLeadDetail, retryCrmLead, type LeadDetail as LeadDetailData } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -153,7 +154,7 @@ export function LeadDetail({ opportunityId }: { opportunityId: string }) {
           <div className="mt-3">
             <ReasonLines
               ruleReason={opportunity.rule_reason}
-              aiRationale={opportunity.ai_rationale}
+              aiRationale={detail.ai_enabled === false ? null : opportunity.ai_rationale}
               fallback={opportunity.reason}
             />
           </div>
@@ -188,6 +189,10 @@ export function LeadDetail({ opportunityId }: { opportunityId: string }) {
           )}
         </Card>
       </div>
+
+      {/* The answer to "where did you get my details?", on the page a rep has open when
+          they are asked it. */}
+      <SourceProvenance sources={detail.sources} linkedProfiles={detail.linked_profiles} />
 
       <div className="print-tight grid grid-cols-1 gap-5 lg:grid-cols-2">
         <Card className="print-break-avoid print-plain">

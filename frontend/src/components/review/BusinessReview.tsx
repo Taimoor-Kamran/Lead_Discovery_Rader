@@ -20,6 +20,7 @@ import { BusinessFacts } from "@/components/review/BusinessFacts";
 import { DecisionDialog, type Assignee, type DecisionFields } from "@/components/review/DecisionDialog";
 import { OPEN_STATUSES, OpportunityCard, opportunityAnchor } from "@/components/review/OpportunityCard";
 import { ShortcutsHelp } from "@/components/review/ShortcutsHelp";
+import { SourceProvenance } from "@/components/review/SourceProvenance";
 import { useShortcuts } from "@/hooks/useShortcuts";
 import {
   ApiError,
@@ -271,8 +272,13 @@ export function BusinessReview({ businessId }: { businessId: string }) {
       >
         <div className="order-2 flex min-w-0 flex-col gap-5 lg:order-1">
           <BusinessFacts detail={detail} />
+          <SourceProvenance sources={detail.sources} linkedProfiles={detail.linked_profiles} />
           <AuditPanel detail={detail} />
-          <AiSummaryBox ai={detail.ai} />
+          {/* Rules-only is a supported configuration, so with AI off there is no empty box
+              where an AI answer would have gone (spec v0.10.0 §3). Only an explicit `false`
+              hides it: a response that does not carry the flag must not hide what the model
+              did say. */}
+          {detail.ai_enabled === false ? null : <AiSummaryBox ai={detail.ai} />}
         </div>
 
         <div className="order-1 flex min-w-0 flex-col gap-3 lg:order-2 lg:sticky lg:top-4 lg:self-start">
@@ -302,6 +308,7 @@ export function BusinessReview({ businessId }: { businessId: string }) {
               <OpportunityCard
                 key={opportunity.id}
                 opportunity={opportunity}
+                aiEnabled={detail.ai_enabled !== false}
                 focused={index === focused}
                 canDecide={decider && !detail.suppressed}
                 busy={busy}

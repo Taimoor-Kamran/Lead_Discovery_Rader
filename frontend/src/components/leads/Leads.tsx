@@ -6,7 +6,9 @@ import { ErrorNote } from "@/components/ErrorNote";
 import { SafeLink } from "@/components/SafeLink";
 import { CrmBadge } from "@/components/crm/CrmBadge";
 import { ReasonLines } from "@/components/review/ReasonLines";
+import { SourceCell } from "@/components/review/SourceProvenance";
 import {
+  Button,
   Card,
   EmptyState,
   PageHeader,
@@ -22,12 +24,24 @@ import {
   Tr,
   useToast,
 } from "@/components/ui";
-import { ApiError, getLeads, retryCrmLead, SERVICES, type LeadRead } from "@/lib/api";
+import {
+  ApiError,
+  getLeads,
+  RECENCY_OPTIONS,
+  retryCrmLead,
+  SERVICES,
+  type LeadRead,
+} from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { loadFailed } from "@/lib/errors";
 import { formatDateTime, formatPhone, place, score } from "@/lib/format";
 import { serviceLabel } from "@/lib/labels";
 import { canManageCrm, canSeeAllLeads } from "@/lib/roles";
+
+/** The chosen window in the words the control used, for the empty state's first line. */
+function withinWords(within: string): string {
+  return RECENCY_OPTIONS.find((option) => option.value === within)?.label ?? `${within} days`;
+}
 
 export function Leads() {
   const { user } = useAuth();
@@ -38,6 +52,7 @@ export function Leads() {
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [service, setService] = useState("");
   const [rep, setRep] = useState("");
+  const [within, setWithin] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const seesAll = user ? canSeeAllLeads(user.role) : false;
@@ -49,6 +64,7 @@ export function Leads() {
         const page = await getLeads({
           service: service || undefined,
           assigned_to: seesAll && rep ? rep : undefined,
+          discovered_within_days: within ? Number(within) : undefined,
           cursor,
         });
         setItems((current) => (cursor ? [...current, ...page.items] : page.items));
@@ -60,7 +76,7 @@ export function Leads() {
         setLoading(false);
       }
     },
-    [service, rep, seesAll],
+    [service, rep, within, seesAll],
   );
 
   useEffect(() => {
@@ -117,16 +133,30 @@ export function Leads() {
               ))}
             </Select>
           ) : null}
+          {/* The window is measured on when the business was first found, not on when it
+              was approved — the same semantics the review queue uses. */}
+          <Select
+            label="Found within"
+            value={within}
+            onChange={(event) => setWithin(event.target.value)}
+          >
+            {RECENCY_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </Select>
         </div>
       </Card>
 
       {error ? <ErrorNote>{error}</ErrorNote> : null}
 
       <TableWrap>
-        <Table minWidth="66rem">
+        <Table minWidth="74rem">
           <THead>
             <tr>
               <Th>Business</Th>
+              <Th>Source</Th>
               <Th>Service</Th>
               <Th numeric className="w-20">
                 Score
@@ -139,16 +169,27 @@ export function Leads() {
             </tr>
           </THead>
           <TBody>
-            {loading && !items.length ? <SkeletonTableRows rows={5} columns={8} /> : null}
+            {loading && !items.length ? <SkeletonTableRows rows={5} columns={9} /> : null}
             {!loading && !items.length ? (
               <tr>
-                <td colSpan={8}>
+                <td colSpan={9}>
                   <EmptyState
-                    title="No leads yet."
+                    title={
+                      within
+                        ? `No lead here was first found in the last ${withinWords(within)}.`
+                        : "No leads yet."
+                    }
                     description={
-                      seesAll
-                        ? "A lead appears here once a reviewer approves an opportunity."
-                        : "A reviewer assigns leads to you."
+                      within
+                        ? "Widen the window to see the rest of your leads."
+                        : seesAll
+                          ? "A lead appears here once a reviewer approves an opportunity."
+                          : "A reviewer assigns leads to you."
+                    }
+                    action={
+                      within ? (
+                        <Button onClick={() => setWithin("")}>Show any time</Button>
+                      ) : undefined
                     }
                   />
                 </td>
@@ -166,6 +207,9 @@ export function Leads() {
                   <div className="text-sm text-ink-soft" data-testid="lead-place">
                     {place(lead.city, lead.state)}
                   </div>
+                </Td>
+                <Td className="text-ink-soft">
+                  <SourceCell codes={lead.sources} />
                 </Td>
                 <Td title={lead.service}>{serviceLabel(lead.service)}</Td>
                 <Td numeric title={`raw ${lead.score}`}>

@@ -15,6 +15,7 @@ import {
   THead,
   Tr,
 } from "@/components/ui";
+import { SourceCell } from "@/components/review/SourceProvenance";
 import type { QueueItem } from "@/lib/api";
 import { formatDateTime, percent, place, score } from "@/lib/format";
 import { auditStatusLabel, findingLabel, industryLabel, serviceLabel } from "@/lib/labels";
@@ -58,15 +59,16 @@ export function QueueTable({
   empty,
 }: Props) {
   const checkboxClass = showWeak ? "" : HOVER_ONLY;
-  const columns = canSelect ? 7 : 6;
+  const columns = canSelect ? 8 : 7;
   return (
     <TableWrap>
-      <Table minWidth="60rem">
+      <Table minWidth="68rem">
         <THead>
           <tr>
             {canSelect ? <Th className="w-8" aria-label="Select" /> : null}
             <Th>Business</Th>
             <Th>Industry</Th>
+            <Th>Source</Th>
             <Th>Opportunities</Th>
             <Th>Audit</Th>
             <Th>Top findings</Th>
@@ -117,6 +119,9 @@ export function QueueTable({
                 </Td>
                 <Td className="text-ink-soft" title={item.industry ?? undefined}>
                   {industryLabel(item.industry)}
+                </Td>
+                <Td className="text-ink-soft">
+                  <SourceCell codes={item.sources} />
                 </Td>
                 <Td>
                   <ul className="flex flex-wrap gap-1">
