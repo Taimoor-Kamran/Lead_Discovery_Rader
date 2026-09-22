@@ -11,6 +11,7 @@ is the active spec in `specs/`. Source of truth for *why* is the Technical Bluep
 3. Work through the **Tasks** checklist top to bottom. Tick each box (`- [ ]` → `- [x]`) in the spec file
    **only after** the code exists and its tests pass.
 4. Tick **Acceptance criteria** boxes only after you have verified each one (by a test where possible).
+   A box whose verification is **manual** may only be ticked by the human who performed it — never by you.
 5. Run `make check` often. Do not finish while any box is unticked or `make check` fails —
    a Stop hook enforces this.
 6. Commit in small, logical commits on the current branch using Conventional Commits,
