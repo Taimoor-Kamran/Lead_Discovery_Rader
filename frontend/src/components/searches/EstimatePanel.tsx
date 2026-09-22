@@ -30,17 +30,21 @@ export function EstimatePanel({ estimate }: { estimate: CostEstimate | null }) {
           </span>
         </dd>
         <dt className="text-ink-soft">AI calls (at most)</dt>
+        {/* With AI off there is no call count and no budget to draw down: saying "0 of $2.00
+            left" would imply a budget this run is using. */}
         <dd data-testid="est-ai">
           {estimate.ai_enabled ? (
             <>
-              <span className="font-mono tabular-nums">{estimate.ai_calls}</span> via {estimate.ai_provider}
+              <span className="font-mono tabular-nums">{estimate.ai_calls}</span> via{" "}
+              {estimate.ai_provider}
+              <span className="ml-2 text-sm text-ink-soft">
+                {money(estimate.ai_budget_remaining_usd)} of {money(estimate.ai_budget_usd)} budget
+                left today
+              </span>
             </>
           ) : (
-            "AI is disabled"
+            "AI is off — this run costs nothing beyond the calls above"
           )}
-          <span className="ml-2 text-sm text-ink-soft">
-            {money(estimate.ai_budget_remaining_usd)} of {money(estimate.ai_budget_usd)} budget left today
-          </span>
         </dd>
       </dl>
       {estimate.blockers.length ? (

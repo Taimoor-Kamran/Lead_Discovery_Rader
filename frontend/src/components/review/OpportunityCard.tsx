@@ -5,7 +5,7 @@ import { ReasonLines } from "@/components/review/ReasonLines";
 import { Badge, type BadgeTone, Button, Card, cx, Disclosure, Tooltip } from "@/components/ui";
 import type { Decision, ReviewDecisionRead, ReviewOpportunity } from "@/lib/api";
 import { DECISION_LABELS, formatDateTime, percent, REASON_LABELS, score, STATUS_LABELS } from "@/lib/format";
-import { serviceLabel, sourceLabel } from "@/lib/labels";
+import { aiStatusLabel, serviceLabel, sourceLabel } from "@/lib/labels";
 
 const SOURCE_TONE: Record<string, BadgeTone> = {
   rules: "neutral",
@@ -38,6 +38,8 @@ export function opportunityAnchor(id: string): string {
 
 type Props = {
   opportunity: ReviewOpportunity;
+  /** With the AI layer off, no AI element renders here at all (spec v0.10.0 §3). */
+  aiEnabled?: boolean;
   focused: boolean;
   canDecide: boolean;
   busy: boolean;
@@ -52,6 +54,7 @@ type Props = {
  */
 export function OpportunityCard({
   opportunity,
+  aiEnabled = true,
   focused,
   canDecide,
   busy,
@@ -136,7 +139,7 @@ export function OpportunityCard({
             AI item — not as a banner over the whole card. */}
         <ReasonLines
           ruleReason={opportunity.rule_reason}
-          aiRationale={opportunity.ai_rationale}
+          aiRationale={aiEnabled ? opportunity.ai_rationale : null}
           fallback={opportunity.reason}
         />
 
@@ -170,7 +173,7 @@ export function OpportunityCard({
           <span className="text-right font-mono font-medium tabular-nums">{score(opportunity.score)}</span>
         </div>
 
-        {opportunity.ai ? (
+        {aiEnabled && opportunity.ai ? (
           <Disclosure summary="Details" testId="ai-details">
             <dl className="grid grid-cols-[7rem_1fr] gap-y-1 text-sm text-ink-soft">
               <dt>Model</dt>
@@ -178,8 +181,8 @@ export function OpportunityCard({
               <dt>Prompt</dt>
               <dd className="font-mono">{opportunity.ai.prompt_version}</dd>
               <dt>Status</dt>
-              <dd>
-                {opportunity.ai.status}
+              <dd title={opportunity.ai.status}>
+                {aiStatusLabel(opportunity.ai.status)}
                 {opportunity.ai.escalated ? " — escalated" : ""}
               </dd>
               {opportunity.ai_agrees === false ? (
