@@ -3,6 +3,146 @@
 All notable changes, one section per merged spec. Newest first.
 Format: `## [vX.Y.Z] - YYYY-MM-DD` followed by Added / Changed / Fixed.
 
+## [v0.9.0] - 2026-09-21
+
+### Added
+
+- **Design tokens** (`frontend/src/app/globals.css`): colour, type, space, radius,
+  elevation and motion as CSS variables. `tailwind.config.ts` **replaces** Tailwind's
+  palette, type scale, radii and shadows with them, so `bg-slate-50`, `text-2xl` and
+  `rounded-xl` no longer exist and a component cannot reach past the system.
+- **Self-hosted typefaces**: Public Sans (UI) and IBM Plex Mono (evidence, URLs, scores
+  and IDs) as latin subsets under `frontend/public/fonts`, `font-display: swap`. No font
+  CDN, so the Content-Security-Policy keeps `font-src 'self'`.
+- **Component layer** (`frontend/src/components/ui/`): Button, Input, Select, Checkbox,
+  Textarea, Table (sortable headers, tabular numerals, its own scroll container), Card,
+  Badge, SeverityDot, Chip, Dialog (focus trap, Esc, focus restored), Toast, Tabs
+  (arrow keys), Disclosure, Tooltip, Skeleton, EmptyState, PageHeader, Pagination — one
+  implementation each, each with a test.
+- **Accessibility**: a skip-to-content link, one visible focus ring everywhere, real
+  landmarks and one `h1` per page, and `src/test/axe.test.tsx` running axe-core over
+  login, the queue, review detail, leads, lead detail, CRM, searches and health with
+  zero serious or critical violations.
+- **Print stylesheet for `/leads/[opportunityId]`**: one A4 page, no navigation, the
+  phone and website as a letterhead, the evidence underneath.
+- **Guard tests**: `src/test/tokens.test.ts` (no raw hex, off-scale size, off-system
+  radius, stale palette class, all-caps label or `·`-joined string in any component, and
+  `globals.css` agrees with `src/lib/tokens.ts`) and `src/lib/contrast.test.ts` (all 26
+  token pairs the UI sets text on clear WCAG AA).
+- `docs/design.md` — tokens, type scale, component inventory, the two-column review
+  rationale, the opportunity/lead vocabulary rule and what was rejected and why.
+  `docs/design/before` and `docs/design/after` hold a screenshot of every screen at
+  1280 px; `make screenshots OUT=…` regenerates them.
+
+### Changed
+
+- **Review detail is a two-column argument** instead of three equal panels: who the
+  business is, what the audit found as one severity-ranked list (not six stacked cards)
+  and the AI summary on the left; the decision column, sticky, on the right.
+- Every screen was refitted: denser tables with the score as the rightmost column in
+  tabular figures, skeletons instead of "Loading…", empty states that name the next
+  action, and errors that state a cause and a fix ("Couldn't reach the API. Check that
+  the api container is running (`make ps`)."). That fix names the stack the build belongs
+  to — `make ps` in a development build, `make prod-ps` in a production one — from the new
+  `NEXT_PUBLIC_ENVIRONMENT` build arg, which compose fills from `ENVIRONMENT`.
+- **Codes are read, not shown.** Industry, website kind and business status join services,
+  findings and severities in `lib/labels.ts`: the facts panel says *Plumbing*, *Own
+  website* and *Open* where it used to print `plumbing`, `own_site` and `operational`,
+  with the raw code kept in the element's tooltip. The field-provenance table still shows
+  stored values verbatim, because that table is about the values themselves.
+- Sentence case throughout: no tracked-out all-caps labels, no eyebrows above headings,
+  and no `·`-joined meta strings — the health metrics read as sentences now.
+- `prefers-reduced-motion: reduce` switches off every transition and animation.
+- `components/Toast.tsx` moved to `components/ui/Toast.tsx`; its API is unchanged.
+
+### Fixed
+
+Seven bugs from the first real production run and the `make e2e` smoke that followed,
+all traced from `logs/worker.log`.
+
+- **The scheduler thread no longer shares a database connection with job execution.**
+  The worker runs the scheduler in a daemon thread *and* forks a work horse for every
+  job, and both used the one engine — so a connection the scheduler had used was copied
+  into a child that then wrote on the same socket. psycopg names its prepared statements
+  `_pg3_N` per connection and counts them client-side, so the two collided
+  (`DuplicatePreparedStatement`, `InvalidSqlStatementName`): "scheduler tick failed"
+  every five minutes, and a real discovery run killed after four places. The scheduler
+  now has its own `NullPool` engine, a forked child disposes the connections it
+  inherited (`os.register_at_fork`, `close=False`), and prepared statements are off on
+  every engine. *Verified in production:* the last `scheduler tick failed` and the last
+  `DuplicatePreparedStatement` are both 2026-09-21T21:24:02Z, 43 minutes before the
+  fixed worker started (22:07:59Z); none since, where before they landed on every
+  five-minute tick. The scheduler is live across that gap — `scheduled:crm-sync` 48 runs
+  done, `scheduled:watchdog` 36.
+- **No job run can be left `running` or `queued` with no error.** `execute_job_run`
+  wrote every outcome through the session the handler had just been using, and the two
+  transitions bracketing the handler sat outside the try — so a broken connection either
+  left a finished run `running` for ever or rolled it back out of `running` to `queued`
+  with nothing on the queue. `running` is now committed before any work starts, a
+  handler failure is recorded in its own session first (so an alert it wrote survives),
+  and anything that escapes an attempt is written to the run on a brand-new session.
+  `queued → failed` joins the state machine for the runs that died before they started.
+- **The watchdog finishes stuck runs of every kind, including `scheduled:*`.** It only
+  looked at `running`; a run abandoned in `queued` was invisible to it and, since the
+  scheduler skips a job whose previous run has not finished, blocked that job for good —
+  one `scheduled:crm-sync` run stopped every later CRM sync for a day. Those are now
+  failed with "queue lost", checked against RQ rather than guessed from the clock.
+  *Verified in production:* that same run, `910e22fd-741f-45f9-bf4a-92155576e2e5`, had
+  been `queued` for 23 h 51 m; the fixed worker's watchdog failed it at
+  2026-09-21T22:08:00Z with "queue lost" (`attempts=0` — it never started), one second
+  after the worker came up, and `crm-sync` has run every minute since.
+- **A discovery run broken partway through a page is retried instead of truncated.** The
+  run that stored 4 of 20 had the whole page in hand; it lost the other 16 to the crash
+  and was never retried. With the failure recorded properly the attempt retries, and
+  `store_raw` being an upsert means the retry ends with everything stored.
+- **A lost race on an opportunity no longer costs a business its classification.**
+  `upsert_opportunities` inserted everything it had not found in one flush, so a
+  `pending` row committed by anybody else in between violated
+  `uq_opportunities_pending_business_service`, aborted the transaction and threw the
+  business away ("classifying one business failed"). Each new row now goes in inside its
+  own savepoint; a conflict on that index means somebody opened the row first, so it is
+  taken over and updated. Any other integrity error is still raised. (The "anybody else"
+  turned out to be the sixth bug below, not the connection bug above.)
+- **A job run now has exactly one executor.** `reset-demo-data` and `load-demo-data`
+  queued their runs to RQ *and* executed them in the CLI process, so the worker claimed
+  the same rows. The second claimant raised `A job run cannot go from 'running' to
+  'running'` and then wrote `failed`, with an empty `result_summary`, over work the first
+  had already committed — which broke `make e2e` at its first step, and which is what was
+  really creating the duplicate opportunities above. `enqueue_run` now takes
+  `dispatch=False` for a caller that will execute the run itself, and `follow_up` carries
+  that decision down the discovery → resolution → audit → classification chain. Separately,
+  an attempt that finds a run already `running` backs off instead of raising: RQ
+  redelivers a job when a worker dies, and judging an abandoned run is the watchdog's job.
+  `running → running` remains forbidden in the state machine — it caught a real
+  double-execution, and permitting it would only hide the next one.
+- **`make load-demo-data` exits non-zero when one of its runs did not finish.** Backing
+  off on an already-`running` run is the one non-terminal exit from `execute_job_run`,
+  and the command printed all three of its run statuses without reading any of them — so
+  an unfinished run still ended with "Now try GET /api/v1/opportunities" and a green
+  shell, over opportunities that were never classified. It now names what did not finish
+  and returns 1, as `reset-demo-data` always has.
+
+Found later, during real-data testing on the same deploy, and merged here:
+
+- **Every real classification call was rejected with a 400.** `OpenAIClient` sent
+  `temperature=0`, which this model family refuses: *"Unsupported value: 'temperature'
+  does not support 0 with this model. Only the default (1) value is supported."* One
+  production run classified 18 businesses with `ai_errors: 14`, `ai_calls: 0` and
+  `est_cost_usd: 0` — nothing was billed because nothing reached the model. `temperature`
+  is now omitted rather than pinned to the default, and a test asserts the request body
+  carries neither it nor `max_tokens`. No output cap was added: the client never sent
+  one, so `max_tokens` was never the problem, and too low a cap truncates a strict-schema
+  answer mid-JSON. **Consequence:** classification output is no longer nudged towards
+  determinism. The `input_hash` reuse cache keys and hits exactly as before, but a hit now
+  pins the first answer rather than approximating a fresh one; the guardrails, which strip
+  unsupported claims, become the load-bearing defence and their trim rate will vary run to
+  run; the strict JSON schema still fixes the answer's shape. See Part G for the detail.
+- **A provider error now records why it failed, and how long it took.** All 14 failures
+  stored only `OpenAI answered 400: BadRequestError` with `latency_ms` 0 — the response
+  body naming the offending parameter was discarded, and the elapsed time lived only on
+  the success path. `LLMError` now carries the provider's `message`, `param` and `code`
+  (truncated) and the failed call's latency, and both reach the `ai_classifications` row.
+
 ## [v0.8.0] - 2026-09-20
 
 ### Added

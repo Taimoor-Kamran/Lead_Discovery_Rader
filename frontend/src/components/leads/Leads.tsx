@@ -2,12 +2,29 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { ErrorNote } from "@/components/ErrorNote";
 import { SafeLink } from "@/components/SafeLink";
-import { useToast } from "@/components/Toast";
 import { CrmBadge } from "@/components/crm/CrmBadge";
 import { ReasonLines } from "@/components/review/ReasonLines";
+import {
+  Card,
+  EmptyState,
+  PageHeader,
+  Pagination,
+  Select,
+  SkeletonTableRows,
+  Table,
+  TableWrap,
+  TBody,
+  Td,
+  Th,
+  THead,
+  Tr,
+  useToast,
+} from "@/components/ui";
 import { ApiError, getLeads, retryCrmLead, SERVICES, type LeadRead } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { loadFailed } from "@/lib/errors";
 import { formatDateTime, formatPhone, place, score } from "@/lib/format";
 import { serviceLabel } from "@/lib/labels";
 import { canManageCrm, canSeeAllLeads } from "@/lib/roles";
@@ -38,7 +55,7 @@ export function Leads() {
         setNextCursor(page.next_cursor ?? null);
         setError(null);
       } catch (caught) {
-        setError(caught instanceof ApiError ? caught.message : "Could not load leads");
+        setError(caught instanceof ApiError ? caught.message : loadFailed("your leads"));
       } finally {
         setLoading(false);
       }
@@ -75,96 +92,120 @@ export function Leads() {
 
   return (
     <div className="flex flex-col gap-4">
-      <header>
-        <h1 className="text-2xl font-semibold text-navy">{seesAll ? "Leads" : "My leads"}</h1>
-        <p className="text-sm text-slate-600">
-          Approved by a reviewer{seesAll ? "" : " and assigned to you"}. Business-level public
-          contact details only.
-        </p>
-      </header>
-      <div className="flex flex-wrap items-end gap-3 rounded-lg border border-slate-200 bg-white p-3">
-        <label className="flex flex-col gap-1 text-xs text-slate-600">
-          Service
-          <select className="field" value={service} onChange={(event) => setService(event.target.value)}>
+      <PageHeader
+        title={seesAll ? "Leads" : "My leads"}
+        description={`Approved by a reviewer${seesAll ? "" : " and assigned to you"}. Business-level public contact details only.`}
+      />
+
+      <Card padded={false} as="div" className="p-3">
+        <div className="flex flex-wrap items-end gap-3">
+          <Select label="Service" value={service} onChange={(event) => setService(event.target.value)}>
             <option value="">Any service</option>
             {SERVICES.map((item) => (
-              <option key={item.key} value={item.key}>{item.name}</option>
+              <option key={item.key} value={item.key}>
+                {item.name}
+              </option>
             ))}
-          </select>
-        </label>
-        {seesAll ? (
-          <label className="flex flex-col gap-1 text-xs text-slate-600">
-            Sales rep
-            <select className="field" value={rep} onChange={(event) => setRep(event.target.value)}>
+          </Select>
+          {seesAll ? (
+            <Select label="Sales rep" value={rep} onChange={(event) => setRep(event.target.value)}>
               <option value="">Anyone</option>
               {reps.map(([id, email]) => (
-                <option key={id} value={id}>{email}</option>
+                <option key={id} value={id}>
+                  {email}
+                </option>
               ))}
-            </select>
-          </label>
-        ) : null}
-      </div>
-      {error ? <p role="alert" className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</p> : null}
-      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-        <table className="w-full min-w-[960px] text-sm">
-          <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-600">
+            </Select>
+          ) : null}
+        </div>
+      </Card>
+
+      {error ? <ErrorNote>{error}</ErrorNote> : null}
+
+      <TableWrap>
+        <Table minWidth="66rem">
+          <THead>
             <tr>
-              <th scope="col" className="px-3 py-2">Business</th>
-              <th scope="col" className="px-3 py-2">Service</th>
-              <th scope="col" className="px-3 py-2 text-right">Score</th>
-              <th scope="col" className="px-3 py-2">Reason</th>
-              <th scope="col" className="px-3 py-2">Approved</th>
-              <th scope="col" className="px-3 py-2">Assigned rep</th>
-              <th scope="col" className="px-3 py-2">Contact</th>
-              <th scope="col" className="px-3 py-2">CRM</th>
+              <Th>Business</Th>
+              <Th>Service</Th>
+              <Th numeric className="w-20">
+                Score
+              </Th>
+              <Th>Reason</Th>
+              <Th>Approved</Th>
+              <Th>Assigned rep</Th>
+              <Th>Contact</Th>
+              <Th>CRM</Th>
             </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
+          </THead>
+          <TBody>
+            {loading && !items.length ? <SkeletonTableRows rows={5} columns={8} /> : null}
+            {!loading && !items.length ? (
+              <tr>
+                <td colSpan={8}>
+                  <EmptyState
+                    title="No leads yet."
+                    description={
+                      seesAll
+                        ? "A lead appears here once a reviewer approves an opportunity."
+                        : "A reviewer assigns leads to you."
+                    }
+                  />
+                </td>
+              </tr>
+            ) : null}
             {items.map((lead) => (
-              <tr key={lead.opportunity_id} className="align-top" data-testid="lead-row">
-                <td className="px-3 py-2">
-                  <Link href={`/leads/${lead.opportunity_id}`} className="font-medium text-navy hover:underline">
+              <Tr key={lead.opportunity_id} data-testid="lead-row">
+                <Td>
+                  <Link
+                    href={`/leads/${lead.opportunity_id}`}
+                    className="rounded font-medium text-ink underline-offset-2 hover:text-accent hover:underline"
+                  >
                     {lead.business_name}
                   </Link>
-                  <div className="text-xs text-slate-600" data-testid="lead-place">{place(lead.city, lead.state)}</div>
-                </td>
-                <td className="px-3 py-2" title={lead.service}>{serviceLabel(lead.service)}</td>
-                <td className="px-3 py-2 text-right font-mono" title={`raw ${lead.score}`}>{score(lead.score)}</td>
-                <td className="max-w-md px-3 py-2 text-slate-700">
+                  <div className="text-sm text-ink-soft" data-testid="lead-place">
+                    {place(lead.city, lead.state)}
+                  </div>
+                </Td>
+                <Td title={lead.service}>{serviceLabel(lead.service)}</Td>
+                <Td numeric title={`raw ${lead.score}`}>
+                  {score(lead.score)}
+                </Td>
+                <Td className="max-w-md">
                   <ReasonLines
                     ruleReason={lead.rule_reason}
                     aiRationale={lead.ai_rationale}
                     fallback={lead.reason}
                     compact
                   />
-                </td>
-                <td className="px-3 py-2 text-xs text-slate-600">
-                  {lead.approved_by_email ?? "unknown"}
-                  <br />
-                  {formatDateTime(lead.approved_at)}
-                </td>
-                <td className="px-3 py-2">{lead.assigned_to_email ?? <span className="text-slate-500">unassigned</span>}</td>
-                <td className="px-3 py-2 text-xs">
-                  <div title={lead.phone_e164 ?? undefined}>{formatPhone(lead.phone_e164)}</div>
+                </Td>
+                <Td className="text-sm text-ink-soft">
+                  <div>{lead.approved_by_email ?? "unknown"}</div>
+                  <div>{formatDateTime(lead.approved_at)}</div>
+                </Td>
+                <Td>{lead.assigned_to_email ?? <span className="text-ink-soft">unassigned</span>}</Td>
+                <Td className="text-sm">
+                  <div className="font-mono" title={lead.phone_e164 ?? undefined}>
+                    {formatPhone(lead.phone_e164)}
+                  </div>
                   <div>{lead.website ? <SafeLink href={lead.website} /> : "no website"}</div>
-                </td>
-                <td className="px-3 py-2 text-xs">
+                </Td>
+                <Td className="text-sm">
                   <CrmBadge crm={lead.crm} canRetry={crmManager} busy={busy} onRetry={retry} />
-                </td>
-              </tr>
+                </Td>
+              </Tr>
             ))}
-          </tbody>
-        </table>
-        {!loading && !items.length ? (
-          <p className="p-8 text-center text-sm text-slate-600">No leads yet.</p>
-        ) : null}
-      </div>
-      <div className="flex items-center gap-3 text-sm text-slate-600">
-        {loading ? <span>Loading…</span> : <span>{items.length} lead{items.length === 1 ? "" : "s"}</span>}
-        {nextCursor ? (
-          <button type="button" className="btn-secondary" onClick={() => load(nextCursor)}>Load more</button>
-        ) : null}
-      </div>
+          </TBody>
+        </Table>
+      </TableWrap>
+
+      <Pagination
+        count={items.length}
+        noun={["lead", "leads"]}
+        loading={loading}
+        hasMore={Boolean(nextCursor)}
+        onLoadMore={() => void load(nextCursor ?? undefined)}
+      />
     </div>
   );
 }

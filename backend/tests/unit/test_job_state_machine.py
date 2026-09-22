@@ -17,6 +17,9 @@ TERMINAL = [JobRunStatus.done, JobRunStatus.failed, JobRunStatus.cancelled]
         (JobRunStatus.running, JobRunStatus.failed),
         (JobRunStatus.running, JobRunStatus.cancelled),
         (JobRunStatus.running, JobRunStatus.queued),
+        # v0.9.0: a run that died before it started still has to be *finished*, or the
+        # scheduler never queues that job again.
+        (JobRunStatus.queued, JobRunStatus.failed),
     ],
 )
 def test_allowed_transitions(current: JobRunStatus, target: JobRunStatus) -> None:
@@ -27,7 +30,7 @@ def test_allowed_transitions(current: JobRunStatus, target: JobRunStatus) -> Non
     ("current", "target"),
     [
         (JobRunStatus.queued, JobRunStatus.done),
-        (JobRunStatus.queued, JobRunStatus.failed),
+        (JobRunStatus.queued, JobRunStatus.queued),
         (JobRunStatus.running, JobRunStatus.running),
         (JobRunStatus.done, JobRunStatus.running),
         (JobRunStatus.failed, JobRunStatus.queued),

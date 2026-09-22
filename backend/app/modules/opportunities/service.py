@@ -19,16 +19,19 @@ marked not-a-fit or duplicate is not re-created as pending until the cool-down h
 """
 
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from functools import partial
 from typing import Any
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
-from app.core.errors import NotFoundError, ValidationFailedError
+from app.core.errors import ConflictError, NotFoundError, ValidationFailedError
 from app.core.logging import get_logger
 from app.core.pagination import DEFAULT_LIMIT, Page, apply_cursor, encode_cursor
 from app.modules.ai import guardrails, routing
@@ -64,7 +67,7 @@ from app.modules.opportunities.schemas import (
     OpportunitySummary,
     ScoreComponentsRead,
 )
-from app.modules.opportunities.scoring import SCORING_VERSION, Weights, score
+from app.modules.opportunities.scoring import SCORING_VERSION, Score, Weights, score
 
 logger = get_logger("app.opportunities")
 
@@ -454,7 +457,9 @@ def _attempt_tier(
                 tokens_in=tokens_in,
                 tokens_out=tokens_out,
                 est_cost_usd=result.cost if result.calls else None,
-                latency_ms=latency,
+                # A failed call still took time; without its own latency the row read 0
+                # for every one of the production 400s (spec v0.9.0).
+                latency_ms=latency + exc.latency_ms,
                 error=str(exc),
                 now=now,
             )
@@ -697,7 +702,12 @@ COOLDOWN_STATUSES = (ReviewStatus.rejected, ReviewStatus.not_a_fit, ReviewStatus
 
 
 def pending_opportunities(session: Session, business_id: uuid.UUID) -> dict[str, Opportunity]:
-    """The open (pending or needs_enrichment) opportunity per service, if any."""
+    """The open (pending or needs_enrichment) opportunity per service, if any.
+
+    A `pending` row wins over a `needs_enrichment` one for the same service, whatever
+    their ages: `pending` is the status the unique index covers, so it is the row an
+    insert would collide with and therefore the row to update.
+    """
     rows = session.scalars(
         select(Opportunity)
         .where(
@@ -708,7 +718,12 @@ def pending_opportunities(session: Session, business_id: uuid.UUID) -> dict[str,
     )
     found: dict[str, Opportunity] = {}
     for row in rows:
-        found.setdefault(row.service, row)
+        seen = found.get(row.service)
+        if seen is None or (
+            seen.review_status is not ReviewStatus.pending
+            and row.review_status is ReviewStatus.pending
+        ):
+            found[row.service] = row
     return found
 
 
@@ -741,6 +756,98 @@ def blocked_services(
         elif decided_at is not None and decided_at >= since and service_key not in blocked:
             blocked[service_key] = "cooldown"
     return blocked
+
+
+# The partial unique index that keeps one *pending* row per business and service.
+PENDING_UNIQUE_INDEX = "uq_opportunities_pending_business_service"
+
+
+def _apply_classification(
+    row: Opportunity,
+    *,
+    item: MergedOpportunity,
+    audit: WebsiteAudit,
+    classification: AIClassification | None,
+    computed: Score,
+) -> None:
+    """Write one classified service onto its opportunity row. The only writer of these fields."""
+    row.website_audit_id = audit.id
+    row.ai_classification_id = classification.id if classification is not None else None
+    row.source = item.source
+    row.reason = item.reason
+    row.evidence = item.evidence
+    row.confidence = Decimal(str(item.confidence))
+    row.ai_agrees = item.ai_agrees
+    row.score = Decimal(str(computed.total))
+    row.score_components = computed.components()
+    row.scoring_version = SCORING_VERSION
+
+
+def open_opportunity_for(
+    session: Session, business_id: uuid.UUID, service: str
+) -> Opportunity | None:
+    """Re-read the open row for one business and service, straight from the database."""
+    return session.scalars(
+        select(Opportunity)
+        .where(
+            Opportunity.business_id == business_id,
+            Opportunity.service == service,
+            Opportunity.review_status.in_(OPEN_STATUSES),
+        )
+        .order_by(Opportunity.created_at.desc(), Opportunity.id.desc())
+    ).first()
+
+
+def _open_row(
+    session: Session,
+    business_id: uuid.UUID,
+    service: str,
+    apply: Callable[[Opportunity], None],
+) -> tuple[Opportunity, bool]:
+    """The open row for this service, creating it if there is none. `(row, created)`.
+
+    `apply` writes the classification onto whichever row we end up with, because the new
+    row has to be complete before it is flushed and the row we might find instead has to
+    be brought up to date afterwards.
+
+    The insert goes in inside a savepoint of its own. `uq_opportunities_pending_business_service`
+    is a partial unique index, so a row another writer committed between our read and our
+    insert comes back as a `UniqueViolation` — and in the v0.9.0 incident that violation
+    aborted the whole transaction and cost the business its entire classification. Here it
+    means only that somebody else opened the row first: roll back to the savepoint, take
+    theirs and update it. Idempotent either way, which is what re-classification is meant
+    to be. Any *other* integrity error is a real fault and is re-raised.
+
+    The flush before the savepoint is not tidiness: it pushes the rows updated earlier in
+    this loop out first, so a rollback to the savepoint can only undo our own insert.
+    """
+    session.flush()
+    savepoint = session.begin_nested()
+    row = Opportunity(business_id=business_id, service=service, review_status=ReviewStatus.pending)
+    apply(row)
+    try:
+        session.add(row)
+        session.flush()
+    except IntegrityError as exc:
+        savepoint.rollback()
+        if PENDING_UNIQUE_INDEX not in str(exc.orig):
+            raise
+    else:
+        savepoint.commit()
+        return row, True
+
+    existing = open_opportunity_for(session, business_id, service)
+    if existing is None:
+        raise ConflictError(
+            "An opportunity for this service could not be opened or found",
+            details={"business_id": str(business_id), "service": service},
+        )
+    logger.info(
+        "an opportunity for this service was opened by another writer; updating it",
+        extra={"business_id": str(business_id), "service": service},
+    )
+    apply(existing)
+    return existing, False
 
 
 def upsert_opportunities(
@@ -782,27 +889,23 @@ def upsert_opportunities(
             intent_explicit=intent_explicit,
             weights=weights,
         )
+
+        apply = partial(
+            _apply_classification,
+            item=item,
+            audit=audit,
+            classification=classification,
+            computed=computed,
+        )
         row = existing.get(item.service)
         if row is None:
-            row = Opportunity(
-                business_id=business.id,
-                service=item.service,
-                review_status=ReviewStatus.pending,
-            )
-            session.add(row)
-            created += 1
+            row, was_created = _open_row(session, business.id, item.service, apply)
+            existing[item.service] = row
+            created += 1 if was_created else 0
+            updated += 0 if was_created else 1
         else:
+            apply(row)
             updated += 1
-        row.website_audit_id = audit.id
-        row.ai_classification_id = classification.id if classification is not None else None
-        row.source = item.source
-        row.reason = item.reason
-        row.evidence = item.evidence
-        row.confidence = Decimal(str(item.confidence))
-        row.ai_agrees = item.ai_agrees
-        row.score = Decimal(str(computed.total))
-        row.score_components = computed.components()
-        row.scoring_version = SCORING_VERSION
         rows.append(row)
     session.flush()
     return rows, created, updated
@@ -817,6 +920,7 @@ def enqueue_classification_for_run(
     *,
     actor_id: uuid.UUID | None = None,
     idempotency_key: str | None = None,
+    dispatch: bool = True,
 ) -> JobRunType:
     """Queue a classification run for the businesses one audit run audited."""
     from app.modules.jobs.service import enqueue_run, get_job_run
@@ -833,6 +937,7 @@ def enqueue_classification_for_run(
         kind=CLASSIFICATION_JOB_KIND,
         actor_id=actor_id,
         idempotency_key=idempotency_key,
+        dispatch=dispatch,
         params={"parent_run_id": str(parent.id)},
     )
 

@@ -16,6 +16,11 @@ visible on `/jobs/{id}/status`, on the health page and in the audit log.
 Two guards keep a restart from doing damage: a job with no recorded last run is not
 fired retroactively (its clock starts at boot), and a job whose previous run is still
 queued or running is not queued again.
+
+**Every database call this thread makes goes through `scheduler_session_scope`**, which
+is bound to the scheduler's own engine (`app/core/db.py`, rule 1). It shares no
+connection and no `Session` with the jobs running beside it: they are in forked children
+of this process, and a socket that reaches both is a corrupted socket, not a shortcut.
 """
 
 import threading
@@ -30,7 +35,7 @@ from redis import Redis
 from sqlalchemy import select
 
 from app.core.config import Settings, get_settings
-from app.core.db import session_scope
+from app.core.db import scheduler_session_scope
 from app.core.logging import get_logger
 from app.modules.jobs.models import TERMINAL_RUN_STATUSES, JobRun
 
@@ -207,7 +212,7 @@ def enqueue_scheduled_run(job: ScheduledJob) -> uuid.UUID | None:
     """Create the `scheduled:<name>` run unless one is already queued or running."""
     from app.modules.jobs.service import enqueue_run
 
-    with session_scope() as session:
+    with scheduler_session_scope() as session:
         pending = session.scalars(
             select(JobRun.id).where(
                 JobRun.kind == job.kind, JobRun.status.not_in(TERMINAL_RUN_STATUSES)

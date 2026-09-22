@@ -1,4 +1,5 @@
 import { AiLabel } from "@/components/AiLabel";
+import { cx } from "@/components/ui";
 
 type Props = {
   ruleReason: string | null | undefined;
@@ -13,21 +14,22 @@ type Props = {
  * stores them as one string; the API hands them back apart, and neither is reworded.
  */
 export function ReasonLines({ ruleReason, aiRationale, fallback, compact = false }: Props) {
-  const rule = ruleReason ?? (aiRationale ? null : fallback ?? null);
-  if (!rule && !aiRationale) return <p className="text-sm text-slate-600">No reason recorded.</p>;
-  const textSize = compact ? "text-xs" : "text-sm";
+  const rule = ruleReason ?? (aiRationale ? null : (fallback ?? null));
+  if (!rule && !aiRationale) return <p className="text-base text-ink-soft">No reason recorded.</p>;
   return (
-    <dl className={`flex flex-col gap-1 ${textSize}`} data-testid="reason-lines">
+    <dl className={cx("flex flex-col gap-1.5", compact ? "text-sm" : "text-base")} data-testid="reason-lines">
       {rule ? (
         <div className="flex gap-2">
-          <dt className="shrink-0 font-medium text-slate-500">Rules:</dt>
-          <dd data-testid="rule-reason">{rule}</dd>
+          <dt className="shrink-0 font-medium text-ink-soft">Rules</dt>
+          <dd className="max-w-measure" data-testid="rule-reason">
+            {rule}
+          </dd>
         </div>
       ) : null}
       {aiRationale ? (
         <div className="flex gap-2">
-          <dt className="shrink-0 font-medium text-amber-800">AI:</dt>
-          <dd data-testid="ai-rationale">
+          <dt className="shrink-0 font-medium text-warn">AI</dt>
+          <dd className="max-w-measure" data-testid="ai-rationale">
             {aiRationale} {compact ? null : <AiLabel />}
           </dd>
         </div>

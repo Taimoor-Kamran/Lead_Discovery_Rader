@@ -3,7 +3,25 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { useToast } from "@/components/Toast";
+import { ErrorNote } from "@/components/ErrorNote";
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Input,
+  PageHeader,
+  Select,
+  SkeletonTableRows,
+  Table,
+  TableWrap,
+  TBody,
+  Td,
+  Th,
+  THead,
+  Tr,
+  useToast,
+} from "@/components/ui";
 import { EstimatePanel } from "@/components/searches/EstimatePanel";
 import { confirmRerun, ranRecently } from "@/components/searches/rerun";
 import {
@@ -21,6 +39,7 @@ import {
   type SourceRead,
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { loadFailed } from "@/lib/errors";
 import { formatDateTime } from "@/lib/format";
 import { canRunSearches } from "@/lib/roles";
 
@@ -38,6 +57,7 @@ export function Searches() {
   const [sources, setSources] = useState<SourceRead[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [name, setName] = useState("");
   const [industry, setIndustry] = useState("");
   const [mode, setMode] = useState<GeoMode>("place");
@@ -54,7 +74,9 @@ export function Searches() {
       setItems((await getSearchJobs()).items);
       setError(null);
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : "Could not load searches");
+      setError(caught instanceof ApiError ? caught.message : loadFailed("the searches"));
+    } finally {
+      setLoading(false);
     }
   }, []);
 
@@ -153,109 +175,206 @@ export function Searches() {
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <header>
-        <h1 className="text-2xl font-semibold text-navy">Searches</h1>
-        <p className="text-sm text-slate-600">
-          A search asks Google Places for businesses of one industry in one area, then resolves,
-          audits and classifies them. See the cost before you run.
-        </p>
-      </header>
+    <div className="flex flex-col gap-5">
+      <PageHeader
+        title="Searches"
+        description="A search asks Google Places for businesses of one industry in one area, then resolves, audits and classifies them. See the cost before you run."
+      />
 
       {mayRun ? (
-        <form
+        <Card
+          as="form"
           aria-label="New search"
+          className="flex flex-col gap-4"
           onSubmit={(event) => {
             event.preventDefault();
             void save(false);
           }}
-          className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-3"
         >
-          <div className="flex flex-wrap items-end gap-3">
-            <label className="flex flex-col gap-1 text-xs text-slate-600">
-              Industry
-              <select className="field" aria-label="Industry" value={industry} onChange={(event) => setIndustry(event.target.value)} required>
-                <option value="">Choose…</option>
-                {industries.map((option) => (
-                  <option key={option.key} value={option.key}>{option.label}</option>
-                ))}
-              </select>
-            </label>
-            <fieldset className="flex items-center gap-3 text-sm">
-              <legend className="text-xs text-slate-600">Area</legend>
-              <label className="flex items-center gap-1"><input type="radio" name="geo-mode" checked={mode === "place"} onChange={() => setMode("place")} /> City + state</label>
-              <label className="flex items-center gap-1"><input type="radio" name="geo-mode" checked={mode === "point"} onChange={() => setMode("point")} /> Point + radius</label>
+          <div className="flex flex-wrap items-end gap-4">
+            <Select
+              label="Industry"
+              value={industry}
+              onChange={(event) => setIndustry(event.target.value)}
+              required
+            >
+              <option value="">Choose…</option>
+              {industries.map((option) => (
+                <option key={option.key} value={option.key}>
+                  {option.label}
+                </option>
+              ))}
+            </Select>
+            <fieldset className="flex flex-col gap-1">
+              <legend className="text-sm font-medium text-ink-soft">Area</legend>
+              <div className="flex items-center gap-4 py-1.5">
+                <label className="flex items-center gap-2 text-base">
+                  <input
+                    type="radio"
+                    name="geo-mode"
+                    className="h-4 w-4 border-line accent-accent"
+                    checked={mode === "place"}
+                    onChange={() => setMode("place")}
+                  />
+                  City and state
+                </label>
+                <label className="flex items-center gap-2 text-base">
+                  <input
+                    type="radio"
+                    name="geo-mode"
+                    className="h-4 w-4 border-line accent-accent"
+                    checked={mode === "point"}
+                    onChange={() => setMode("point")}
+                  />
+                  Point and radius
+                </label>
+              </div>
             </fieldset>
             {mode === "place" ? (
               <>
-                <label className="flex flex-col gap-1 text-xs text-slate-600">City<input className="field" value={city} onChange={(event) => setCity(event.target.value)} /></label>
-                <label className="flex flex-col gap-1 text-xs text-slate-600">State<input className="field w-24" value={state} onChange={(event) => setState(event.target.value)} /></label>
+                <Input label="City" value={city} onChange={(event) => setCity(event.target.value)} />
+                <Input
+                  label="State"
+                  controlClassName="w-24"
+                  value={state}
+                  onChange={(event) => setState(event.target.value)}
+                />
               </>
             ) : (
               <>
-                <label className="flex flex-col gap-1 text-xs text-slate-600">Latitude<input className="field w-28" value={lat} onChange={(event) => setLat(event.target.value)} /></label>
-                <label className="flex flex-col gap-1 text-xs text-slate-600">Longitude<input className="field w-28" value={lng} onChange={(event) => setLng(event.target.value)} /></label>
-                <label className="flex flex-col gap-1 text-xs text-slate-600">Radius (m)<input className="field w-24" value={radius} onChange={(event) => setRadius(event.target.value)} /></label>
+                <Input
+                  label="Latitude"
+                  controlClassName="w-32"
+                  value={lat}
+                  onChange={(event) => setLat(event.target.value)}
+                />
+                <Input
+                  label="Longitude"
+                  controlClassName="w-32"
+                  value={lng}
+                  onChange={(event) => setLng(event.target.value)}
+                />
+                <Input
+                  label="Radius (m)"
+                  controlClassName="w-28"
+                  value={radius}
+                  onChange={(event) => setRadius(event.target.value)}
+                />
               </>
             )}
-            <label className="flex flex-col gap-1 text-xs text-slate-600">
-              Max results
-              <input className="field w-24" type="number" min={1} max={estimate?.max_results && !maxResults ? undefined : undefined} value={maxResults} placeholder={estimate ? String(estimate.max_results) : ""} onChange={(event) => setMaxResults(event.target.value)} onBlur={() => void refreshEstimate()} />
-            </label>
-            <label className="flex flex-col gap-1 text-xs text-slate-600">
-              Name (optional)
-              <input className="field w-64" value={name} onChange={(event) => setName(event.target.value)} />
-            </label>
-            <span className="text-xs text-slate-600">Source: Google Places{placesSource ? "" : " (not registered: run make sync-sources)"}</span>
+            <Input
+              label="Max results"
+              type="number"
+              min={1}
+              controlClassName="w-28"
+              value={maxResults}
+              placeholder={estimate ? String(estimate.max_results) : ""}
+              onChange={(event) => setMaxResults(event.target.value)}
+              onBlur={() => void refreshEstimate()}
+            />
+            <Input
+              label="Name (optional)"
+              controlClassName="w-64"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+            />
           </div>
+          <p className="text-sm text-ink-soft">
+            Source: Google Places
+            {placesSource ? "" : " — not registered yet, run make sync-sources"}
+          </p>
           <EstimatePanel estimate={estimate} />
           <div className="flex gap-2">
-            <button type="submit" className="btn-secondary" disabled={busy}>Save</button>
-            <button type="button" className="btn-primary" disabled={busy || !estimate || !estimate.can_run} title={estimate && !estimate.can_run ? estimate.blockers[0] : undefined} onClick={() => void save(true)}>
+            <Button type="submit" disabled={busy}>
+              Save
+            </Button>
+            <Button
+              variant="primary"
+              disabled={busy || !estimate || !estimate.can_run}
+              title={estimate && !estimate.can_run ? estimate.blockers[0] : undefined}
+              onClick={() => void save(true)}
+            >
               Save and run
-            </button>
+            </Button>
           </div>
-        </form>
+        </Card>
       ) : (
-        <p className="text-sm text-slate-600">Your role can follow searches but not create or run them.</p>
+        <p className="text-base text-ink-soft">
+          Your role can follow searches but not create or run them.
+        </p>
       )}
-      {error ? <p role="alert" className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</p> : null}
+      {error ? <ErrorNote>{error}</ErrorNote> : null}
 
-      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-        <table className="w-full text-sm">
-          <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-600">
+      <TableWrap>
+        <Table minWidth="54rem">
+          <THead>
             <tr>
-              <th scope="col" className="px-3 py-2">Search</th>
-              <th scope="col" className="px-3 py-2">Industry</th>
-              <th scope="col" className="px-3 py-2">Area</th>
-              <th scope="col" className="px-3 py-2">Max</th>
-              <th scope="col" className="px-3 py-2">Last run</th>
-              <th scope="col" className="px-3 py-2" />
+              <Th>Search</Th>
+              <Th>Industry</Th>
+              <Th>Area</Th>
+              <Th numeric className="w-20">
+                Max
+              </Th>
+              <Th>Last run</Th>
+              <Th aria-label="Actions" />
             </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {items.map((item) => (
-              <tr key={item.id} data-testid="search-row">
-                <td className="px-3 py-2"><Link href={`/searches/${item.id}`} className="text-teal-700 underline">{item.name}</Link></td>
-                <td className="px-3 py-2">{item.industry}</td>
-                <td className="px-3 py-2 text-xs">{describeGeo(item.geo)}</td>
-                <td className="px-3 py-2">{item.max_results ?? "default"}</td>
-                <td className="px-3 py-2 text-xs" data-testid="last-run">
-                  {item.last_run ? `${item.last_run.status} · ${formatDateTime(item.last_run.finished_at ?? item.last_run.created_at)}` : "never"}
-                </td>
-                <td className="px-3 py-2 text-right">
-                  {mayRun ? (
-                    <button type="button" className="btn-secondary !py-0.5" disabled={busy} onClick={() => void rerun(item)}>
-                      {item.last_run ? "Run again" : "Run"}
-                    </button>
-                  ) : null}
+          </THead>
+          <TBody>
+            {loading && !items.length ? <SkeletonTableRows rows={3} columns={6} /> : null}
+            {items.length ? (
+              items.map((item) => (
+                <Tr key={item.id} data-testid="search-row">
+                  <Td>
+                    <Link
+                      href={`/searches/${item.id}`}
+                      className="rounded font-medium text-ink underline-offset-2 hover:text-accent hover:underline"
+                    >
+                      {item.name}
+                    </Link>
+                  </Td>
+                  <Td>{item.industry}</Td>
+                  <Td className="text-sm">{describeGeo(item.geo)}</Td>
+                  <Td numeric>{item.max_results ?? "default"}</Td>
+                  <Td className="text-sm" data-testid="last-run">
+                    {item.last_run ? (
+                      <>
+                        <Badge tone={item.last_run.status === "done" ? "ok" : "neutral"}>
+                          {item.last_run.status}
+                        </Badge>
+                        <span className="ml-2 text-ink-soft">
+                          {formatDateTime(item.last_run.finished_at ?? item.last_run.created_at)}
+                        </span>
+                      </>
+                    ) : (
+                      "never"
+                    )}
+                  </Td>
+                  <Td className="text-right">
+                    {mayRun ? (
+                      <Button size="sm" disabled={busy} onClick={() => void rerun(item)}>
+                        {item.last_run ? "Run again" : "Run"}
+                      </Button>
+                    ) : null}
+                  </Td>
+                </Tr>
+              ))
+            ) : loading ? null : (
+              <tr>
+                <td colSpan={6}>
+                  <EmptyState
+                    title="No searches yet."
+                    description={
+                      mayRun
+                        ? "Pick an industry and an area above, check the cost, then save and run."
+                        : "A search appears here once an admin or a sales rep creates one."
+                    }
+                  />
                 </td>
               </tr>
-            ))}
-          </tbody>
-        </table>
-        {!items.length ? <p className="p-8 text-center text-sm text-slate-600">No searches yet.</p> : null}
-      </div>
+            )}
+          </TBody>
+        </Table>
+      </TableWrap>
     </div>
   );
 }

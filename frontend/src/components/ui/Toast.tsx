@@ -1,6 +1,8 @@
 "use client";
 
 import { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
+import { Button } from "./Button";
+import { cx } from "./cx";
 
 export type Toast = {
   id: number;
@@ -53,44 +55,40 @@ export function useToast(): ToastApi {
   return value;
 }
 
+/** A tint and a word — the tone is never the only thing that says what happened. */
 const TONE: Record<Toast["tone"], string> = {
-  info: "border-slate-300 bg-white text-slate-900",
-  success: "border-teal-600 bg-white text-slate-900",
-  error: "border-red-300 bg-red-50 text-red-900",
+  info: "border-line bg-surface text-ink",
+  success: "border-ok bg-ok-tint text-ink",
+  error: "border-risk bg-risk-tint text-ink",
 };
 
 function ToastViewport() {
   const { toasts, dismiss } = useToast();
   if (!toasts.length) return null;
   return (
-    <div className="fixed bottom-4 right-4 z-50 flex w-96 flex-col gap-2" aria-live="polite">
+    <div className="print-hide fixed bottom-4 right-4 z-50 flex w-96 max-w-[calc(100vw-2rem)] flex-col gap-2">
       {toasts.map((toast) => (
         <div
           key={toast.id}
           role="status"
-          className={`flex items-start gap-3 rounded border p-3 text-sm shadow-lg ${TONE[toast.tone]}`}
+          className={cx("flex items-start gap-3 rounded-lg border p-3 text-base shadow-overlay", TONE[toast.tone])}
         >
           <p className="flex-1">{toast.message}</p>
           {toast.action ? (
-            <button
-              type="button"
-              className="btn-primary !py-1"
+            <Button
+              size="sm"
+              variant="primary"
               onClick={async () => {
                 await toast.action?.run();
                 dismiss(toast.id);
               }}
             >
               {toast.action.label}
-            </button>
+            </Button>
           ) : null}
-          <button
-            type="button"
-            aria-label="Dismiss"
-            className="text-slate-500 hover:text-slate-900"
-            onClick={() => dismiss(toast.id)}
-          >
-            ×
-          </button>
+          <Button size="sm" variant="ghost" aria-label="Dismiss" onClick={() => dismiss(toast.id)}>
+            <span aria-hidden="true">×</span>
+          </Button>
         </div>
       ))}
     </div>

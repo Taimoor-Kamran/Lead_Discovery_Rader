@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { AiSummaryBox } from "./AiSummaryBox";
 import { AI_LABEL } from "@/lib/safe";
 
@@ -26,9 +26,13 @@ describe("AiSummaryBox", () => {
     expect(screen.getByTestId("ai-label").textContent).toContain(AI_LABEL);
     expect(container.querySelector("b")).toBeNull();
     expect(screen.getByTestId("ai-summary").textContent).toContain("<b>Family-run</b> plumber");
-    // Model, prompt and status live behind a Details disclosure, not in the headline.
+    // Model, prompt and status live behind the Details disclosure, not in the headline.
     const details = screen.getByTestId("ai-details");
-    expect(details.tagName).toBe("DETAILS");
+    const trigger = within(details).getByRole("button", { name: "Details" });
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    expect(details.textContent).not.toContain("scripted-triage");
+    fireEvent.click(trigger);
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
     expect(details.textContent).toContain("scripted-triage");
     expect(details.textContent).toContain("classify-1");
   });

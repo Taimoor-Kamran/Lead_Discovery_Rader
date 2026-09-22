@@ -27,6 +27,36 @@ OPENAI_SOURCE_NAME = "openai"
 AI_SERVICE_ROLE = "ai_service"
 OPENAI_ENDPOINT = "https://api.openai.com/v1/chat/completions"
 RETRYABLE_STATUSES = frozenset({408, 409, 429})
+# How much of a provider error body is kept on the classification row. Long enough for
+# the `message`/`param`/`code` triple that names the offending parameter, short enough
+# that a stack of them cannot bloat the table.
+ERROR_BODY_MAX_CHARS = 600
+
+
+def _elapsed_ms(started: float) -> int:
+    return int((time.perf_counter() - started) * 1000)
+
+
+def _error_body(exc: openai.APIStatusError) -> str:
+    """What the provider actually objected to, for the `error` column on the row.
+
+    The first pass stored only "OpenAI answered 400: BadRequestError" for all 14 of the
+    production failures and threw the body away — so the one thing that would have named
+    the offending parameter (`temperature`) needed a manual reproduction to recover. The
+    body is the provenance of the failure and is kept, truncated (spec v0.9.0).
+    """
+    parts = [str(exc.message)] if getattr(exc, "message", None) else []
+    for label in ("param", "code"):
+        value = getattr(exc, label, None)
+        if value:
+            parts.append(f"{label}={value}")
+    if not parts:
+        # No parsed body — a proxy's HTML error page, say. Take the raw text instead.
+        try:
+            parts = [exc.response.text]
+        except Exception:  # pragma: no cover - a response that cannot be read
+            parts = [repr(exc.body)]
+    return " ".join(part for part in parts if part).strip()[:ERROR_BODY_MAX_CHARS]
 
 
 class OpenAIClient:
@@ -78,24 +108,31 @@ class OpenAIClient:
                         "schema": dict(request.json_schema),
                     },
                 },
-                temperature=0,
             )
         except openai.APIStatusError as exc:
             self._record(started, status_code=exc.status_code, error_class=type(exc).__name__)
             retryable = exc.status_code in RETRYABLE_STATUSES or exc.status_code >= 500
             raise LLMError(
-                f"OpenAI answered {exc.status_code}: {type(exc).__name__}",
+                f"OpenAI answered {exc.status_code}: {type(exc).__name__}: {_error_body(exc)}",
                 retryable=retryable,
                 status_code=exc.status_code,
+                latency_ms=_elapsed_ms(started),
             ) from exc
         except openai.APIConnectionError as exc:
             self._record(started, error_class=type(exc).__name__)
-            raise LLMError(f"OpenAI did not answer: {type(exc).__name__}", retryable=True) from exc
+            raise LLMError(
+                f"OpenAI did not answer: {type(exc).__name__}: {exc}"[:ERROR_BODY_MAX_CHARS],
+                retryable=True,
+                latency_ms=_elapsed_ms(started),
+            ) from exc
         except openai.OpenAIError as exc:
             self._record(started, error_class=type(exc).__name__)
-            raise LLMError(f"OpenAI call failed: {type(exc).__name__}") from exc
+            raise LLMError(
+                f"OpenAI call failed: {type(exc).__name__}: {exc}"[:ERROR_BODY_MAX_CHARS],
+                latency_ms=_elapsed_ms(started),
+            ) from exc
 
-        latency_ms = int((time.perf_counter() - started) * 1000)
+        latency_ms = _elapsed_ms(started)
         self._record(started, status_code=200)
         if not response.choices:
             raise LLMError("OpenAI returned no choices")

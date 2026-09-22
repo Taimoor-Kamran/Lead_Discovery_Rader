@@ -3,10 +3,15 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { AlertBanner } from "@/components/AlertBanner";
+import { Button, cx } from "@/components/ui";
 import { useAuth } from "@/lib/auth";
 import { navFor, ROLE_LABELS } from "@/lib/roles";
 
-/** Navy header, role-aware navigation. Hides what a role cannot do; the API enforces it. */
+/**
+ * The app shell: a slim ink bar with the product name, the role's navigation and the
+ * account block, then the page. Navigation hides what a role cannot do; the API enforces
+ * it. The skip link is the first focusable thing on every page.
+ */
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { user, signOut } = useAuth();
   const pathname = usePathname();
@@ -20,13 +25,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="bg-navy text-white">
-        <div className="mx-auto flex h-14 w-full max-w-[1600px] items-center gap-6 px-4">
-          <Link href="/" className="flex items-center gap-2 font-semibold tracking-tight">
-            <span className="inline-block h-2.5 w-2.5 rounded-full bg-teal-400" aria-hidden="true" />
+      <a href="#main" className="skip-link print-hide">
+        Skip to content
+      </a>
+      <header className="print-hide bg-ink text-on-ink">
+        <div className="mx-auto flex w-full max-w-shell flex-wrap items-center gap-x-6 gap-y-2 px-6 py-2">
+          <Link href="/" className="flex items-center gap-2 text-base font-semibold">
+            <span className="inline-block h-2 w-2 rounded-full bg-accent" aria-hidden="true" />
             Lead Discovery Radar
           </Link>
-          <nav aria-label="Main" className="flex items-center gap-1">
+          <nav aria-label="Main" className="flex flex-wrap items-center gap-1">
             {items.map((item) => {
               const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
               return (
@@ -34,34 +42,42 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   key={item.href}
                   href={item.href}
                   aria-current={active ? "page" : undefined}
-                  className={`rounded px-3 py-1.5 text-sm ${
-                    active ? "bg-teal-600 text-white" : "text-slate-200 hover:bg-navy-700"
-                  }`}
+                  className={cx(
+                    "rounded px-2.5 py-1.5 text-sm transition-colors",
+                    active ? "bg-ink-raised font-medium text-on-ink" : "text-on-ink-soft hover:bg-ink-raised hover:text-on-ink",
+                  )}
                 >
                   {item.label}
                 </Link>
               );
             })}
           </nav>
-          <div className="ml-auto flex items-center gap-3 text-sm">
-            {user ? (
-              <>
-                <span className="text-slate-200" data-testid="whoami">
-                  {user.email} · {ROLE_LABELS[user.role]}
-                </span>
-                <Link href="/profile" className="text-slate-200 underline" data-testid="profile-link">
-                  Profile
-                </Link>
-                <button type="button" onClick={onSignOut} className="btn-secondary !py-1">
-                  Sign out
-                </button>
-              </>
-            ) : null}
-          </div>
+          {user ? (
+            <div className="ml-auto flex items-center gap-3">
+              {/* The email and the role are text, not a link: a link would take their words
+                  into its accessible name and collide with the navigation above. */}
+              <span className="text-right leading-tight" data-testid="whoami">
+                <span className="block text-sm text-on-ink">{user.email}</span>
+                <span className="block text-xs text-on-ink-soft">{ROLE_LABELS[user.role]}</span>
+              </span>
+              <Link
+                href="/profile"
+                data-testid="profile-link"
+                className="rounded text-sm text-on-ink-soft underline underline-offset-2 hover:text-on-ink"
+              >
+                Profile
+              </Link>
+              <Button size="sm" onClick={onSignOut}>
+                Sign out
+              </Button>
+            </div>
+          ) : null}
         </div>
       </header>
       <AlertBanner />
-      <main className="mx-auto w-full max-w-[1600px] flex-1 px-4 py-6">{children}</main>
+      <main id="main" className="mx-auto w-full max-w-shell flex-1 px-6 py-6">
+        {children}
+      </main>
     </div>
   );
 }

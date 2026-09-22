@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   getBusinessOpportunities,
   NOT_A_FIT_REASONS,
@@ -10,6 +10,7 @@ import {
   type Decision,
   type OpportunitySummary,
 } from "@/lib/api";
+import { Button, Dialog, Input, Select, Textarea } from "@/components/ui";
 import { place, REASON_LABELS } from "@/lib/format";
 
 export type DecisionFields = {
@@ -63,9 +64,10 @@ export function DecisionDialog({
   const [assignee, setAssignee] = useState("");
   const [duplicateOf, setDuplicateOf] = useState<{ id: string; label: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const headingId = useId();
   const firstField = useRef<HTMLElement | null>(null);
 
+  // The Dialog focuses the first control for us; this only matters when the first control
+  // is not the one a reviewer wants (a note before a reason, say).
   useEffect(() => {
     firstField.current?.focus();
   }, []);
@@ -99,120 +101,100 @@ export function DecisionDialog({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-40 flex items-center justify-center bg-navy-900/50 p-4"
-      onKeyDown={(event) => {
-        if (event.key === "Escape") onCancel();
-      }}
-    >
-      <form
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={headingId}
-        onSubmit={submit}
-        className="flex w-full max-w-md flex-col gap-3 rounded-lg border border-slate-200 bg-white p-5 shadow-xl"
-      >
-        <h2 id={headingId} className="text-lg font-semibold text-navy">
-          {TITLES[decision]}
-          {count > 1 ? ` ${count} opportunities` : ""}
-        </h2>
-        {decision === "do_not_contact" ? (
-          <p className="rounded border border-red-200 bg-red-50 p-2 text-sm text-red-900">
-            This closes <strong>every</strong> opportunity of the business and blocks it, its
-            domain and its phone from ever getting a new one. It can be undone for a short
-            while.
-          </p>
-        ) : null}
-
-        {reasons ? (
-          <label className="flex flex-col gap-1 text-sm">
-            Reason
-            <select
-              ref={(node) => {
-                firstField.current = node;
-              }}
-              name="reason_code"
-              required
-              value={reason}
-              onChange={(event) => setReason(event.target.value)}
-              className="field"
-            >
-              <option value="">Choose a reason…</option>
-              {reasons.map((code) => (
-                <option key={code} value={code}>
-                  {REASON_LABELS[code] ?? code}
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : null}
-
-        {decision === "duplicate" && service ? (
-          <DuplicatePicker
-            service={service}
-            exclude={excludeOpportunityId}
-            value={duplicateOf}
-            onChange={setDuplicateOf}
-          />
-        ) : null}
-
-        {decision === "approve" && assignees.length ? (
-          <label className="flex flex-col gap-1 text-sm">
-            Assign to sales rep (optional)
-            <select
-              ref={(node) => {
-                firstField.current = node;
-              }}
-              name="assigned_to"
-              value={assignee}
-              onChange={(event) => setAssignee(event.target.value)}
-              className="field"
-            >
-              <option value="">Unassigned</option>
-              {assignees.map((rep) => (
-                <option key={rep.id} value={rep.id}>
-                  {rep.email}
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : null}
-
-        <label className="flex flex-col gap-1 text-sm">
-          Note{noteRequired ? " (required)" : " (optional)"}
-          <textarea
-            ref={(node) => {
-              if (!reasons && decision !== "approve") firstField.current = node;
-            }}
-            name="note"
-            rows={3}
-            required={noteRequired}
-            value={note}
-            onChange={(event) => setNote(event.target.value)}
-            className="field"
-          />
-        </label>
-
-        {error ? (
-          <p role="alert" className="text-sm text-red-700">
-            {error}
-          </p>
-        ) : null}
-
-        <div className="flex justify-end gap-2">
-          <button type="button" className="btn-secondary" onClick={onCancel} disabled={busy}>
+    <Dialog
+      as="form"
+      title={`${TITLES[decision]}${count > 1 ? ` ${count} opportunities` : ""}`}
+      onClose={onCancel}
+      onSubmit={submit}
+      footer={
+        <>
+          <Button onClick={onCancel} disabled={busy}>
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
             type="submit"
-            className={decision === "do_not_contact" ? "btn-danger" : "btn-primary"}
-            disabled={busy}
+            variant={decision === "do_not_contact" ? "danger" : "primary"}
+            loading={busy}
           >
             {decision === "do_not_contact" ? "Confirm: do not contact" : TITLES[decision]}
-          </button>
-        </div>
-      </form>
-    </div>
+          </Button>
+        </>
+      }
+    >
+      {decision === "do_not_contact" ? (
+        <p className="rounded border border-risk bg-risk-tint p-2 text-base text-ink">
+          This closes <strong>every</strong> opportunity of the business and blocks it, its
+          domain and its phone from ever getting a new one. It can be undone for a short
+          while.
+        </p>
+      ) : null}
+
+      {reasons ? (
+        <Select
+          label="Reason"
+          ref={(node) => {
+            firstField.current = node;
+          }}
+          name="reason_code"
+          required
+          value={reason}
+          onChange={(event) => setReason(event.target.value)}
+        >
+          <option value="">Choose a reason…</option>
+          {reasons.map((code) => (
+            <option key={code} value={code}>
+              {REASON_LABELS[code] ?? code}
+            </option>
+          ))}
+        </Select>
+      ) : null}
+
+      {decision === "duplicate" && service ? (
+        <DuplicatePicker
+          service={service}
+          exclude={excludeOpportunityId}
+          value={duplicateOf}
+          onChange={setDuplicateOf}
+        />
+      ) : null}
+
+      {decision === "approve" && assignees.length ? (
+        <Select
+          label="Assign to sales rep (optional)"
+          ref={(node) => {
+            firstField.current = node;
+          }}
+          name="assigned_to"
+          value={assignee}
+          onChange={(event) => setAssignee(event.target.value)}
+        >
+          <option value="">Unassigned</option>
+          {assignees.map((rep) => (
+            <option key={rep.id} value={rep.id}>
+              {rep.email}
+            </option>
+          ))}
+        </Select>
+      ) : null}
+
+      <Textarea
+        label={`Note${noteRequired ? " (required)" : " (optional)"}`}
+        ref={(node) => {
+          if (!reasons && decision !== "approve") firstField.current = node;
+        }}
+        name="note"
+        rows={3}
+        required={noteRequired}
+        value={note}
+        onChange={(event) => setNote(event.target.value)}
+      />
+
+      {error ? (
+        <p role="alert" className="text-base text-risk">
+          {error}
+        </p>
+      ) : null}
+    </Dialog>
   );
 }
 
@@ -260,37 +242,34 @@ function DuplicatePicker({
     const same = page.items.filter((o) => o.service === service && o.id !== exclude);
     setCandidates(same);
     if (same.length === 1) {
-      onChange({ id: same[0].id, label: `${business.display_name} · ${same[0].review_status}` });
+      onChange({ id: same[0].id, label: `${business.display_name} — ${same[0].review_status}` });
     } else {
       onChange(null);
     }
   }
 
   return (
-    <div className="flex flex-col gap-2 text-sm">
-      <label className="flex flex-col gap-1">
-        Duplicate of (search businesses)
-        <input
-          type="search"
-          name="duplicate_search"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Business name or domain"
-          className="field"
-        />
-      </label>
-      {searching ? <p className="text-xs text-slate-500">Searching…</p> : null}
+    <div className="flex flex-col gap-2 text-base">
+      <Input
+        label="Duplicate of (search businesses)"
+        type="search"
+        name="duplicate_search"
+        value={query}
+        onChange={(event) => setQuery(event.target.value)}
+        placeholder="Business name or domain"
+      />
+      {searching ? <p className="text-sm text-ink-soft">Searching…</p> : null}
       {businesses.length ? (
-        <ul className="max-h-40 divide-y overflow-auto rounded border border-slate-200">
+        <ul className="max-h-40 divide-y divide-line overflow-auto rounded border border-line">
           {businesses.map((business) => (
             <li key={business.id}>
               <button
                 type="button"
-                className="flex w-full justify-between px-2 py-1 text-left hover:bg-slate-50"
+                className="flex w-full justify-between px-2 py-1.5 text-left transition-colors hover:bg-surface-sunken"
                 onClick={() => pickBusiness(business)}
               >
                 <span>{business.display_name}</span>
-                <span className="text-slate-500">{place(business.city, business.state)}</span>
+                <span className="text-ink-soft">{place(business.city, business.state)}</span>
               </button>
             </li>
           ))}
@@ -298,31 +277,32 @@ function DuplicatePicker({
       ) : null}
       {candidates.length > 1 ? (
         <fieldset className="flex flex-col gap-1">
-          <legend className="text-xs text-slate-600">Which opportunity?</legend>
+          <legend className="text-sm font-medium text-ink-soft">Which opportunity?</legend>
           {candidates.map((candidate) => (
             <label key={candidate.id} className="flex items-center gap-2">
               <input
                 type="radio"
                 name="duplicate_of"
+                className="h-4 w-4 border-line accent-accent"
                 checked={value?.id === candidate.id}
                 onChange={() =>
                   onChange({
                     id: candidate.id,
-                    label: `${candidate.business_name} · ${candidate.review_status}`,
+                    label: `${candidate.business_name} — ${candidate.review_status}`,
                   })
                 }
               />
-              {candidate.business_name} · {candidate.review_status} · score{" "}
-              {candidate.score.toFixed(2)}
+              {candidate.business_name} — {candidate.review_status}, score{" "}
+              <span className="font-mono tabular-nums">{candidate.score.toFixed(2)}</span>
             </label>
           ))}
         </fieldset>
       ) : null}
       {candidates.length === 0 && businesses.length === 0 && query.length >= 2 && !searching ? (
-        <p className="text-xs text-slate-500">No business matches.</p>
+        <p className="text-sm text-ink-soft">No business matches.</p>
       ) : null}
       {value ? (
-        <p className="rounded bg-teal-50 px-2 py-1 text-xs text-teal-700" data-testid="duplicate-pick">
+        <p className="rounded bg-accent-tint px-2 py-1 text-sm text-ink" data-testid="duplicate-pick">
           Duplicate of: {value.label}
         </p>
       ) : null}

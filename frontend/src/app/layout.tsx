@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth";
-import { ToastProvider } from "@/components/Toast";
+import { ToastProvider } from "@/components/ui";
 
 export const metadata: Metadata = {
   title: "Lead Discovery Radar",
@@ -15,7 +15,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   await headers();
   return (
     <html lang="en">
-      <body className="min-h-screen bg-slate-50 text-slate-900 antialiased">
+      {/* Colours, type and spacing all come from the tokens in globals.css. */}
+      <body className="min-h-screen bg-paper font-sans text-base text-ink antialiased">
         <AuthProvider>
           <ToastProvider>{children}</ToastProvider>
         </AuthProvider>

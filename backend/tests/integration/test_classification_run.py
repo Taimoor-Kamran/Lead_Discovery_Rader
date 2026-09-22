@@ -300,6 +300,35 @@ def test_a_provider_error_leaves_the_rules_standing(db: Session) -> None:
     assert outcome.ai is not None and outcome.ai.errors == 1
 
 
+def test_a_provider_400_stores_the_body_and_the_time_it_wasted(db: Session) -> None:
+    """The production failure, on the row a human would read (spec v0.9.0).
+
+    Fourteen of eighteen businesses stored "OpenAI answered 400: BadRequestError" and
+    `latency_ms` 0. The body naming `temperature` was discarded by the client and the
+    failure's own elapsed time never left it, so the row said neither what broke nor that
+    anything had taken time. Both now reach the row.
+    """
+    business = make_business(db)
+    make_audit(db, business)
+    tools = make_tools(
+        LLMError(
+            "OpenAI answered 400: BadRequestError: Unsupported value: 'temperature' does "
+            "not support 0 with this model. param=temperature code=unsupported_value",
+            retryable=False,
+            status_code=400,
+            latency_ms=412,
+        )
+    )
+
+    service.classify(db, business, tools=tools)
+
+    [row] = classifications_of(db, business)
+    assert row.status.value == "error"
+    assert "param=temperature" in (row.error or ""), "the row must name what broke"
+    assert "does not support 0" in (row.error or "")
+    assert row.latency_ms == 412, "a failed call still took time"
+
+
 def test_explicit_intent_with_a_real_quote_scores_intent(db: Session) -> None:
     business = make_business(db)
     make_audit(db, business)

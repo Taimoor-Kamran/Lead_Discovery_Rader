@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { Button, cx } from "@/components/ui";
 import { acknowledgeAlert, getAlerts, type AlertRead } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { canSeeAlerts } from "@/lib/roles";
@@ -32,21 +33,34 @@ export function AlertBanner() {
   if (!visible || !alerts.length) return null;
   const critical = alerts.some((alert) => alert.severity === "critical");
   return (
-    <div role="alert" data-testid="alert-banner" className={`border-b px-4 py-2 text-sm ${critical ? "border-red-300 bg-red-50 text-red-900" : "border-amber-300 bg-amber-50 text-amber-900"}`}>
-      <div className="mx-auto flex w-full max-w-[1600px] flex-wrap items-center gap-3">
-        <strong>{alerts.length} open alert{alerts.length === 1 ? "" : "s"}:</strong>
-        <span className="flex-1">{alerts[0].message}{alerts.length > 1 ? ` (+${alerts.length - 1} more)` : ""}</span>
-        <Link href="/admin/health" className="underline">Health page</Link>
-        <button
-          type="button"
-          className="btn-secondary !py-0.5"
+    <div
+      role="alert"
+      data-testid="alert-banner"
+      className={cx(
+        "print-hide border-b text-base",
+        critical ? "border-risk bg-risk-tint" : "border-warn bg-warn-tint",
+      )}
+    >
+      <div className="mx-auto flex w-full max-w-shell flex-wrap items-center gap-x-3 gap-y-2 px-6 py-2">
+        <strong className="font-medium">
+          {alerts.length} open alert{alerts.length === 1 ? "" : "s"}
+        </strong>
+        <span className="flex-1 text-ink">
+          {alerts[0].message}
+          {alerts.length > 1 ? ` (+${alerts.length - 1} more)` : ""}
+        </span>
+        <Link href="/admin/health" className="rounded font-medium text-accent underline underline-offset-2">
+          Health page
+        </Link>
+        <Button
+          size="sm"
           onClick={async () => {
             await acknowledgeAlert(alerts[0].id).catch(() => undefined);
             await load();
           }}
         >
           Acknowledge
-        </button>
+        </Button>
       </div>
     </div>
   );

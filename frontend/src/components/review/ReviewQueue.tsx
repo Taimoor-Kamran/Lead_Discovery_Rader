@@ -1,15 +1,31 @@
 "use client";
 
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useToast } from "@/components/Toast";
 import { DecisionDialog, type DecisionFields } from "@/components/review/DecisionDialog";
-import { EMPTY_FILTERS, QueueFilters, type QueueFilterState } from "@/components/review/QueueFilters";
+import {
+  EMPTY_FILTERS,
+  isFiltered,
+  QueueFilters,
+  type QueueFilterState,
+} from "@/components/review/QueueFilters";
 import { QueueTable } from "@/components/review/QueueTable";
+import { Button, EmptyState, PageHeader, Pagination, Tabs, useToast } from "@/components/ui";
 import { ApiError, getReviewQueue, reviewBatch, type QueueItem } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { loadFailed } from "@/lib/errors";
 import { QUEUE_ORDER_KEY } from "@/lib/review";
 import { canDecide } from "@/lib/roles";
+import { ErrorNote } from "@/components/ErrorNote";
+
+const STATUS_TABS = [
+  { value: "pending", label: "Pending" },
+  { value: "needs_enrichment", label: "Needs enrichment" },
+] as const;
+
+const PANEL_ID = "queue-results";
+const BATCH_LIMIT = 50;
 
 /** The queue page. Selection enables batch reject / not-a-fit only; nothing else is batched. */
 export function ReviewQueue() {
@@ -46,7 +62,7 @@ export function ReviewQueue() {
         setItems((current) => (cursor ? [...current, ...page.items] : page.items));
         setNextCursor(page.next_cursor ?? null);
       } catch (caught) {
-        setError(caught instanceof ApiError ? caught.message : "Could not load the queue");
+        setError(caught instanceof ApiError ? caught.message : loadFailed("the review queue"));
       } finally {
         setLoading(false);
       }
@@ -99,7 +115,7 @@ export function ReviewQueue() {
     setBusy(true);
     try {
       const result = await reviewBatch({
-        ids: selectedIds.slice(0, 50),
+        ids: selectedIds.slice(0, BATCH_LIMIT),
         decision: batch,
         reason_code: fields.reason_code ?? "",
         note: fields.note ?? null,
@@ -126,66 +142,89 @@ export function ReviewQueue() {
     }
   }
 
+  const tooMany = selected.size > BATCH_LIMIT;
+
   return (
     <div className="flex flex-col gap-4">
-      <header className="flex items-end justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold text-navy">Review queue</h1>
-          <p className="text-sm text-slate-600">
-            Businesses with open opportunities, strongest first. Weak signals are hidden until
-            you ask for them.
-          </p>
-        </div>
-        {decider ? (
-          <div className="flex items-center gap-2" data-testid="batch-bar">
-            <span className="text-sm text-slate-600">{selected.size} selected</span>
-            <button
-              type="button"
-              className="btn-secondary"
-              disabled={!selected.size || selected.size > 50}
-              onClick={() => setBatch("reject")}
-            >
-              Reject selected
-            </button>
-            <button
-              type="button"
-              className="btn-secondary"
-              disabled={!selected.size || selected.size > 50}
-              onClick={() => setBatch("not_a_fit")}
-            >
-              Not a fit selected
-            </button>
-            {selected.size > 50 ? (
-              <span className="text-xs text-red-700">At most 50 at a time.</span>
-            ) : null}
-          </div>
-        ) : null}
-      </header>
+      <PageHeader
+        title="Review queue"
+        description="Businesses with open opportunities, strongest first. Weak signals are hidden until you ask for them."
+        actions={
+          decider ? (
+            <div className="flex flex-wrap items-center gap-2" data-testid="batch-bar">
+              <span className="text-sm text-ink-soft" aria-live="polite">
+                {selected.size} selected
+              </span>
+              <Button disabled={!selected.size || tooMany} onClick={() => setBatch("reject")}>
+                Reject selected
+              </Button>
+              <Button disabled={!selected.size || tooMany} onClick={() => setBatch("not_a_fit")}>
+                Not a fit selected
+              </Button>
+              {tooMany ? (
+                <span className="text-sm text-risk">At most {BATCH_LIMIT} at a time.</span>
+              ) : null}
+            </div>
+          ) : null
+        }
+      />
+
+      <Tabs
+        label="Status"
+        value={filters.status}
+        options={STATUS_TABS}
+        panelId={PANEL_ID}
+        onChange={(status) => setFilters({ ...filters, status })}
+      />
 
       <QueueFilters value={filters} onChange={setFilters} />
 
-      {error ? (
-        <p role="alert" className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800">
-          {error}
-        </p>
-      ) : null}
+      {error ? <ErrorNote>{error}</ErrorNote> : null}
 
-      <QueueTable
-        items={items}
-        selected={selected}
-        onToggle={toggle}
-        onToggleBusiness={toggleBusiness}
-        canSelect={decider}
-        showWeak={filters.include_weak}
-      />
+      <div id={PANEL_ID} role="tabpanel" aria-labelledby={`tab-${filters.status}`} className="flex flex-col gap-4">
+        <QueueTable
+          items={items}
+          selected={selected}
+          onToggle={toggle}
+          onToggleBusiness={toggleBusiness}
+          canSelect={decider}
+          showWeak={filters.include_weak}
+          loading={loading}
+          empty={
+            isFiltered(filters) ? (
+              <EmptyState
+                title="Nothing to review with these filters."
+                description="Widen the service, the city, the score or the search to see more."
+                action={
+                  <Button onClick={() => setFilters({ ...EMPTY_FILTERS, status: filters.status })}>
+                    Clear the filters
+                  </Button>
+                }
+              />
+            ) : (
+              <EmptyState
+                title="Nothing to review."
+                description="Run a search to find businesses."
+                action={
+                  <Link
+                    href="/searches"
+                    className="rounded font-medium text-accent underline underline-offset-2"
+                  >
+                    Go to Searches
+                  </Link>
+                }
+              />
+            )
+          }
+        />
 
-      <div className="flex items-center gap-3 text-sm text-slate-600">
-        {loading ? <span>Loading…</span> : <span>{items.length} business{items.length === 1 ? "" : "es"}</span>}
-        {nextCursor ? (
-          <button type="button" className="btn-secondary" onClick={() => load(nextCursor)}>
-            Load more
-          </button>
-        ) : null}
+        <Pagination
+          count={items.length}
+          noun={["business", "businesses"]}
+          loading={loading}
+          hasMore={Boolean(nextCursor)}
+          onLoadMore={() => void load(nextCursor ?? undefined)}
+        />
       </div>
 
       {batch ? (

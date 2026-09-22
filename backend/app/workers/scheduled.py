@@ -28,6 +28,9 @@ from app.workers.scheduler import (
 logger = get_logger("app.scheduled")
 
 WORKER_LOST = "worker lost: the run was still `running` after the stale-run limit"
+QUEUE_LOST = (
+    "queue lost: the run was still `queued` after the stale-run limit, with no job on the queue"
+)
 
 
 class ScheduledJobError(Exception):
@@ -92,26 +95,77 @@ def stale_runs(session: Session, *, now: datetime, exclude: JobRun | None = None
     return list(session.scalars(stmt.order_by(JobRun.started_at.asc())))
 
 
+def abandoned_runs(
+    session: Session, *, now: datetime, exclude: JobRun | None = None
+) -> list[JobRun]:
+    """Runs still `queued` past the limit that no longer have a job on the RQ queue.
+
+    The other half of "stuck". A run whose worker died *before* it reached `running` —
+    or whose attempt was rolled back out of `running` — is `queued` with nothing left to
+    pick it up. It is not `running`, so `stale_runs` never sees it, and it is not
+    terminal, so the scheduler keeps skipping its job: exactly how one
+    `scheduled:crm-sync` run held every later CRM sync for a day (spec v0.9.0).
+
+    Redis is the arbiter, not the clock: a run that really is waiting its turn on a busy
+    queue still has its job and is left alone. If Redis cannot be reached the sweep is
+    skipped entirely — failing runs on a guess is worse than failing them late.
+    """
+    limit = now - timedelta(minutes=get_settings().watchdog_stale_minutes)
+    stmt = select(JobRun).where(JobRun.status == JobRunStatus.queued, JobRun.created_at < limit)
+    if exclude is not None:
+        stmt = stmt.where(JobRun.id != exclude.id)
+    candidates = list(session.scalars(stmt.order_by(JobRun.created_at.asc())))
+    if not candidates:
+        return []
+    try:
+        known = _queued_job_ids()
+    except Exception:
+        logger.warning("could not read the queue; leaving queued runs alone", exc_info=True)
+        return []
+    return [run for run in candidates if str(run.id) not in known]
+
+
+def _queued_job_ids() -> set[str]:
+    """Every job id RQ still has work for. `enqueue_run` uses the run id as the job id.
+
+    The waiting queue plus the started registry. Deliberately *not* the failed registry:
+    a job whose RQ side has already failed is precisely one nothing will run again.
+    """
+    from rq.registry import StartedJobRegistry
+
+    from app.core.redis import get_queue
+
+    queue = get_queue()
+    known = set(queue.get_job_ids())
+    known.update(StartedJobRegistry(queue=queue).get_job_ids())
+    return known
+
+
 def run_watchdog(session: Session, run: JobRun, *, now: datetime | None = None) -> None:
-    """Fail abandoned runs with "worker lost", alert, then re-evaluate every alert rule."""
+    """Fail abandoned runs with their reason, alert, then re-evaluate every alert rule."""
     from app.modules.alerts import service as alerts
 
     moment = now or datetime.now(UTC)
     failed: list[dict[str, Any]] = []
-    for stale in stale_runs(session, now=moment, exclude=run):
-        transition(session, stale, JobRunStatus.failed, error=WORKER_LOST)
-        failed.append({"job_run_id": str(stale.id), "kind": stale.kind})
+    stuck: list[tuple[JobRun, str]] = [
+        *((item, WORKER_LOST) for item in stale_runs(session, now=moment, exclude=run)),
+        *((item, QUEUE_LOST) for item in abandoned_runs(session, now=moment, exclude=run)),
+    ]
+    for item, reason in stuck:
+        transition(session, item, JobRunStatus.failed, error=reason)
+        failed.append({"job_run_id": str(item.id), "kind": item.kind})
         alerts.raise_alert(
             session,
             alerts.RULE_STALE_JOB,
-            f"A {stale.kind} run was stuck in `running` for more than "
-            f"{get_settings().watchdog_stale_minutes} minutes and was failed (worker lost)",
-            details={"job_run_id": str(stale.id), "kind": stale.kind},
+            f"A {item.kind} run was stuck in `{_was(reason)}` for more than "
+            f"{get_settings().watchdog_stale_minutes} minutes and was failed "
+            f"({reason.split(':')[0]})",
+            details={"job_run_id": str(item.id), "kind": item.kind, "reason": reason},
             now=moment,
         )
         logger.warning(
             "stale run failed by the watchdog",
-            extra={"job_run_id": str(stale.id), "kind": stale.kind},
+            extra={"job_run_id": str(item.id), "kind": item.kind, "reason": reason},
         )
 
     from app.modules.monitoring import service as monitoring
@@ -122,6 +176,10 @@ def run_watchdog(session: Session, run: JobRun, *, now: datetime | None = None) 
         "stale": failed,
         "alerts_open": len(evaluated),
     }
+
+
+def _was(reason: str) -> str:
+    return "running" if reason == WORKER_LOST else "queued"
 
 
 HANDLERS = {

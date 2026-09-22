@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { OpportunityCard } from "./OpportunityCard";
 import { reviewOpportunity } from "@/test/utils";
 import { AI_LABEL } from "@/lib/safe";
@@ -75,8 +75,9 @@ describe("OpportunityCard display", () => {
       },
     });
     const details = screen.getByTestId("ai-details");
-    expect(details.tagName).toBe("DETAILS");
-    expect(details.querySelector("summary")?.textContent).toBe("Details");
+    const trigger = within(details).getByRole("button", { name: "Details" });
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(trigger);
     expect(details.textContent).toContain("scripted-triage");
     const top = screen.getByTestId("card-top");
     expect(top.className).toContain("sticky");

@@ -1,5 +1,6 @@
 import { AiLabel } from "@/components/AiLabel";
 import { SafeLink } from "@/components/SafeLink";
+import { Badge } from "@/components/ui";
 import { findingLabel } from "@/lib/labels";
 
 export type Evidence = {
@@ -50,32 +51,36 @@ export function groupEvidence(items: Evidence[]): EvidenceGroup[] {
   });
 }
 
+/** Quoted from the website, so every quote is set in the evidence face. */
 export function EvidenceList({ items }: { items: Evidence[] }) {
   const groups = groupEvidence(items);
-  if (!groups.length) return <p className="text-sm text-slate-600">No evidence recorded.</p>;
+  if (!groups.length) return <p className="text-base text-ink-soft">No evidence recorded.</p>;
   return (
-    <ul className="mt-1 flex flex-col gap-1 text-sm">
+    <ul className="flex flex-col gap-2">
       {groups.map((group) => (
-        <li key={group.key} className="rounded border border-slate-100 bg-slate-50 p-2" data-testid="evidence">
-          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
-            <span className="font-medium text-slate-800" title={group.finding_code ?? undefined}>
+        <li key={group.key} className="rounded border border-line bg-surface-sunken p-2" data-testid="evidence">
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <span className="font-medium text-ink" title={group.finding_code ?? undefined}>
               {group.finding_code ? findingLabel(group.finding_code) : "Observation"}
             </span>
             {group.fromRules && group.fromAi ? (
-              <span className="chip border-teal-300 bg-teal-50 text-teal-700" data-testid="ai-agrees">
+              <Badge tone="accent" data-testid="ai-agrees">
                 AI agrees
-              </span>
+              </Badge>
             ) : null}
             {group.fromAi && !group.fromRules ? <AiLabel /> : null}
           </div>
-          {group.text ? <blockquote className="mt-1 whitespace-pre-wrap">{group.text}</blockquote> : null}
+          {group.text ? (
+            <blockquote className="mt-1 whitespace-pre-wrap font-mono text-sm text-ink">{group.text}</blockquote>
+          ) : null}
           {group.aiQuote ? (
-            <p className="mt-1 whitespace-pre-wrap text-xs text-slate-600">
-              <span className="font-medium text-amber-800">AI quote:</span> {group.aiQuote}
+            <p className="mt-1 whitespace-pre-wrap text-sm text-ink-soft">
+              <span className="font-medium text-warn">AI quote:</span>{" "}
+              <span className="font-mono">{group.aiQuote}</span>
             </p>
           ) : null}
           {group.url ? (
-            <p className="mt-1 text-xs">
+            <p className="print-hide mt-1 text-sm text-ink-soft">
               Source: <SafeLink href={group.url} />
             </p>
           ) : null}

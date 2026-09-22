@@ -162,3 +162,104 @@ def test_the_source_row_config_is_marked_as_a_service() -> None:
     assert config["role"] == "ai_service"
     assert config["rate_limit"] == {"requests_per_second": 2.0, "burst": 2, "daily_call_cap": 500}
     assert "never a phone number" in config["commercial_use_note"]
+
+
+def test_the_request_body_carries_no_temperature_and_no_max_tokens(
+    mock_http: respx.MockRouter,
+) -> None:
+    """The production 400 (spec v0.9.0): this model family rejects both parameters.
+
+    `temperature: 0` → "Unsupported value: 'temperature' does not support 0 with this
+    model. Only the default (1) value is supported." `max_tokens` → "Unsupported
+    parameter: 'max_tokens' is not supported with this model. Use
+    'max_completion_tokens' instead." Fourteen of eighteen businesses failed this way
+    and nothing was ever billed, because nothing reached the model.
+
+    `temperature` is omitted rather than pinned to 1: the default is the only value the
+    model accepts, and sending it buys nothing while being one more thing to change when
+    the next family arrives. No output cap is sent at all — see the spec note — so the
+    assertion is that neither spelling of one appears.
+    """
+    route = mock_http.post(OPENAI_ENDPOINT).mock(
+        return_value=httpx.Response(200, json=completion("{}"))
+    )
+
+    client().complete(request())
+
+    sent = json.loads(route.calls[0].request.content)
+    assert "temperature" not in sent, "this model family accepts only the default"
+    assert "max_tokens" not in sent, "if an output cap is ever added it must be the new name"
+    # The strict JSON schema is the half of the request that was always fine; keeping it
+    # asserted here means a fix to the parameters cannot quietly drop it.
+    assert sent["response_format"]["json_schema"]["strict"] is True
+
+
+def test_a_400_stores_the_body_that_names_the_offending_parameter(
+    mock_http: respx.MockRouter,
+) -> None:
+    """The stored error was "OpenAI answered 400: BadRequestError" for all 14 failures.
+
+    The response body — the one thing that names the parameter — was discarded, so
+    diagnosing this needed a manual reproduction against the live API that the stored
+    provenance should have made unnecessary.
+    """
+    mock_http.post(OPENAI_ENDPOINT).mock(
+        return_value=httpx.Response(
+            400,
+            json={
+                "error": {
+                    "message": (
+                        "Unsupported value: 'temperature' does not support 0 with this "
+                        "model. Only the default (1) value is supported."
+                    ),
+                    "type": "invalid_request_error",
+                    "param": "temperature",
+                    "code": "unsupported_value",
+                }
+            },
+        )
+    )
+
+    with pytest.raises(LLMError) as info:
+        client().complete(request())
+
+    stored = str(info.value)
+    assert "400" in stored
+    assert "does not support 0 with this model" in stored, "the body must survive"
+    assert "param=temperature" in stored, "and must name the parameter"
+    assert "code=unsupported_value" in stored
+    assert info.value.retryable is False, "a malformed request is not worth retrying"
+    assert KEY not in stored
+
+
+def test_a_failed_call_reports_how_long_it_took(mock_http: respx.MockRouter) -> None:
+    """`latency_ms` read 0 on every one of the production failures.
+
+    A failure costs real time — a timeout, or a round trip that ended in a 400 — and the
+    classification row recorded none of it, because the latency lived only on the success
+    path. A run that spent a minute failing looked instant.
+    """
+    mock_http.post(OPENAI_ENDPOINT).mock(
+        return_value=httpx.Response(400, json={"error": {"message": "no", "param": "temperature"}})
+    )
+
+    with pytest.raises(LLMError) as info:
+        client().complete(request())
+
+    assert info.value.latency_ms >= 0
+    assert isinstance(info.value.latency_ms, int)
+
+
+def test_an_error_body_is_truncated(mock_http: respx.MockRouter) -> None:
+    """A provider that answers with a wall of text must not bloat the `error` column."""
+    from app.modules.ai.openai_client import ERROR_BODY_MAX_CHARS
+
+    mock_http.post(OPENAI_ENDPOINT).mock(
+        return_value=httpx.Response(400, json={"error": {"message": "x" * 5_000}})
+    )
+
+    with pytest.raises(LLMError) as info:
+        client().complete(request())
+
+    body = str(info.value).split("BadRequestError: ", 1)[1]
+    assert len(body) <= ERROR_BODY_MAX_CHARS

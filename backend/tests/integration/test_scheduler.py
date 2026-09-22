@@ -17,7 +17,7 @@ from app.modules.jobs.models import JobRun, JobRunStatus
 from app.modules.jobs.service import DEMO_JOB_KIND, enqueue_run
 from app.modules.jobs.state import transition
 from app.workers import tasks
-from app.workers.scheduled import WORKER_LOST, run_watchdog
+from app.workers.scheduled import QUEUE_LOST, WORKER_LOST, run_watchdog
 from app.workers.scheduler import (
     JOB_BACKUP,
     JOB_BACKUP_VERIFY,
@@ -233,3 +233,61 @@ def test_a_failed_backup_verify_is_not_retried_and_raises_an_alert(
     alert = db.scalars(select(Alert).where(Alert.rule == alerts.RULE_BACKUP_VERIFY_FAILED)).one()
     assert alert.severity == "critical"
     assert alert.active
+
+
+def test_the_watchdog_fails_an_abandoned_queued_run_and_unblocks_its_schedule(
+    db: Session, fake_redis: fakeredis.FakeStrictRedis
+) -> None:
+    """The v0.9.0 `scheduled:crm-sync` incident, from both ends.
+
+    A run that died before it reached `running` was rolled back to `queued` with no job
+    left on the queue. `stale_runs` only ever looked at `running`, so the watchdog walked
+    past it, and the scheduler — which skips a job whose previous run has not finished —
+    queued no CRM sync for a day. The watchdog now fails runs of *any* kind stuck in
+    `queued` past the limit with nothing on the queue, and the next tick queues the job.
+    """
+    now = datetime.now(UTC)
+    kind = f"{SCHEDULED_KIND_PREFIX}{JOB_CRM_SYNC}"
+    abandoned = JobRun(kind=kind, status=JobRunStatus.queued)
+    abandoned.created_at = now - timedelta(hours=21)
+    db.add(abandoned)
+    db.commit()
+    assert fake_redis.llen("rq:queue:default") == 0, "nothing on the queue will run it"
+
+    run = enqueue_run(db, search_job_id=None, kind=f"{SCHEDULED_KIND_PREFIX}{JOB_WATCHDOG}")
+    assert tasks.execute_job_run(run.id) is JobRunStatus.done
+
+    db.expire_all()
+    assert abandoned.status is JobRunStatus.failed
+    assert abandoned.error == QUEUE_LOST
+    assert abandoned.is_terminal, "the scheduler can only move on once this run is finished"
+
+    watchdog = db.get(JobRun, run.id)
+    assert watchdog is not None and watchdog.result_summary is not None
+    assert watchdog.result_summary["stale"] == [{"job_run_id": str(abandoned.id), "kind": kind}]
+
+    # And the schedule is moving again: the next tick queues a new crm-sync run.
+    scheduler = Scheduler(fake_redis, instance_id="after-the-watchdog")
+    scheduler.tick(T0)
+    queued = scheduler.tick(T0 + timedelta(minutes=1, seconds=40))
+    db.expire_all()
+    kinds = {db.get(JobRun, run_id).kind for run_id in queued}  # type: ignore[union-attr]
+    assert kind in kinds
+
+
+def test_the_watchdog_leaves_a_queued_run_that_still_has_its_job_alone(
+    db: Session, fake_redis: fakeredis.FakeStrictRedis
+) -> None:
+    """A busy queue is not a broken one: only a run RQ has forgotten is failed."""
+    waiting = enqueue_run(db, search_job_id=None, kind=DEMO_JOB_KIND)
+    waiting.created_at = datetime.now(UTC) - timedelta(hours=3)
+    db.commit()
+
+    run = enqueue_run(db, search_job_id=None, kind=f"{SCHEDULED_KIND_PREFIX}{JOB_WATCHDOG}")
+    assert tasks.execute_job_run(run.id) is JobRunStatus.done
+
+    db.expire_all()
+    assert waiting.status is JobRunStatus.queued
+    watchdog = db.get(JobRun, run.id)
+    assert watchdog is not None and watchdog.result_summary is not None
+    assert watchdog.result_summary["stale_runs_failed"] == 0

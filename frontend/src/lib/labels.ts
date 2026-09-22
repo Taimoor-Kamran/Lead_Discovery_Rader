@@ -44,6 +44,30 @@ export const AUDIT_STATUS_LABELS: Record<string, string> = {
   failed: "Failed",
 };
 
+export const WEBSITE_KIND_LABELS: Record<string, string> = {
+  own_site: "Own website",
+  builder_subdomain: "Builder site",
+  social_profile: "Social profile only",
+  none: "No website",
+};
+
+export const BUSINESS_STATUS_LABELS: Record<string, string> = {
+  operational: "Open",
+  closed_temporarily: "Temporarily closed",
+  closed_permanently: "Permanently closed",
+  unknown: "Unknown",
+};
+
+/**
+ * Industry slugs come from `normalization/taxonomy.py`, which is data and grows without a
+ * code change, and the API's own dropdown label is `slug → Slug`. So only the slugs
+ * `humanize` would read wrongly are listed here; everything else falls through to
+ * `pest_control` → `Pest control`, which is the same wording the dropdown shows.
+ */
+export const INDUSTRY_LABELS: Record<string, string> = {
+  hvac: "HVAC",
+};
+
 export const SEVERITY_LABELS: Record<string, string> = {
   high: "High",
   medium: "Medium",
@@ -76,4 +100,16 @@ export function auditStatusLabel(code: string | null | undefined): string {
 
 export function severityLabel(code: string | null | undefined): string {
   return (code && SEVERITY_LABELS[code]) || humanize(code);
+}
+
+export function websiteKindLabel(code: string | null | undefined): string {
+  return (code && WEBSITE_KIND_LABELS[code]) || humanize(code);
+}
+
+export function businessStatusLabel(code: string | null | undefined): string {
+  return (code && BUSINESS_STATUS_LABELS[code]) || humanize(code);
+}
+
+export function industryLabel(code: string | null | undefined): string {
+  return (code && INDUSTRY_LABELS[code]) || humanize(code);
 }

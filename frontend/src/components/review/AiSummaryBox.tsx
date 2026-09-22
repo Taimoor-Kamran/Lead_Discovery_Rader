@@ -1,34 +1,35 @@
-import type { AISummary } from "@/lib/api";
 import { AiLabel } from "@/components/AiLabel";
+import { Card, Disclosure } from "@/components/ui";
+import type { AISummary } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
+import { industryLabel } from "@/lib/labels";
 
-/** The model's summary, boxed and labelled. Plain text only; nothing here is a fact. */
+/**
+ * The model's summary — labelled, muted and last in the argument, because it is the only
+ * part that is not a stored fact. Plain text only; nothing here is evidence.
+ */
 export function AiSummaryBox({ ai }: { ai: AISummary | null | undefined }) {
   if (!ai) {
     return (
-      <section className="rounded-lg border border-dashed border-slate-300 bg-white p-3 text-sm text-slate-600">
-        No AI classification for this business.
-      </section>
+      <Card className="print-hide border-dashed">
+        <p className="text-base text-ink-soft">No AI classification for this business.</p>
+      </Card>
     );
   }
   return (
-    <section
-      className="rounded-lg border border-amber-300 bg-amber-50/60 p-3 text-sm"
-      aria-label="AI summary"
-      data-testid="ai-summary"
-    >
+    <Card className="print-hide bg-surface-sunken" aria-label="AI summary" data-testid="ai-summary">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <AiLabel />
-        <span className="text-xs text-slate-600">{formatDateTime(ai.created_at)}</span>
+        <span className="text-sm text-ink-soft">{formatDateTime(ai.created_at)}</span>
       </div>
-      <p className="mt-2 whitespace-pre-wrap">
+      <p className="mt-2 max-w-measure whitespace-pre-wrap text-base text-ink-soft">
         {ai.business_summary ?? "No summary (expired or not produced)."}
       </p>
-      <dl className="mt-2 grid grid-cols-[9rem_1fr] gap-y-0.5 text-xs text-slate-700">
+      <dl className="mt-3 grid grid-cols-[9rem_1fr] gap-y-1 text-sm text-ink-soft">
         <dt>Industry (AI)</dt>
-        <dd>
-          {ai.industry ?? "unknown"}
-          {ai.industry_matches_listing === false ? " · does not match the listing" : ""}
+        <dd title={ai.industry ?? undefined}>
+          {industryLabel(ai.industry)}
+          {ai.industry_matches_listing === false ? " — does not match the listing" : ""}
         </dd>
         <dt>Buying intent</dt>
         <dd>{ai.buying_intent ?? "unknown"}</dd>
@@ -39,20 +40,21 @@ export function AiSummaryBox({ ai }: { ai: AISummary | null | undefined }) {
           </>
         ) : null}
       </dl>
-      <details className="mt-2 text-xs text-slate-600" data-testid="ai-details">
-        <summary className="cursor-pointer select-none text-slate-700">Details</summary>
-        <dl className="mt-1 grid grid-cols-[7rem_1fr] gap-y-0.5">
-          <dt>Model</dt>
-          <dd className="font-mono">{ai.model}</dd>
-          <dt>Prompt</dt>
-          <dd className="font-mono">{ai.prompt_version}</dd>
-          <dt>Status</dt>
-          <dd>
-            {ai.status}
-            {ai.escalated ? " · escalated" : ""}
-          </dd>
-        </dl>
-      </details>
-    </section>
+      <div className="mt-3">
+        <Disclosure summary="Details" testId="ai-details">
+          <dl className="grid grid-cols-[7rem_1fr] gap-y-1 text-sm text-ink-soft">
+            <dt>Model</dt>
+            <dd className="font-mono">{ai.model}</dd>
+            <dt>Prompt</dt>
+            <dd className="font-mono">{ai.prompt_version}</dd>
+            <dt>Status</dt>
+            <dd>
+              {ai.status}
+              {ai.escalated ? " — escalated" : ""}
+            </dd>
+          </dl>
+        </Disclosure>
+      </div>
+    </Card>
   );
 }

@@ -23,7 +23,9 @@ describe("Alert banner", () => {
     expect(screen.getByTestId("alert-banner").textContent).toContain("(+1 more)");
 
     fireEvent.click(screen.getByRole("button", { name: "Acknowledge" }));
-    await waitFor(() => expect(screen.getByTestId("alert-banner").textContent).toContain("1 open alert:"));
+    // v0.9.0 dropped the colon that used to join the count to the message.
+    await waitFor(() => expect(screen.getByTestId("alert-banner").textContent).toContain("1 open alert"));
+    expect(screen.getByTestId("alert-banner").textContent).not.toContain("2 open alerts");
   });
 
   it("is not shown to a reviewer and never asks for alerts", async () => {

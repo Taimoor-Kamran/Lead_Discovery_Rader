@@ -120,7 +120,12 @@ def load_demo_data(session: Session, *, now: datetime | None = None) -> DemoLoad
     run.result_summary = summary.model_dump()
     session.flush()
 
-    resolution = enqueue_resolution(session, run.id, idempotency_key=f"resolution:{run.id}")
+    # `dispatch=False` here and `dispatch_follow_up=False` in `run_pipeline`: this command
+    # walks the whole chain itself, so no run in it may also be on the queue. See the note
+    # in `reset_demo_data` for why the executor is this process.
+    resolution = enqueue_resolution(
+        session, run.id, idempotency_key=f"resolution:{run.id}", dispatch=False
+    )
     session.commit()
 
     logger.info(
@@ -151,7 +156,7 @@ def run_pipeline(result: DemoLoadResult) -> DemoPipelineResult:
     """
     from app.workers.tasks import execute_job_run
 
-    resolution_status = execute_job_run(result.resolution_run_id)
+    resolution_status = execute_job_run(result.resolution_run_id, dispatch_follow_up=False)
     audit_run_id: uuid.UUID | None = None
     audit_status: JobRunStatus | None = None
     audit_summary: dict[str, Any] = {}
@@ -169,7 +174,7 @@ def run_pipeline(result: DemoLoadResult) -> DemoPipelineResult:
     classification_status: JobRunStatus | None = None
     classification_summary: dict[str, Any] = {}
     if audit_run_id is not None:
-        audit_status = execute_job_run(audit_run_id)
+        audit_status = execute_job_run(audit_run_id, dispatch_follow_up=False)
         with session_scope() as session:
             audit_run = session.get(JobRun, audit_run_id)
             audit_summary = dict((audit_run.result_summary if audit_run else None) or {})
@@ -250,10 +255,29 @@ def reset_demo_data(session: Session) -> DemoResetResult:
     _wipe(session, CrmLead)
     _wipe(session, FakeCrmRecord)
     e2e_deleted, e2e_deactivated = _remove_e2e_users(session)
+    # `dispatch=False`: this process executes the run itself, a few lines down, so it must
+    # not also go on the queue. There *is* a worker in the loop here — the command runs in
+    # a `compose run` container beside a live worker — and queueing it and running it is
+    # exactly what broke `make e2e`: both claimed the row, the second one wrote `failed`
+    # over the 56 opportunities the first had already committed (spec v0.9.0).
+    #
+    # Why this process and not the worker: the command's whole job is to leave the
+    # database in a known state and *report what it did* to its caller, which `make e2e`
+    # reads before it starts. Waiting on another process would mean a timeout, a second
+    # source of truth for "is it finished", and a hang whenever the worker is down or
+    # busy — and the test suite calls `reset_demo_data` directly, with no worker at all.
+    # The handler needs nothing a worker has: the fake AI provider answers from
+    # checked-in files and no network is touched.
+    #
+    # Not `run_inline`, which is for commands with no worker: it would build a different
+    # row — no `search_job_id`, no parent link, no idempotency key — and would overwrite
+    # the summary the classification handler writes. Keeping the real row and the real
+    # handler means the reset goes through the same state machine as everything else.
     run = enqueue_classification_for_run(
         session,
         audit_run.id,
         idempotency_key=f"classification:{audit_run.id}:reset:{uuid.uuid4()}",
+        dispatch=False,
     )
     run_id = run.id
     session.commit()

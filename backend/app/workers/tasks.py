@@ -107,89 +107,211 @@ for _kind, _handler in _SCHEDULED_HANDLERS.items():
     register_handler(_kind, _handler)
 
 
-def follow_up(session: Session, run: JobRun) -> None:
+def follow_up(session: Session, run: JobRun, *, dispatch: bool = True) -> None:
     """Queue whatever a finished run implies: discovery → resolution → audit → classification.
 
     Each key is derived from the run that triggered it, so a retried or re-requested run
     never leaves a second follow-up behind.
+
+    `dispatch=False` creates the next run without putting it on the queue, for a caller
+    walking the pipeline itself (`make load-demo-data`). The rule it serves is the one
+    below: one run, one executor.
     """
     if run.kind == DISCOVERY_JOB_KIND:
         from app.modules.resolution.service import enqueue_resolution
 
-        enqueue_resolution(session, run.id, idempotency_key=f"resolution:{run.id}")
+        enqueue_resolution(
+            session, run.id, idempotency_key=f"resolution:{run.id}", dispatch=dispatch
+        )
         return
 
     if run.kind == RESOLUTION_JOB_KIND:
         from app.modules.audit_web.service import enqueue_audits_for_run
 
-        enqueue_audits_for_run(session, run.id, idempotency_key=f"audit:{run.id}")
+        enqueue_audits_for_run(
+            session, run.id, idempotency_key=f"audit:{run.id}", dispatch=dispatch
+        )
         return
 
     if run.kind == AUDIT_JOB_KIND:
         from app.modules.opportunities.service import enqueue_classification_for_run
 
-        enqueue_classification_for_run(session, run.id, idempotency_key=f"classification:{run.id}")
+        enqueue_classification_for_run(
+            session, run.id, idempotency_key=f"classification:{run.id}", dispatch=dispatch
+        )
 
 
-def execute_job_run(
-    job_run_id: str | uuid.UUID, *, sleeper: Callable[[float], None] = time.sleep
-) -> JobRunStatus:
-    """Run one job run to a terminal status, retrying failures with exponential backoff.
+class _HandlerFailedError(Exception):
+    """A handler failed and its own session could not record it. Carried out to a new one."""
 
-    `sleeper` is injectable so tests can assert the backoff schedule without waiting.
-    """
+    def __init__(self, cause: BaseException, attempt: int) -> None:
+        super().__init__(f"{type(cause).__name__}: {cause}")
+        self.cause = cause
+        self.attempt = attempt
+
+
+def _decide(
+    session: Session, run: JobRun, failure: _HandlerFailedError
+) -> tuple[JobRunStatus | None, int]:
+    """Fail the run, or queue a retry. Returns the terminal status, or `None` and a delay."""
     settings = get_settings()
-    run_id = uuid.UUID(str(job_run_id))
-    max_attempts = settings.job_max_attempts
+    message = str(failure)
+    retryable = is_retryable(failure.cause)
+    if failure.attempt >= settings.job_max_attempts or not retryable:
+        transition(session, run, JobRunStatus.failed, error=message)
+        logger.error(
+            "job run failed permanently",
+            extra={
+                "job_run_id": str(run.id),
+                "attempts": failure.attempt,
+                "retryable": retryable,
+            },
+        )
+        return JobRunStatus.failed, 0
 
-    while True:
+    delay = backoff_seconds(failure.attempt, settings.job_backoff_base_seconds)
+    transition(session, run, JobRunStatus.queued, error=message)
+    logger.warning(
+        "job run failed, retrying",
+        extra={
+            "job_run_id": str(run.id),
+            "attempt": failure.attempt,
+            "retry_in_seconds": delay,
+        },
+    )
+    return None, delay
+
+
+def _one_attempt(
+    run_id: uuid.UUID, *, dispatch_follow_up: bool = True
+) -> tuple[JobRunStatus | None, int]:
+    """Run the job once. Returns its terminal status, or `None` and the seconds until a retry.
+
+    Raises `_HandlerFailedError` only when this session could not record the outcome
+    itself — an aborted transaction or a lost connection. That is decided here rather
+    than outside so that a handler which wrote something before it failed (an alert, a
+    partial result) keeps it: the failure and the handler's rows commit together.
+    """
+    with session_scope() as session:
+        run = get_job_run(session, run_id)
+        if run.is_terminal:
+            return run.status, 0
+        if run.status is JobRunStatus.running:
+            # Somebody else is already running this. RQ redelivers a job when a worker
+            # dies, and `make load-demo-data` used to queue a run *and* execute it, so
+            # two executors claimed the same row: one of them then wrote `failed` over
+            # work the other had already committed. Whoever arrives second backs off
+            # here. Adjudicating a run left `running` by a dead worker belongs to the
+            # watchdog, which has the stale-run limit to judge it by; an attempt that
+            # has just found it cannot tell a dead worker from a live one.
+            logger.warning(
+                "job run is already running; leaving it to the executor that claimed it",
+                extra={"job_run_id": str(run.id), "kind": run.kind},
+            )
+            return run.status, 0
+        if run.cancel_requested and run.status is JobRunStatus.queued:
+            transition(session, run, JobRunStatus.cancelled)
+            return JobRunStatus.cancelled, 0
+
+        transition(session, run, JobRunStatus.running)
+        # Committed before any work starts. If the attempt dies from here on, the row on
+        # disk says `running` and the watchdog owns it; without this commit the rollback
+        # that follows a failure also undid the transition, putting the run back to
+        # `queued` with no RQ job behind it — invisible to the watchdog and, for a
+        # `scheduled:*` kind, blocking that job for ever (the v0.9.0 incident).
+        session.commit()
+        attempt = run.attempts
+
+        try:
+            # Looked up inside the try so an unknown kind fails the run through the
+            # normal path instead of leaving it stuck as `running`.
+            get_handler(run.kind)(session, run)
+        except JobCancelledError as exc:
+            transition(session, run, JobRunStatus.cancelled, error=str(exc))
+            logger.info("job run cancelled", extra={"job_run_id": str(run.id)})
+            return JobRunStatus.cancelled, 0
+        except Exception as exc:  # a handler failure is data, not a crash
+            failure = _HandlerFailedError(exc, attempt)
+            try:
+                return _decide(session, run, failure)
+            except Exception:
+                raise failure from exc
+
+        transition(session, run, JobRunStatus.done)
+        follow_up(session, run, dispatch=dispatch_follow_up)
+        logger.info("job run done", extra={"job_run_id": str(run.id)})
+        return JobRunStatus.done, 0
+
+
+def _record_failure(
+    run_id: uuid.UUID, failure: _HandlerFailedError
+) -> tuple[JobRunStatus | None, int]:
+    """Write a handler failure in a session of its own, the attempt's having gone bad."""
+    with session_scope() as session:
+        run = get_job_run(session, run_id)
+        if run.is_terminal:
+            return run.status, 0
+        return _decide(session, run, failure)
+
+
+def _fail_run(run_id: uuid.UUID, exc: BaseException) -> JobRunStatus:
+    """The last resort: whatever broke, the run ends `failed` with the reason stored.
+
+    Reached when the attempt itself came apart — a dead connection, an aborted
+    transaction, a transition that could not be written. A brand-new session is used
+    because the one that failed cannot be trusted to run another statement. Nothing a
+    worker does may leave a run sitting in `running` or `queued` with no error: that is
+    a run nobody will ever finish, and for a `scheduled:*` kind it stops the scheduler
+    from ever queueing that job again.
+    """
+    message = f"{type(exc).__name__}: {exc}"
+    try:
         with session_scope() as session:
             run = get_job_run(session, run_id)
             if run.is_terminal:
                 return run.status
-            if run.cancel_requested and run.status is JobRunStatus.queued:
-                transition(session, run, JobRunStatus.cancelled)
-                return JobRunStatus.cancelled
+            transition(session, run, JobRunStatus.failed, error=message)
+    except Exception:
+        # The database is unreachable too. Say so and let RQ record the original: the
+        # watchdog finishes the run once the database is back.
+        logger.exception("could not record a failed job run", extra={"job_run_id": str(run_id)})
+        raise exc from None
+    logger.error(
+        "job run failed", extra={"job_run_id": str(run_id), "error": message}, exc_info=exc
+    )
+    return JobRunStatus.failed
 
-            transition(session, run, JobRunStatus.running)
-            attempt = run.attempts
 
+def execute_job_run(
+    job_run_id: str | uuid.UUID,
+    *,
+    sleeper: Callable[[float], None] = time.sleep,
+    dispatch_follow_up: bool = True,
+) -> JobRunStatus:
+    """Run one job run to a terminal status, retrying failures with exponential backoff.
+
+    Every exit is terminal — `done`, `cancelled` or `failed` — with one exception:
+    `running`, meaning another executor holds this run and this call did nothing. Anything
+    that escapes an attempt is written to the run by `_fail_run` rather than being allowed
+    to leave it `running`.
+
+    `sleeper` is injectable so tests can assert the backoff schedule without waiting.
+    `dispatch_follow_up=False` keeps the next run in the chain off the queue, for a caller
+    that is walking the pipeline itself.
+    """
+    run_id = uuid.UUID(str(job_run_id))
+
+    while True:
+        try:
+            status, delay = _one_attempt(run_id, dispatch_follow_up=dispatch_follow_up)
+        except _HandlerFailedError as failure:
             try:
-                # Looked up inside the try so an unknown kind fails the run through the
-                # normal path instead of leaving it stuck as `running`.
-                get_handler(run.kind)(session, run)
-            except JobCancelledError as exc:
-                transition(session, run, JobRunStatus.cancelled, error=str(exc))
-                logger.info("job run cancelled", extra={"job_run_id": str(run.id)})
-                return JobRunStatus.cancelled
-            except Exception as exc:  # a handler failure is data, not a crash
-                message = f"{type(exc).__name__}: {exc}"
-                if attempt >= max_attempts or not is_retryable(exc):
-                    transition(session, run, JobRunStatus.failed, error=message)
-                    logger.error(
-                        "job run failed permanently",
-                        extra={
-                            "job_run_id": str(run.id),
-                            "attempts": attempt,
-                            "retryable": is_retryable(exc),
-                        },
-                    )
-                    return JobRunStatus.failed
+                status, delay = _record_failure(run_id, failure)
+            except Exception as exc:
+                return _fail_run(run_id, exc)
+        except Exception as exc:
+            return _fail_run(run_id, exc)
 
-                delay = backoff_seconds(attempt, settings.job_backoff_base_seconds)
-                transition(session, run, JobRunStatus.queued, error=message)
-                logger.warning(
-                    "job run failed, retrying",
-                    extra={
-                        "job_run_id": str(run.id),
-                        "attempt": attempt,
-                        "retry_in_seconds": delay,
-                    },
-                )
-            else:
-                transition(session, run, JobRunStatus.done)
-                follow_up(session, run)
-                logger.info("job run done", extra={"job_run_id": str(run.id)})
-                return JobRunStatus.done
-
+        if status is not None:
+            return status
         sleeper(delay)

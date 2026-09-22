@@ -525,6 +525,40 @@ def test_reset_demo_data_puts_every_opportunity_back_to_pending(
     assert isinstance(db.get(User, reviewer.id), User)
 
 
+def test_reset_demo_data_leaves_nothing_on_the_queue_for_a_second_executor(
+    db: Session, classified: DemoLoadResult, fake_redis: Any
+) -> None:
+    """One run, one executor — the bug that broke `make e2e` (spec v0.9.0).
+
+    `reset-demo-data` used to queue its classification run *and* execute it in this
+    process. In the real stack a worker is listening, so it picked the same run up: the
+    CLI took it to `running`, the worker found it already `running` and raised
+    `InvalidStateTransitionError`, and `_fail_run` then wrote `failed` over the 56
+    opportunities the CLI had already committed. The run must reach `done` with the
+    summary it produced, and the queue must be empty so nothing can claim it twice.
+    """
+    from app.demo.loader import reset_demo_data
+
+    fake_redis.delete("rq:queue:default")
+
+    result = reset_demo_data(db)
+
+    assert result.classification_status is JobRunStatus.done
+    assert result.classification_summary, "a finished run reports what it did"
+    assert result.classification_summary["businesses"] > 0
+    assert result.classification_summary["ai_errors"] == 0
+
+    db.expire_all()
+    run = db.get(JobRun, result.classification_run_id)
+    assert run is not None
+    assert run.status is JobRunStatus.done
+    assert run.result_summary is not None, "the summary must survive to the row"
+    assert run.error is None
+    assert fake_redis.llen("rq:queue:default") == 0, (
+        "the run was handed to RQ as well as executed here; a worker would race it"
+    )
+
+
 def test_reset_demo_data_removes_the_e2e_users_and_nobody_else(
     db: Session, classified: DemoLoadResult
 ) -> None:

@@ -5,8 +5,8 @@
 
 import { render, type RenderOptions } from "@testing-library/react";
 import { vi } from "vitest";
-import { ToastProvider } from "@/components/Toast";
-import type { Me, QueueItem, ReviewDetail, ReviewOpportunity } from "@/lib/api";
+import { ToastProvider } from "@/components/ui";
+import type { LeadDetail, LeadRead, Me, QueueItem, ReviewDetail, ReviewOpportunity } from "@/lib/api";
 import { AuthProvider, type AuthStatus } from "@/lib/auth";
 
 export type RouteHandler =
@@ -204,6 +204,64 @@ export function reviewDetail(overrides: Partial<ReviewDetail> = {}): ReviewDetai
     suppressions: [],
     undo_window_minutes: 30,
     weak_confidence: 0.4,
+    ...overrides,
+  };
+}
+
+export function leadRead(overrides: Partial<LeadRead> = {}): LeadRead {
+  return {
+    opportunity_id: "opp-1",
+    business_id: "biz-1",
+    business_name: "Barton Creek Plumbing",
+    city: "Austin",
+    state: "TX",
+    industry: "plumbing",
+    service: "website_design",
+    service_name: "Website design / redesign",
+    score: 0.72,
+    reason: "Audit found the site is served over http.",
+    approved_by: "user-reviewer",
+    approved_by_email: "reviewer@example.com",
+    approved_at: "2026-09-20T10:00:00Z",
+    assigned_to: "user-sales_rep",
+    assigned_to_email: "rep1@example.com",
+    phone_e164: "+15125550100",
+    website: "https://bartoncreekplumbing.invalid/",
+    lock_version: 1,
+    top_evidence: null,
+    rule_reason: "Audit found the site is served over http.",
+    ai_rationale: "The model also read a 2016 copyright line.",
+    crm: {
+      id: "crm-1",
+      status: "synced",
+      external_url: "https://airtable.com/app1/tbl1/rec1",
+      last_synced_at: "2026-09-20T12:31:00Z",
+      due_at: null,
+      last_error: null,
+    },
+    ...overrides,
+  };
+}
+
+export function leadDetail(overrides: Partial<LeadDetail> = {}): LeadDetail {
+  const base = reviewDetail();
+  return {
+    lead: leadRead(),
+    crm_history: [
+      {
+        id: 1,
+        crm_lead_id: "crm-1",
+        action: "create",
+        status: "ok",
+        http_status: null,
+        error: null,
+        duration_ms: 12,
+        created_at: "2026-09-20T12:31:00Z",
+      },
+    ],
+    business: base.business,
+    audit: null,
+    opportunity: reviewOpportunity({ review_status: "approved", lock_version: 1 }),
     ...overrides,
   };
 }
