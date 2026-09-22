@@ -122,9 +122,7 @@ all traced from `logs/worker.log`.
   shell, over opportunities that were never classified. It now names what did not finish
   and returns 1, as `reset-demo-data` always has.
 
-Found later, during real-data testing, and **recorded here pending a decision on where it
-belongs** — it is not part of the design pass, and specs/v0.9.0.md Part G recommends a
-spec of its own:
+Found later, during real-data testing on the same deploy, and merged here:
 
 - **Every real classification call was rejected with a 400.** `OpenAIClient` sent
   `temperature=0`, which this model family refuses: *"Unsupported value: 'temperature'
