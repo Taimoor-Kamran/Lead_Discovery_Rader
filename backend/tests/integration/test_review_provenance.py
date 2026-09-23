@@ -13,6 +13,7 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.modules.audit_web.checks import CheckResult, as_payload
@@ -22,11 +23,27 @@ from app.modules.businesses.models import Business
 from app.modules.discovery.models import DiscoveredRecord
 from app.modules.normalization.schemas import BusinessStatus, WebsiteKind
 from app.modules.opportunities.models import Opportunity, OpportunitySource, ReviewStatus
+from app.modules.review import service as review_service
 from app.modules.sources.models import Source, SourceKind
 from tests.conftest import auth_headers, make_user
 
+# A fixed anchor for the provenance-display tests. They stamp records from it and assert on
+# dates derived from it, so they are self-consistent and no clock is involved. It is also fine
+# for `decided_at`, which no filter in this file measures against the real clock.
 NOW = datetime(2026, 9, 22, 12, 0, tzinfo=UTC)
 PAGE = "https://bartoncreekplumbing.invalid/"
+
+
+def discovered_ago(days: float) -> datetime:
+    """A `first_discovered_at` that many days before **the real clock**.
+
+    Every "found within" test has to use this rather than `NOW`. `discovered_within_days`
+    compares against `datetime.now(UTC)` and there is no `now` to inject through HTTP, so data
+    stamped from a fixed constant drifts out of the window as the calendar moves, and the test
+    then fails on a date instead of on a change. `NOW` was a day old on 2026-09-23, which put
+    "Plumbing today" 26 hours in the past and emptied a 24-hour window.
+    """
+    return datetime.now(UTC) - timedelta(days=days)
 
 
 # --- helpers ----------------------------------------------------------------------------
@@ -366,7 +383,7 @@ def three_businesses(db: Session, places: Source, reviewer: User) -> dict[str, B
     built: dict[str, Business] = {}
     for key, days in ages.items():
         business = make_business(db, name=f"Plumbing {key}")
-        make_record(db, places, business, first_discovered_at=NOW - timedelta(days=days))
+        make_record(db, places, business, first_discovered_at=discovered_ago(days))
         make_opportunity(db, business, score=0.9 - days / 100)
         built[key] = business
     db.commit()
@@ -375,6 +392,30 @@ def three_businesses(db: Session, places: Source, reviewer: User) -> dict[str, B
 
 def names(body: Any) -> set[str]:
     return {item.get("display_name") or item["business_name"] for item in body["items"]}
+
+
+def test_the_recency_fixture_is_anchored_to_the_real_clock(
+    db: Session, three_businesses: dict[str, Business]
+) -> None:
+    """Data for a real-clock comparison must be stamped from the real clock.
+
+    `discovered_within_days` has no `now` to inject through HTTP: the service reads
+    `datetime.now(UTC)`. So a window test whose records are stamped from a module constant
+    passes only until that constant ages past the window, and then fails on a date rather
+    than on a change. That is what happened on 2026-09-23, and it is the third
+    time-dependent failure in this project.
+
+    This guards the rule rather than any one test: whatever a recency fixture builds, its
+    newest record must actually be *now*.
+    """
+    newest = db.scalars(select(func.max(DiscoveredRecord.first_discovered_at))).one()
+    age = datetime.now(UTC) - newest
+
+    assert age < timedelta(minutes=5), (
+        f"the newest record this fixture builds is {age} old, not 'now'. It is stamped from a "
+        "fixed constant, so every window assertion in this file will start failing on a date. "
+        "Stamp it with discovered_ago() instead."
+    )
 
 
 def test_found_within_narrows_the_queue_to_recently_discovered_businesses(
@@ -407,8 +448,8 @@ def test_found_within_is_first_found_not_last_seen(
         db,
         places,
         business,
-        first_discovered_at=NOW - timedelta(days=200),
-        last_discovered_at=NOW,
+        first_discovered_at=discovered_ago(200),
+        last_discovered_at=discovered_ago(0),
     )
     make_opportunity(db, business)
     db.commit()
@@ -421,8 +462,8 @@ def test_the_earliest_record_decides_for_a_business_with_several(
     client: TestClient, db: Session, places: Source, demo: Source, reviewer: User
 ) -> None:
     business = make_business(db, name="Two-record Plumbing")
-    make_record(db, places, business, first_discovered_at=NOW - timedelta(days=100))
-    make_record(db, demo, business, first_discovered_at=NOW)
+    make_record(db, places, business, first_discovered_at=discovered_ago(100))
+    make_record(db, demo, business, first_discovered_at=discovered_ago(0))
     make_opportunity(db, business)
     db.commit()
 
@@ -438,19 +479,19 @@ def test_found_within_composes_with_the_other_filters(
 ) -> None:
     """Three filters at once, each of which alone would let a different business through."""
     wanted = make_business(db, name="Austin Recent Plumbing", city="Austin", industry="plumbing")
-    make_record(db, places, wanted, first_discovered_at=NOW)
+    make_record(db, places, wanted, first_discovered_at=discovered_ago(0))
     make_opportunity(db, wanted, service="website_design", score=0.9)
 
     wrong_city = make_business(db, name="Houston Recent", city="Houston", industry="plumbing")
-    make_record(db, places, wrong_city, first_discovered_at=NOW)
+    make_record(db, places, wrong_city, first_discovered_at=discovered_ago(0))
     make_opportunity(db, wrong_city, service="website_design", score=0.9)
 
     wrong_service = make_business(db, name="Austin Recent SEO", city="Austin")
-    make_record(db, places, wrong_service, first_discovered_at=NOW)
+    make_record(db, places, wrong_service, first_discovered_at=discovered_ago(0))
     make_opportunity(db, wrong_service, service="seo_gbp", score=0.9)
 
     too_old = make_business(db, name="Austin Old Plumbing", city="Austin")
-    make_record(db, places, too_old, first_discovered_at=NOW - timedelta(days=60))
+    make_record(db, places, too_old, first_discovered_at=discovered_ago(60))
     make_opportunity(db, too_old, service="website_design", score=0.9)
     db.commit()
 
@@ -473,7 +514,7 @@ def test_found_within_holds_across_a_page_boundary(
     """Two recent businesses and one old one, one per page: the old one never appears."""
     for index, days in enumerate((0, 1, 90)):
         business = make_business(db, name=f"Paged {days}", city="Austin")
-        make_record(db, places, business, first_discovered_at=NOW - timedelta(days=days))
+        make_record(db, places, business, first_discovered_at=discovered_ago(days))
         make_opportunity(db, business, score=0.9 - index / 10)
     db.commit()
 
@@ -505,11 +546,11 @@ def test_found_within_narrows_the_leads_list_too(
     client: TestClient, db: Session, places: Source, reviewer: User
 ) -> None:
     recent = make_business(db, name="Recent Lead")
-    make_record(db, places, recent, first_discovered_at=NOW)
+    make_record(db, places, recent, first_discovered_at=discovered_ago(0))
     approve(db, recent, reviewer)
 
     old = make_business(db, name="Old Lead")
-    make_record(db, places, old, first_discovered_at=NOW - timedelta(days=90))
+    make_record(db, places, old, first_discovered_at=discovered_ago(90))
     approve(db, old, reviewer)
     db.commit()
 
@@ -524,7 +565,7 @@ def test_found_within_composes_with_the_leads_filters_and_paginates(
 ) -> None:
     for index, days in enumerate((0, 1, 90)):
         business = make_business(db, name=f"Lead {days}", city="Austin")
-        make_record(db, places, business, first_discovered_at=NOW - timedelta(days=days))
+        make_record(db, places, business, first_discovered_at=discovered_ago(days))
         make_opportunity(
             db,
             business,
@@ -534,7 +575,7 @@ def test_found_within_composes_with_the_leads_filters_and_paginates(
             assigned_to=rep.id,
         )
     other = make_business(db, name="Lead elsewhere", city="Houston")
-    make_record(db, places, other, first_discovered_at=NOW)
+    make_record(db, places, other, first_discovered_at=discovered_ago(0))
     make_opportunity(
         db,
         other,
@@ -575,6 +616,53 @@ def test_a_business_with_no_discovered_record_is_not_within_any_window(
 
     assert names(get(client, reviewer, "/api/v1/review-queue")) == {"No records"}
     assert get(client, reviewer, "/api/v1/review-queue", discovered_within_days=3650)["items"] == []
+
+
+def test_the_window_boundary_is_exact_and_inclusive(
+    db: Session, places: Source, reviewer: User
+) -> None:
+    """The cutoff itself, pinned with an explicit `now` so no clock can move it.
+
+    The service takes a `now`, which is the only way to assert the boundary rather than hope
+    a test runs far enough from it. `first_discovered_at >= now - days` is inclusive, so a
+    record stamped exactly on the cutoff is inside the window and one a second older is not.
+    Nothing here reads the real clock.
+    """
+    at = datetime(2026, 5, 4, 9, 30, tzinfo=UTC)
+    cutoff = at - timedelta(days=1)
+    for name, stamp in (
+        ("Just inside", cutoff + timedelta(seconds=1)),
+        ("Exactly on the cutoff", cutoff),
+        ("Just outside", cutoff - timedelta(seconds=1)),
+    ):
+        business = make_business(db, name=name)
+        make_record(db, places, business, first_discovered_at=stamp)
+        make_opportunity(db, business)
+    db.commit()
+
+    page = review_service.review_queue(db, discovered_within_days=1, now=at)
+
+    assert {item.display_name for item in page.items} == {"Just inside", "Exactly on the cutoff"}
+
+
+def test_the_window_boundary_is_exact_on_the_leads_list_too(
+    db: Session, places: Source, reviewer: User
+) -> None:
+    """The same boundary, through `list_leads`, which takes its own `now`."""
+    at = datetime(2026, 5, 4, 9, 30, tzinfo=UTC)
+    cutoff = at - timedelta(days=7)
+    for name, stamp in (
+        ("Inside lead", cutoff + timedelta(seconds=1)),
+        ("Outside lead", cutoff - timedelta(seconds=1)),
+    ):
+        business = make_business(db, name=name)
+        make_record(db, places, business, first_discovered_at=stamp)
+        approve(db, business, reviewer)
+    db.commit()
+
+    page = review_service.list_leads(db, actor=reviewer, discovered_within_days=7, now=at)
+
+    assert {item.business_name for item in page.items} == {"Inside lead"}
 
 
 @pytest.mark.parametrize("value", [0, -1, 4000])
