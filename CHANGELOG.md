@@ -24,7 +24,8 @@ Format: `## [vX.Y.Z] - YYYY-MM-DD` followed by Added / Changed / Fixed.
   `best_practices_score`, migration `0009_deeper_audit`). Below
   `AUDIT_QUALITY_SCORE_THRESHOLD` (90) they produce `low_accessibility_score` /
   `low_best_practices_score`. The lead page's Speed block is now **Speed and quality**.
-  Built against constructed fixtures: no `PAGESPEED_API_KEY` exists yet.
+  Verified live with a key; the test fixture is a recorded response
+  (`scripts/psi_smoke.py --record`, new).
 - **Listing rating and review count** (`places.rating`, `places.userRatingCount` in the
   field mask), stored on `businesses` through survivorship with per-field provenance, shown
   in the facts panels and as a review-count chip in the review queue. Fewer than

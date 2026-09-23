@@ -245,19 +245,33 @@ def test_the_source_config_marks_pagespeed_as_a_service() -> None:
 # --- v0.11.0: accessibility and best practices ---------------------------------------
 
 
-def test_all_three_category_scores_are_read_from_one_response() -> None:
-    result = parse_psi(fixture("runpagespeed_mobile_three_categories.json"))
+RECORDED = "runpagespeed_mobile_recorded.json"
 
-    assert result.performance_score == 61
-    assert result.accessibility_score == 58
-    assert result.best_practices_score == 67
+
+def test_all_three_category_scores_are_read_from_a_recorded_response() -> None:
+    """A live response (Lighthouse 13.5.0, example.com, 2026-09-23). A perfect score comes
+    back as the integer `1`, not `1.0`, and must still read as 100."""
+    payload = fixture(RECORDED)
+    assert payload["lighthouseResult"]["categories"]["performance"]["score"] == 1
+
+    result = parse_psi(payload)
+
+    assert result.performance_score == 100
+    assert result.accessibility_score == 96
+    assert result.best_practices_score == 96
+    assert (result.lcp_ms, result.cls, result.tbt_ms) == (757, 0.0, 0)
+    assert result.crux_category == "FAST"
 
 
 def test_a_category_lighthouse_could_not_score_is_null_not_zero() -> None:
-    result = parse_psi(fixture("runpagespeed_accessibility_unscored.json"))
+    """The recorded response with one score nulled, as Lighthouse reports an unscorable one."""
+    payload = fixture(RECORDED)
+    payload["lighthouseResult"]["categories"]["accessibility"]["score"] = None
+
+    result = parse_psi(payload)
 
     assert result.accessibility_score is None
-    assert result.best_practices_score == 67
+    assert result.best_practices_score == 96
 
 
 def test_a_response_that_only_scored_performance_leaves_the_others_null() -> None:
@@ -271,7 +285,7 @@ def test_the_client_asks_for_all_three_categories_in_one_request(
     mock_http: respx.MockRouter,
 ) -> None:
     route = mock_http.get(url__startswith=PSI_ENDPOINT).mock(
-        return_value=httpx.Response(200, json=fixture("runpagespeed_mobile_three_categories.json"))
+        return_value=httpx.Response(200, json=fixture(RECORDED))
     )
 
     result = client(mock_http).analyse(URL)
@@ -279,7 +293,7 @@ def test_the_client_asks_for_all_three_categories_in_one_request(
     assert route.call_count == 1
     query = route.calls[0].request.url.params
     assert query.get_list("category") == ["performance", "accessibility", "best-practices"]
-    assert (result.accessibility_score, result.best_practices_score) == (58, 67)
+    assert (result.accessibility_score, result.best_practices_score) == (96, 96)
 
 
 def test_without_a_key_pagespeed_is_never_called(mock_http: respx.MockRouter) -> None:
