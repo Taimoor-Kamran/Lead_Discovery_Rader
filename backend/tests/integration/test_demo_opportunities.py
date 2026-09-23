@@ -223,7 +223,8 @@ def test_every_opportunity_carries_evidence_with_text_and_url(
             assert item["text"], item
             business = db.get(Business, row.business_id)
             assert business is not None
-            if business.website_kind.value != "none":
+            # A demo listing has no source page, so its `few_reviews` evidence has no URL.
+            if business.website_kind.value != "none" and item["finding_code"] != "few_reviews":
                 assert item["url"], item
         assert set(row.score_components) == {"facts", "inference", "intent", "contactability"}
         assert row.scoring_version == "scoring-1"

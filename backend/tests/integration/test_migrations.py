@@ -3,7 +3,7 @@
 import uuid
 
 from alembic import command
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import Engine, create_engine, inspect, text
 
 from tests.conftest import alembic_config
 
@@ -79,8 +79,46 @@ def _enums(engine: object) -> set[str]:
         }
 
 
-def test_one_step_down_and_back_up_leaves_the_schema_as_it_was(database_url: str) -> None:
-    """`downgrade -1` must undo exactly the newest migration (v0.8.0) and nothing else."""
+DEEPER_AUDIT_COLUMNS = {
+    "website_audits": {"accessibility_score", "best_practices_score"},
+    "businesses": {"rating", "user_rating_count"},
+}
+
+
+def _columns(engine: Engine, table: str) -> set[str]:
+    return {c["name"] for c in inspect(engine).get_columns(table)}
+
+
+def test_one_step_down_removes_only_the_v0_11_columns_and_comes_back(database_url: str) -> None:
+    """`downgrade -1` undoes exactly the newest migration (v0.11.0): four nullable columns."""
+    url = _fresh_database(database_url)
+    config = alembic_config(url)
+    command.upgrade(config, "head")
+    engine = create_engine(url)
+    tables_at_head = set(inspect(engine).get_table_names())
+    engine.dispose()
+
+    command.downgrade(config, "-1")
+    engine = create_engine(url)
+    assert set(inspect(engine).get_table_names()) == tables_at_head
+    for table, columns in DEEPER_AUDIT_COLUMNS.items():
+        assert columns & _columns(engine, table) == set(), table
+    assert "must_change_password" in _columns(engine, "users"), "only v0.11.0 comes off"
+    engine.dispose()
+
+    command.upgrade(config, "head")
+    engine = create_engine(url)
+    for table, columns in DEEPER_AUDIT_COLUMNS.items():
+        assert columns <= _columns(engine, table), table
+    engine.dispose()
+
+
+def test_down_to_v0_7_and_back_up_leaves_the_schema_as_it_was(database_url: str) -> None:
+    """Down to `0007_crm` must undo v0.8.0 (and anything after it) and nothing else.
+
+    The steps are named by revision, not counted: a count silently changes meaning each
+    time a migration is added on top.
+    """
     url = _fresh_database(database_url)
     config = alembic_config(url)
     command.upgrade(config, "head")
@@ -89,7 +127,7 @@ def test_one_step_down_and_back_up_leaves_the_schema_as_it_was(database_url: str
     at_head = set(inspect(engine).get_table_names())
     engine.dispose()
 
-    command.downgrade(config, "-1")
+    command.downgrade(config, "0007_crm")
     engine = create_engine(url)
     after_downgrade = set(inspect(engine).get_table_names())
     user_columns = {c["name"] for c in inspect(engine).get_columns("users")}
@@ -109,8 +147,8 @@ def test_one_step_down_and_back_up_leaves_the_schema_as_it_was(database_url: str
     engine.dispose()
 
 
-def test_two_steps_down_takes_the_crm_with_it(database_url: str) -> None:
-    """`downgrade -2` removes v0.8.0 and the v0.7.0 CRM tables, nothing else."""
+def test_down_to_v0_6_takes_the_crm_with_it(database_url: str) -> None:
+    """Down to `0006_review` removes v0.8.0 and the v0.7.0 CRM tables, nothing else."""
     url = _fresh_database(database_url)
     config = alembic_config(url)
     command.upgrade(config, "head")
@@ -119,7 +157,7 @@ def test_two_steps_down_takes_the_crm_with_it(database_url: str) -> None:
     at_head = set(inspect(engine).get_table_names())
     engine.dispose()
 
-    command.downgrade(config, "-2")
+    command.downgrade(config, "0006_review")
     engine = create_engine(url)
     after_downgrade = set(inspect(engine).get_table_names())
     enums_after = _enums(engine)
@@ -137,8 +175,8 @@ def test_two_steps_down_takes_the_crm_with_it(database_url: str) -> None:
     engine.dispose()
 
 
-def test_three_steps_down_takes_review_with_it(database_url: str) -> None:
-    """`downgrade -3` removes the CRM and the review tables and the review columns."""
+def test_down_to_v0_5_takes_review_with_it(database_url: str) -> None:
+    """Down to `0005_opportunities` removes the CRM and review tables and review columns."""
     url = _fresh_database(database_url)
     config = alembic_config(url)
     command.upgrade(config, "head")
@@ -147,7 +185,7 @@ def test_three_steps_down_takes_review_with_it(database_url: str) -> None:
     at_head = set(inspect(engine).get_table_names())
     engine.dispose()
 
-    command.downgrade(config, "-3")
+    command.downgrade(config, "0005_opportunities")
     engine = create_engine(url)
     after_downgrade = set(inspect(engine).get_table_names())
     enums_after = _enums(engine)
@@ -172,7 +210,7 @@ def test_three_steps_down_takes_review_with_it(database_url: str) -> None:
     engine.dispose()
 
 
-def test_six_steps_down_takes_entity_resolution_with_it(database_url: str) -> None:
+def test_down_to_v0_2_takes_entity_resolution_with_it(database_url: str) -> None:
     """The v0.3.0 migration owns the businesses tables and the columns it added."""
     url = _fresh_database(database_url)
     config = alembic_config(url)
@@ -182,7 +220,7 @@ def test_six_steps_down_takes_entity_resolution_with_it(database_url: str) -> No
     at_head = set(inspect(engine).get_table_names())
     engine.dispose()
 
-    command.downgrade(config, "-6")
+    command.downgrade(config, "0002_discovery")
     engine = create_engine(url)
     after_downgrade = set(inspect(engine).get_table_names())
     record_columns = {c["name"] for c in inspect(engine).get_columns("discovered_records")}

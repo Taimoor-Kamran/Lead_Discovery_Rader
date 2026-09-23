@@ -75,7 +75,9 @@
       ],
       "nationalPhoneNumber": "(512) 555-0101",
       "websiteUri": "https://lonestarplumbing.invalid/",
-      "businessStatus": "OPERATIONAL"
+      "businessStatus": "OPERATIONAL",
+      "rating": 4.8,
+      "userRatingCount": 212
     },
     {
       "id": "demo-a1-2",
@@ -2818,7 +2820,9 @@
       ],
       "nationalPhoneNumber": "(512) 555-0615",
       "websiteUri": "https://copperlineelectric.invalid/",
-      "businessStatus": "OPERATIONAL"
+      "businessStatus": "OPERATIONAL",
+      "rating": 4.7,
+      "userRatingCount": 64
     },
     {
       "id": "demo-e16",
@@ -2886,7 +2890,9 @@
       ],
       "nationalPhoneNumber": "(512) 555-0616",
       "websiteUri": "https://pecanstreetplumbing.invalid/",
-      "businessStatus": "OPERATIONAL"
+      "businessStatus": "OPERATIONAL",
+      "rating": 4.1,
+      "userRatingCount": 11
     }
   ]
 }

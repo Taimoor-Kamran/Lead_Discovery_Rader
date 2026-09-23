@@ -48,6 +48,8 @@ def normalize(candidate: Candidate, source: str) -> NormalizedBusiness:
             domain=domain,
             website_kind=website_kind,
             business_status=taxonomy.to_business_status(candidate.business_status),
+            rating=_valid_rating(candidate.rating),
+            user_rating_count=_valid_count(candidate.user_rating_count),
         )
     except ValidationError as exc:
         raise NormalizationError(
@@ -63,3 +65,16 @@ def _valid_point(lat: float | None, lng: float | None) -> tuple[float | None, fl
     if not (-90.0 <= lat <= 90.0) or not (-180.0 <= lng <= 180.0):
         return None, None
     return lat, lng
+
+
+def _valid_rating(value: float | None) -> float | None:
+    """A Places rating is 1.0 to 5.0. Anything else is not a rating we can show: `None`."""
+    if value is None or isinstance(value, bool) or not 1.0 <= float(value) <= 5.0:
+        return None
+    return round(float(value), 1)
+
+
+def _valid_count(value: int | None) -> int | None:
+    if value is None or isinstance(value, bool) or value < 0:
+        return None
+    return int(value)

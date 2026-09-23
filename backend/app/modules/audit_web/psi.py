@@ -38,6 +38,9 @@ AUDIT_SERVICE_ROLE = "audit_service"
 PSI_ENDPOINT = "https://www.googleapis.com/pagespeedonline/v5/runPagespeed"
 PSI_STRATEGY = "mobile"
 PSI_FIXTURE_FILENAME = "psi.json"
+# The Lighthouse categories one request asks for. PSI returns only the ones requested.
+PSI_CATEGORIES = ("performance", "accessibility", "best-practices")
+NO_KEY_REASON = "No PAGESPEED_API_KEY is configured, so PageSpeed Insights was not called"
 CONTENT_TTL_DAYS_UNLIMITED = 0
 
 
@@ -46,6 +49,8 @@ class PsiResult:
     """The mobile numbers an audit keeps. Anything PSI did not report stays `None`."""
 
     performance_score: int | None = None
+    accessibility_score: int | None = None
+    best_practices_score: int | None = None
     lcp_ms: int | None = None
     cls: float | None = None
     tbt_ms: int | None = None
@@ -55,6 +60,8 @@ class PsiResult:
     def as_dict(self) -> dict[str, Any]:
         return {
             "performance_score": self.performance_score,
+            "accessibility_score": self.accessibility_score,
+            "best_practices_score": self.best_practices_score,
             "lcp_ms": self.lcp_ms,
             "cls": self.cls,
             "tbt_ms": self.tbt_ms,
@@ -85,14 +92,12 @@ def parse_psi(payload: Any) -> PsiResult:
     lighthouse = payload.get("lighthouseResult")
     lighthouse = lighthouse if isinstance(lighthouse, dict) else {}
     categories = _dict(lighthouse.get("categories"))
-    performance = _dict(categories.get("performance"))
     audits = _dict(lighthouse.get("audits"))
 
-    raw_score = performance.get("score")
-    score = round(float(raw_score) * 100) if isinstance(raw_score, int | float) else None
-
     return PsiResult(
-        performance_score=score,
+        performance_score=_category_score(categories, "performance"),
+        accessibility_score=_category_score(categories, "accessibility"),
+        best_practices_score=_category_score(categories, "best-practices"),
         lcp_ms=_numeric_int(audits, "largest-contentful-paint"),
         cls=_numeric_float(audits, "cumulative-layout-shift"),
         tbt_ms=_numeric_int(audits, "total-blocking-time"),
@@ -103,6 +108,18 @@ def parse_psi(payload: Any) -> PsiResult:
 
 def _dict(value: object) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
+
+
+def _category_score(categories: dict[str, Any], key: str) -> int | None:
+    """A Lighthouse category score (0 to 1) as a whole number out of 100, or `None`.
+
+    `None` when the category is absent *or* its score is null — Lighthouse reports a null
+    score when a category could not be computed, and that is not a zero.
+    """
+    raw = _dict(categories.get(key)).get("score")
+    if isinstance(raw, bool) or not isinstance(raw, int | float):
+        return None
+    return round(float(raw) * 100)
 
 
 def _numeric_int(audits: dict[str, Any], key: str) -> int | None:
@@ -150,11 +167,19 @@ class NetworkPageSpeedClient:
         self._http.close()
 
     def analyse(self, url: str) -> PsiResult:
-        query = {"url": url, "strategy": self._strategy, "category": "performance"}
-        if self._api_key:
+        # Without a key PSI answers from a small quota shared by every keyless caller, so
+        # a score would appear on some audits and not others for reasons nobody can see.
+        # v0.11.0: no key means no call, and every score is null with the reason recorded.
+        if not self._api_key:
+            raise PageSpeedUnavailableError(NO_KEY_REASON)
+        query: dict[str, str | list[str]] = {
+            "url": url,
+            "strategy": self._strategy,
+            "category": list(PSI_CATEGORIES),
             # PSI takes its key as a query parameter; the client's secret list keeps it
             # out of every log line and error body.
-            query["key"] = self._api_key
+            "key": self._api_key,
+        }
         target = f"{self._endpoint}?{_encode(query)}"
         try:
             return self._http.request_json("GET", target, parse=parse_psi)
@@ -164,10 +189,10 @@ class NetworkPageSpeedClient:
             raise PageSpeedUnavailableError(f"{type(exc).__name__}: {exc}") from exc
 
 
-def _encode(query: dict[str, str]) -> str:
+def _encode(query: dict[str, str | list[str]]) -> str:
     from urllib.parse import urlencode
 
-    return urlencode(query)
+    return urlencode(query, doseq=True)
 
 
 class FixturePageSpeedClient:

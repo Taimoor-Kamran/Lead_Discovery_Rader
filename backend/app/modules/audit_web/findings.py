@@ -214,12 +214,30 @@ CATALOGUE: dict[str, FindingSpec] = {
             "PageSpeed Insights scored the homepage {score} out of 100 on mobile.",
         ),
         FindingSpec(
+            "low_accessibility_score",
+            Severity.low,
+            ServiceCategory.web_design,
+            "PageSpeed scored accessibility at {score} out of 100.",
+        ),
+        FindingSpec(
+            "low_best_practices_score",
+            Severity.low,
+            ServiceCategory.web_design,
+            "PageSpeed scored best practices at {score} out of 100.",
+        ),
+        FindingSpec(
             "js_shell_suspected",
             Severity.info,
             ServiceCategory.web_design,
             "Audit found almost no text in the homepage HTML, so this audit may be "
             "incomplete: the page appears to build itself with JavaScript, which this "
             "audit does not run.",
+        ),
+        FindingSpec(
+            "few_reviews",
+            Severity.low,
+            ServiceCategory.seo,
+            "Listing shows {count} {noun}.",
         ),
         FindingSpec(
             "robots_blocked",
@@ -266,6 +284,7 @@ class FindingContext:
     stale_copyright_years: int
     now: datetime
     thin_content_words: int = 200
+    quality_score_threshold: int = 90
 
 
 def for_missing_website(context: FindingContext, *, business_label: str) -> list[Finding]:
@@ -283,6 +302,28 @@ def for_missing_website(context: FindingContext, *, business_label: str) -> list
             "no_website",
             # The only finding without an evidence URL: what it cites is our own record.
             evidence_text=f"The business record for {business_label} lists no website",
+        )
+    ]
+
+
+def for_listing(
+    user_rating_count: int | None, *, few_reviews: int, listing_url: str | None = None
+) -> list[Finding]:
+    """What the business's own listing says, whatever happened to its website.
+
+    An unknown count is never a small one: `None` produces nothing. The evidence URL is
+    the `source_url` of the listing record the count came from — a Google Maps place link
+    for Places — and `None` only for a source that has no public page (the demo fixture).
+    """
+    if user_rating_count is None or user_rating_count >= few_reviews:
+        return []
+    return [
+        build(
+            "few_reviews",
+            count=user_rating_count,
+            noun="review" if user_rating_count == 1 else "reviews",
+            evidence_text=f"The business listing reports {user_rating_count} user reviews",
+            evidence_url=listing_url,
         )
     ]
 
@@ -348,6 +389,7 @@ def for_page(
                     evidence_url=url,
                 )
             )
+        findings.extend(_quality_score_findings(psi, context, url))
 
     if value_of(checks, "js_shell_suspected"):
         findings.append(_from_check(checks, "js_shell_suspected", "js_shell_suspected"))
@@ -390,6 +432,36 @@ def _content_findings(checks: Checks, context: FindingContext) -> list[Finding]:
         and (year <= context.now.year - context.stale_copyright_years)
     ):
         findings.append(_from_check(checks, "copyright_year", "stale_copyright", year=year))
+    return findings
+
+
+QUALITY_SCORES = (
+    ("accessibility_score", "low_accessibility_score", "accessibility"),
+    ("best_practices_score", "low_best_practices_score", "best practices"),
+)
+
+
+def _quality_score_findings(
+    psi: Mapping[str, Any], context: FindingContext, url: str | None
+) -> list[Finding]:
+    """Lighthouse's category scores, reported below the threshold. A null is never a zero."""
+    findings: list[Finding] = []
+    for key, code, label in QUALITY_SCORES:
+        score = psi.get(key)
+        if isinstance(score, bool) or not isinstance(score, int | float):
+            continue
+        if score < context.quality_score_threshold:
+            findings.append(
+                build(
+                    code,
+                    score=int(score),
+                    evidence_text=(
+                        f"PageSpeed Insights scored {label} {int(score)}/100 "
+                        f"({psi.get('strategy') or 'mobile'})"
+                    ),
+                    evidence_url=url,
+                )
+            )
     return findings
 
 

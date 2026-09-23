@@ -19,6 +19,7 @@ from app.modules.audit_web.findings import (
     CATALOGUE,
     FindingContext,
     codes,
+    for_listing,
     for_missing_website,
     for_page,
     for_robots_blocked,
@@ -119,7 +120,10 @@ def test_the_catalogue_covers_every_code_the_spec_names() -> None:
         "heading_level_skipped",
         "stale_copyright",
         "slow_mobile",
+        "low_accessibility_score",
+        "low_best_practices_score",
         "js_shell_suspected",
+        "few_reviews",
         "robots_blocked",
     }
 
@@ -139,12 +143,14 @@ def test_only_no_website_may_omit_its_evidence_url() -> None:
             fetch_checks(FetchOutcome(url=URL, final_url=URL, error="ConnectError")), URL
         ),
         *for_page(page("<html><body></body></html>"), {"performance_score": 20}, context()),
+        *for_listing(11, few_reviews=20),
     ]
 
     assert produced, "the sweep must actually produce findings"
     for finding in produced:
         assert finding.evidence_text, f"{finding.code} has no evidence text"
-        if finding.code != "no_website":
+        # Both cite our own stored record, not a page: there is nothing to link to.
+        if finding.code not in ("no_website", "few_reviews"):
             assert finding.evidence_url, f"{finding.code} has no evidence url"
 
 
@@ -589,3 +595,64 @@ def test_going_back_up_a_level_is_not_a_skip_and_no_h1_is_left_to_no_h1() -> Non
     assert only("heading_level_skipped", back_up) == []
     assert page(no_h1)["heading_structure"].value["sections_below_h1"] is None
     assert only("no_section_headings", no_h1) == []
+
+
+# --- v0.11.0: PageSpeed accessibility and best practices --------------------------------
+
+
+def scored(**scores: Any) -> dict[str, Any]:
+    return {"performance_score": 92, "strategy": "mobile", **scores}
+
+
+def test_scores_below_the_threshold_are_reported_in_pagespeed_terms() -> None:
+    produced = {
+        f.code: f
+        for f in for_page(
+            page(COMPLETE_PAGE), scored(accessibility_score=58, best_practices_score=67), context()
+        )
+    }
+
+    assert produced["low_accessibility_score"].message == (
+        "PageSpeed scored accessibility at 58 out of 100."
+    )
+    assert produced["low_best_practices_score"].message == (
+        "PageSpeed scored best practices at 67 out of 100."
+    )
+    assert produced["low_accessibility_score"].evidence_text == (
+        "PageSpeed Insights scored accessibility 58/100 (mobile)"
+    )
+
+
+def test_scores_at_or_above_the_threshold_and_null_scores_produce_nothing() -> None:
+    for psi in (
+        scored(accessibility_score=90, best_practices_score=100),
+        scored(accessibility_score=None, best_practices_score=None),
+        scored(),
+    ):
+        assert for_page(page(COMPLETE_PAGE), psi, context()) == [], psi
+
+
+def test_the_quality_threshold_is_configurable() -> None:
+    psi = scored(accessibility_score=85, best_practices_score=85)
+
+    assert for_page(page(COMPLETE_PAGE), psi, context(quality_score_threshold=80)) == []
+    assert len(for_page(page(COMPLETE_PAGE), psi, context())) == 2
+
+
+# --- v0.11.0: the listing's review count ------------------------------------------------
+
+
+def test_a_listing_with_few_reviews_is_reported_in_listing_terms() -> None:
+    [finding] = for_listing(11, few_reviews=20)
+
+    assert finding.code == "few_reviews"
+    assert finding.message == "Listing shows 11 reviews."
+    assert finding.evidence_text == "The business listing reports 11 user reviews"
+    assert finding.severity.value == "low"
+    assert for_listing(1, few_reviews=20)[0].message == "Listing shows 1 review."
+
+
+def test_enough_reviews_or_an_unknown_count_produces_nothing() -> None:
+    assert for_listing(20, few_reviews=20) == []
+    assert for_listing(None, few_reviews=20) == []
+    assert for_listing(0, few_reviews=20)[0].message == "Listing shows 0 reviews."

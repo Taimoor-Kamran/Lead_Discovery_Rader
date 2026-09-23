@@ -41,7 +41,7 @@ def finding(code: str, *, text: str | None = None, url: str | None = PAGE_URL) -
         wording["url"] = url
     if code == "stale_copyright":
         wording["year"] = 2016
-    if code == "slow_mobile":
+    if code in ("slow_mobile", "low_accessibility_score", "low_best_practices_score"):
         wording["score"] = 41
     if code == "images_without_alt":
         wording.update(missing=37, total=41)
@@ -49,6 +49,8 @@ def finding(code: str, *, text: str | None = None, url: str | None = PAGE_URL) -
         wording.update(count=4, noun="form fields")
     if code == "thin_content":
         wording.update(words=84, noun="words")
+    if code == "few_reviews":
+        wording.update(count=4, noun="reviews")
     if code == "heading_level_skipped":
         wording.update(higher="h1", lower="h3")
     return findings_module.build(

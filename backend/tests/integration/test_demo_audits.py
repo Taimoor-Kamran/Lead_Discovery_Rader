@@ -247,7 +247,9 @@ def test_every_finding_carries_its_evidence(db: Session, audited: DemoLoadResult
     for audit in db.scalars(select(WebsiteAudit)):
         for finding in audit.findings:
             assert finding["evidence_text"], f"{finding['code']} on {audit.url_audited}"
-            if finding["code"] != "no_website":
+            # `few_reviews` links to the listing's own page, and a demo listing has none
+            # (`source_url` is null for the fixture source); a Places one always does.
+            if finding["code"] not in ("no_website", "few_reviews"):
                 assert finding["evidence_url"], f"{finding['code']} on {audit.url_audited}"
             assert finding["message"].startswith(
                 ("Audit found", "Audit could not", "PageSpeed", "Listing shows")

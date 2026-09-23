@@ -158,6 +158,9 @@ class QueueItem(BaseModel):
     state: str | None
     industry: str | None
     website: str | None
+    # The listing's star rating and review count (v0.11.0); null where the source gave none.
+    rating: float | None = None
+    user_rating_count: int | None = None
     top_score: float
     latest_audit: QueueAudit | None
     opportunities: list[QueueOpportunity]

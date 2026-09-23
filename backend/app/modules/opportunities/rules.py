@@ -25,7 +25,8 @@ from app.modules.opportunities.catalogue import (
 ADS_SOCIAL_REASON = "Audit found no social profile links on the homepage."
 # The only findings an unreachable site may contribute: the site itself could not be read,
 # so nothing about its content is known.
-UNREACHABLE_FINDINGS = frozenset({"unreachable", "tls_invalid"})
+# `few_reviews` is read from the listing, not the site, so it stands however the site did.
+UNREACHABLE_FINDINGS = frozenset({"unreachable", "tls_invalid", "few_reviews"})
 
 
 @dataclass(frozen=True)

@@ -1,0 +1,51 @@
+{
+  "id": "https://example.test/",
+  "analysisUTCTimestamp": "2026-09-23T12:00:00.000Z",
+  "loadingExperience": {
+    "overall_category": "AVERAGE"
+  },
+  "lighthouseResult": {
+    "requestedUrl": "https://example.test/",
+    "finalUrl": "https://example.test/",
+    "lighthouseVersion": "12.0.0",
+    "configSettings": {
+      "formFactor": "mobile",
+      "onlyCategories": [
+        "performance",
+        "accessibility",
+        "best-practices"
+      ]
+    },
+    "categories": {
+      "performance": {
+        "id": "performance",
+        "title": "Performance",
+        "score": 0.61
+      },
+      "accessibility": {
+        "id": "accessibility",
+        "title": "Accessibility",
+        "score": 0.58
+      },
+      "best-practices": {
+        "id": "best-practices",
+        "title": "Best Practices",
+        "score": 0.67
+      }
+    },
+    "audits": {
+      "largest-contentful-paint": {
+        "id": "largest-contentful-paint",
+        "numericValue": 4120.5
+      },
+      "cumulative-layout-shift": {
+        "id": "cumulative-layout-shift",
+        "numericValue": 0.118
+      },
+      "total-blocking-time": {
+        "id": "total-blocking-time",
+        "numericValue": 610
+      }
+    }
+  }
+}

@@ -387,3 +387,29 @@ def test_the_rate_limit_and_metadata_come_from_settings(adapter: GooglePlacesAda
     assert limits.daily_call_cap == 200
     assert meta.content_ttl_days == 30
     assert meta.terms_url.startswith("https://")
+
+
+# --- v0.11.0: rating and review count ------------------------------------------------------
+
+
+def test_the_default_field_mask_asks_for_rating_and_review_count_and_nothing_richer() -> None:
+    from app.core.config import DEFAULT_PLACES_FIELD_MASK
+
+    fields = DEFAULT_PLACES_FIELD_MASK.split(",")
+
+    assert "places.rating" in fields
+    assert "places.userRatingCount" in fields
+    # Enterprise + Atmosphere, and review text carries attribution duties: never requested.
+    assert not {"places.reviews", "places.editorialSummary"} & set(fields)
+
+
+def test_rating_and_review_count_are_copied_verbatim(adapter: GooglePlacesAdapter) -> None:
+    candidate = adapter.normalize(raw_doc({"id": "place-1", "rating": 4.6, "userRatingCount": 11}))
+
+    assert (candidate.rating, candidate.user_rating_count) == (4.6, 11)
+
+
+def test_a_place_without_a_rating_leaves_both_null(adapter: GooglePlacesAdapter) -> None:
+    candidate = adapter.normalize(raw_doc({"id": "place-2"}))
+
+    assert (candidate.rating, candidate.user_rating_count) == (None, None)

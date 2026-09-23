@@ -152,6 +152,8 @@ class GooglePlacesAdapter:
             ),
             lat=place.location.latitude if place.location else None,
             lng=place.location.longitude if place.location else None,
+            rating=place.rating,
+            user_rating_count=place.user_rating_count,
         )
 
     def emit_events(self, raw: RawDoc) -> list[Event]:

@@ -89,6 +89,10 @@ def field_values(normalized: NormalizedBusiness) -> dict[str, str | None]:
         "domain": normalized.domain,
         "website_kind": normalized.website_kind.value,
         "business_status": normalized.business_status.value,
+        "rating": None if normalized.rating is None else repr(normalized.rating),
+        "user_rating_count": (
+            None if normalized.user_rating_count is None else str(normalized.user_rating_count)
+        ),
     }
 
 
@@ -303,8 +307,10 @@ def _address_rank(fields: RecordFields) -> int:
 
 def _apply(business: Business, field: str, value: str | None) -> None:
     """Write one field back onto the business, converting text to its column type."""
-    if field in {"lat", "lng"}:
+    if field in {"lat", "lng", "rating"}:
         setattr(business, field, _as_float(value))
+    elif field == "user_rating_count":
+        business.user_rating_count = _as_int(value)
     elif field == "website_kind":
         business.website_kind = _as_enum(WebsiteKind, value, WebsiteKind.none)
     elif field == "business_status":
@@ -323,6 +329,16 @@ def _as_float(value: str | None) -> float | None:
         return float(value)
     except ValueError:
         logger.warning("a stored coordinate is not a number", extra={"value": value})
+        return None
+
+
+def _as_int(value: str | None) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except ValueError:
+        logger.warning("a stored count is not a whole number", extra={"value": value})
         return None
 
 

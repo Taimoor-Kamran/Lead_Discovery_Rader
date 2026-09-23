@@ -8,7 +8,16 @@ retention work — expiring a source's values recomputes the business rather tha
 import uuid
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, Float, ForeignKey, Index, Text, UniqueConstraint
+from sqlalchemy import (
+    BigInteger,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -46,6 +55,8 @@ PROVENANCED_FIELDS = (
     "domain",
     "website_kind",
     "business_status",
+    "rating",
+    "user_rating_count",
 )
 
 
@@ -90,6 +101,10 @@ class Business(Base):
     business_status: Mapped[BusinessStatus] = mapped_column(
         business_status_enum, nullable=False, default=BusinessStatus.unknown
     )
+    # The listing's star rating and review count (v0.11.0). Places content: they expire
+    # and are purged with the rest of it, and are null wherever the source gave none.
+    rating: Mapped[float | None] = mapped_column(Float, nullable=True)
+    user_rating_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # The earliest expiry among the provider content this business is built from; it is
     # why a name may read `[expired] <place_id>` after `purge-expired` has run.
     places_content_expires_at: Mapped[datetime | None] = mapped_column(

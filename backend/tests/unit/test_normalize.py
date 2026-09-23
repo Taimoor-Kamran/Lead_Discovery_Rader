@@ -125,3 +125,26 @@ def test_tldextract_never_reaches_the_network(mock_http: respx.MockRouter) -> No
 
     assert not suffix_list.called
     assert not mock_http.calls
+
+
+# --- v0.11.0: rating and review count ------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("rating", "count", "expected"),
+    [
+        (4.6, 11, (4.6, 11)),
+        (1.0, 0, (1.0, 0)),
+        (None, None, (None, None)),
+        (7.5, -3, (None, None)),  # not a rating or a count: null, never clamped
+        (0.0, 5, (None, 5)),
+    ],
+)
+def test_rating_and_review_count_are_kept_only_when_they_are_plausible(
+    rating: float | None, count: int | None, expected: tuple[float | None, int | None]
+) -> None:
+    normalized = normalize(
+        austin_candidate(rating=rating, user_rating_count=count), "google_places"
+    )
+
+    assert (normalized.rating, normalized.user_rating_count) == expected

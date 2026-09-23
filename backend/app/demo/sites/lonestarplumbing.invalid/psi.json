@@ -4,6 +4,12 @@
     "categories": {
       "performance": {
         "score": 0.94
+      },
+      "accessibility": {
+        "score": 0.96
+      },
+      "best-practices": {
+        "score": 1.0
       }
     },
     "audits": {

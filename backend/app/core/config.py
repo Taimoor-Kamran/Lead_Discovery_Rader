@@ -21,7 +21,8 @@ BOT_USER_AGENT_NAME = "LeadDiscoveryRadarBot/0.4"
 DEFAULT_PLACES_FIELD_MASK = (
     "places.id,places.displayName,places.formattedAddress,places.addressComponents,"
     "places.location,places.nationalPhoneNumber,places.internationalPhoneNumber,"
-    "places.websiteUri,places.businessStatus,places.types,places.primaryType,nextPageToken"
+    "places.websiteUri,places.businessStatus,places.types,places.primaryType,"
+    "places.rating,places.userRatingCount,nextPageToken"
 )
 
 
@@ -84,6 +85,10 @@ class Settings(BaseSettings):
     audit_stale_copyright_years: int = 3
     # Fewer words of visible homepage text than this is reported as `thin_content`.
     audit_thin_content_words: int = 200
+    # A PageSpeed accessibility or best-practices score below this is reported as a finding.
+    audit_quality_score_threshold: int = 90
+    # A Places listing with fewer reviews than this is reported as `few_reviews`.
+    places_few_reviews: int = 20
     audit_page_text_max_chars: int = 20_000
     psi_rps: float = 1.0
     psi_daily_call_cap: int = 200

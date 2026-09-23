@@ -305,10 +305,13 @@
       "psi_score": 71
     },
     "pecanstreetplumbing.invalid": {
-      "case": "Squarespace on its own domain (so no builder_subdomain), 4 of 5 images with no alt, a contact form labelled only by placeholders, 32 words of text and an h1 with nothing below it.",
+      "case": "Squarespace on its own domain (so no builder_subdomain), 4 of 5 images with no alt, a contact form labelled only by placeholders, 32 words of text and an h1 with nothing below it. PageSpeed scores accessibility 58 and best practices 67, and the listing shows 11 reviews.",
       "status": "done",
       "findings": [
+        "few_reviews",
         "images_without_alt",
+        "low_accessibility_score",
+        "low_best_practices_score",
         "no_live_chat",
         "no_online_booking",
         "no_section_headings",

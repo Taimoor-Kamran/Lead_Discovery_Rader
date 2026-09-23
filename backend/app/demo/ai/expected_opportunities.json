@@ -540,7 +540,7 @@
       ]
     },
     "pecanstreetplumbing.invalid": {
-      "case": "Page-quality findings (alt text, labels, thin content, headings) combine into website_design. No scripted AI answer.",
+      "case": "Page-quality findings, the two PageSpeed quality scores and few_reviews combine into website_design and seo_gbp. No scripted AI answer.",
       "services": {
         "ads_social": {
           "source": "rules",
@@ -569,16 +569,16 @@
         "seo_gbp": {
           "source": "rules",
           "confidence": [
-            0.4,
-            0.4
+            0.64,
+            0.64
           ],
           "ai_agrees": false
         },
         "website_design": {
           "source": "rules",
           "confidence": [
-            0.87,
-            0.87
+            0.95,
+            0.95
           ],
           "ai_agrees": false
         }

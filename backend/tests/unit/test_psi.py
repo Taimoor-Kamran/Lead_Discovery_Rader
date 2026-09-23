@@ -2,6 +2,7 @@
 
 import json
 import os
+from pathlib import Path
 from typing import Any
 
 import fakeredis
@@ -24,6 +25,12 @@ from app.modules.audit_web.psi import (
 from tests.conftest import FakeClock
 
 URL = "https://example.test/"
+FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "pagespeed"
+
+
+def fixture(name: str) -> dict[str, Any]:
+    loaded: dict[str, Any] = json.loads((FIXTURES / name).read_text(encoding="utf-8"))
+    return loaded
 
 
 def lighthouse(
@@ -94,7 +101,7 @@ def test_a_body_that_is_not_an_object_is_not_a_result() -> None:
 
 
 def client(
-    mock_http: respx.MockRouter, *, api_key: str = "", max_attempts: int = 1
+    mock_http: respx.MockRouter, *, api_key: str = "psi-test-key", max_attempts: int = 1
 ) -> NetworkPageSpeedClient:
     clock = FakeClock()
     return NetworkPageSpeedClient(
@@ -161,7 +168,7 @@ def test_a_daily_cap_that_is_already_spent_stops_the_call(mock_http: respx.MockR
     redis_client = fakeredis.FakeStrictRedis()
     clock = FakeClock()
     psi = build_psi_client(
-        settings=_settings(psi_daily_call_cap=0),
+        settings=_settings(psi_daily_call_cap=0, pagespeed_api_key=SecretStr("psi-test-key")),
         redis_client=redis_client,
         clock=clock,
         sleeper=clock.sleep,
@@ -233,3 +240,55 @@ def test_the_source_config_marks_pagespeed_as_a_service() -> None:
     assert config["role"] == "audit_service"
     assert config["display_name"] == "PageSpeed Insights"
     assert config["rate_limit"]["daily_call_cap"] == 200
+
+
+# --- v0.11.0: accessibility and best practices ---------------------------------------
+
+
+def test_all_three_category_scores_are_read_from_one_response() -> None:
+    result = parse_psi(fixture("runpagespeed_mobile_three_categories.json"))
+
+    assert result.performance_score == 61
+    assert result.accessibility_score == 58
+    assert result.best_practices_score == 67
+
+
+def test_a_category_lighthouse_could_not_score_is_null_not_zero() -> None:
+    result = parse_psi(fixture("runpagespeed_accessibility_unscored.json"))
+
+    assert result.accessibility_score is None
+    assert result.best_practices_score == 67
+
+
+def test_a_response_that_only_scored_performance_leaves_the_others_null() -> None:
+    result = parse_psi(lighthouse())
+
+    assert result.accessibility_score is None
+    assert result.best_practices_score is None
+
+
+def test_the_client_asks_for_all_three_categories_in_one_request(
+    mock_http: respx.MockRouter,
+) -> None:
+    route = mock_http.get(url__startswith=PSI_ENDPOINT).mock(
+        return_value=httpx.Response(200, json=fixture("runpagespeed_mobile_three_categories.json"))
+    )
+
+    result = client(mock_http).analyse(URL)
+
+    assert route.call_count == 1
+    query = route.calls[0].request.url.params
+    assert query.get_list("category") == ["performance", "accessibility", "best-practices"]
+    assert (result.accessibility_score, result.best_practices_score) == (58, 67)
+
+
+def test_without_a_key_pagespeed_is_never_called(mock_http: respx.MockRouter) -> None:
+    route = mock_http.get(url__startswith=PSI_ENDPOINT).mock(
+        return_value=httpx.Response(200, json=lighthouse())
+    )
+
+    with pytest.raises(PageSpeedUnavailableError) as exc:
+        client(mock_http, api_key="").analyse(URL)
+
+    assert "PAGESPEED_API_KEY" in exc.value.reason
+    assert route.call_count == 0
