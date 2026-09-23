@@ -88,6 +88,45 @@ class UndoResult(BaseModel):
     suppressions_lifted: int
 
 
+# --- provenance -----------------------------------------------------------------------------
+
+
+class SourceRecordRead(BaseModel):
+    """One discovered record a business was built from: the answer to "where did you get
+    my details?", in the words a prospect asks it in.
+
+    `code` is what the API and the `sources` table call it (`google_places`); `name` is the
+    operator-facing name on the source row. The screen reads its own label from
+    `lib/labels.ts` and keeps `code` in the tooltip.
+    """
+
+    code: str
+    name: str
+    source_record_id: str
+    source_url: str | None
+    # When the record was first discovered, and when the source last handed it to us again.
+    discovered_at: datetime
+    last_seen_at: datetime
+
+
+class LinkedProfileRead(BaseModel):
+    """A social profile the business links to **from its own homepage**.
+
+    The v0.4.0 audit records which platforms the homepage points at. No profile is ever
+    fetched, and this is never a source: `page_url` on the block below is the page the
+    links were read on, so the screen can say so. `url` is null when the audit's evidence
+    does not yield a link we would let a browser open — never a guess.
+    """
+
+    platform: str
+    url: str | None
+
+
+class LinkedProfilesRead(BaseModel):
+    page_url: str | None
+    profiles: list[LinkedProfileRead]
+
+
 # --- queue --------------------------------------------------------------------------------
 
 
@@ -123,6 +162,8 @@ class QueueItem(BaseModel):
     latest_audit: QueueAudit | None
     opportunities: list[QueueOpportunity]
     weak_hidden: int
+    # The distinct source codes behind the business, for the queue's source column.
+    sources: list[str]
 
 
 # --- detail -------------------------------------------------------------------------------
@@ -166,6 +207,13 @@ class ReviewDetail(BaseModel):
     suppressions: list[SuppressionRead]
     undo_window_minutes: int
     weak_confidence: float
+    # Where this came from: one entry per contributing discovered record, and what the
+    # business's own homepage links to.
+    sources: list[SourceRecordRead]
+    linked_profiles: LinkedProfilesRead
+    # Whether the AI layer is switched on at all. False means rules-only: the page shows no
+    # AI furniture rather than an empty box where an AI answer would have gone.
+    ai_enabled: bool
 
 
 # --- leads --------------------------------------------------------------------------------
@@ -195,6 +243,8 @@ class LeadRead(BaseModel):
     top_evidence: dict[str, Any] | None
     rule_reason: str | None
     ai_rationale: str | None
+    # The distinct source codes behind the business, for the leads list's source column.
+    sources: list[str]
     # Where the business's CRM record stands (v0.7.0). Null until a sync was scheduled.
     crm: CrmLeadStatusRead | None = None
 
@@ -209,3 +259,7 @@ class LeadDetail(BaseModel):
     opportunity: ReviewOpportunity
     # Every CRM sync attempt for the business, newest first (v0.7.0).
     crm_history: list[CrmSyncAttemptRead] = []
+    # The same two blocks the review page shows, so a rep can answer the same question.
+    sources: list[SourceRecordRead]
+    linked_profiles: LinkedProfilesRead
+    ai_enabled: bool

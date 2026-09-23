@@ -30,10 +30,59 @@ export const FINDING_LABELS: Record<string, string> = {
   robots_blocked: "Blocked by robots.txt",
 };
 
+/** How an opportunity was arrived at, not where a fact came from. See SOURCE_NAME_LABELS. */
 export const SOURCE_LABELS: Record<string, string> = {
   rules: "Rules",
   ai: "AI",
   "rules+ai": "Rules + AI",
+};
+
+/**
+ * Every row of the `sources` table, said the way a salesperson would say it out loud when a
+ * prospect asks where their details came from. The keys are `sources.name` — the same string
+ * the adapter registry registers — and a backend guard test
+ * (`tests/unit/test_label_coverage.py`) fails when a registered source has no entry here, so
+ * adding a source later cannot quietly ship `google_places` to the screen.
+ */
+export const SOURCE_NAME_LABELS: Record<string, string> = {
+  google_places: "Google Places",
+  pagespeed_insights: "PageSpeed Insights",
+  openai: "OpenAI",
+  airtable: "Airtable",
+  demo_fixture: "Demo fixture",
+};
+
+/**
+ * The platforms the website audit records a homepage linking to. These are links the
+ * business published on its own site — never a profile this system read.
+ */
+export const SOCIAL_PLATFORM_LABELS: Record<string, string> = {
+  facebook: "Facebook",
+  instagram: "Instagram",
+  x: "X",
+  linkedin: "LinkedIn",
+  youtube: "YouTube",
+  tiktok: "TikTok",
+  yelp: "Yelp",
+  nextdoor: "Nextdoor",
+  google: "Google",
+};
+
+/** What the model said about intent. `none_detected` is the honest default, not a blank. */
+export const BUYING_INTENT_LABELS: Record<string, string> = {
+  none_detected: "None detected",
+  explicit: "Stated on their website",
+};
+
+/** How a classification call ended. Shown inside the AI details disclosure. */
+export const AI_STATUS_LABELS: Record<string, string> = {
+  ok: "Answered",
+  reused: "Reused an earlier answer",
+  guardrail_trimmed: "Answered, parts dropped by the guardrails",
+  schema_invalid: "Answer did not match the schema",
+  error: "Call failed",
+  skipped_budget: "Skipped: daily budget reached",
+  skipped_disabled: "Skipped: AI is off",
 };
 
 export const AUDIT_STATUS_LABELS: Record<string, string> = {
@@ -92,6 +141,22 @@ export function findingLabel(code: string | null | undefined): string {
 
 export function sourceLabel(code: string | null | undefined): string {
   return (code && SOURCE_LABELS[code]) || humanize(code);
+}
+
+export function sourceNameLabel(code: string | null | undefined): string {
+  return (code && SOURCE_NAME_LABELS[code]) || humanize(code);
+}
+
+export function socialPlatformLabel(code: string | null | undefined): string {
+  return (code && SOCIAL_PLATFORM_LABELS[code]) || humanize(code);
+}
+
+export function buyingIntentLabel(code: string | null | undefined): string {
+  return (code && BUYING_INTENT_LABELS[code]) || humanize(code);
+}
+
+export function aiStatusLabel(code: string | null | undefined): string {
+  return (code && AI_STATUS_LABELS[code]) || humanize(code);
 }
 
 export function auditStatusLabel(code: string | null | undefined): string {

@@ -12,7 +12,7 @@ import {
 } from "@/components/review/QueueFilters";
 import { QueueTable } from "@/components/review/QueueTable";
 import { Button, EmptyState, PageHeader, Pagination, Tabs, useToast } from "@/components/ui";
-import { ApiError, getReviewQueue, reviewBatch, type QueueItem } from "@/lib/api";
+import { ApiError, getReviewQueue, RECENCY_OPTIONS, reviewBatch, type QueueItem } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { loadFailed } from "@/lib/errors";
 import { QUEUE_ORDER_KEY } from "@/lib/review";
@@ -26,6 +26,11 @@ const STATUS_TABS = [
 
 const PANEL_ID = "queue-results";
 const BATCH_LIMIT = 50;
+
+/** The chosen window in the words the control used, for the empty state's first line. */
+function withinWords(within: string): string {
+  return RECENCY_OPTIONS.find((option) => option.value === within)?.label ?? `${within} days`;
+}
 
 /** The queue page. Selection enables batch reject / not-a-fit only; nothing else is batched. */
 export function ReviewQueue() {
@@ -56,6 +61,7 @@ export function ReviewQueue() {
           city: filters.city.trim() || undefined,
           min_score: filters.min_score ? Number(filters.min_score) : undefined,
           q: filters.q.trim() || undefined,
+          discovered_within_days: filters.within ? Number(filters.within) : undefined,
           include_weak: filters.include_weak,
           cursor,
         });
@@ -193,12 +199,34 @@ export function ReviewQueue() {
           empty={
             isFiltered(filters) ? (
               <EmptyState
-                title="Nothing to review with these filters."
-                description="Widen the service, the city, the score or the search to see more."
+                title={
+                  filters.within
+                    ? `Nothing was first found in the last ${withinWords(filters.within)}.`
+                    : "Nothing to review with these filters."
+                }
+                description={
+                  filters.within
+                    ? "Widen the window, or run a search to find businesses that are new to us."
+                    : "Widen the service, the city, the score or the search to see more."
+                }
                 action={
-                  <Button onClick={() => setFilters({ ...EMPTY_FILTERS, status: filters.status })}>
-                    Clear the filters
-                  </Button>
+                  filters.within ? (
+                    <div className="flex flex-wrap items-center gap-3">
+                      <Button onClick={() => setFilters({ ...filters, within: "" })}>
+                        Show any time
+                      </Button>
+                      <Link
+                        href="/searches"
+                        className="rounded font-medium text-accent underline underline-offset-2"
+                      >
+                        Go to Searches
+                      </Link>
+                    </div>
+                  ) : (
+                    <Button onClick={() => setFilters({ ...EMPTY_FILTERS, status: filters.status })}>
+                      Clear the filters
+                    </Button>
+                  )
                 }
               />
             ) : (

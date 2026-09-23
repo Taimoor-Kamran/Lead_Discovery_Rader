@@ -9,6 +9,7 @@ warns and the rest do not apply. One test per rule, as the spec asks.
 import os
 import subprocess
 import sys
+import typing
 from collections.abc import Iterator
 from typing import Any
 from unittest.mock import PropertyMock, patch
@@ -136,6 +137,59 @@ def test_the_fake_ai_provider_is_refused_in_production(environment: None) -> Non
     production(AI_PROVIDER="fake")
     with pytest.raises(InsecureConfigurationError, match="AI_PROVIDER=fake"):
         check_startup()
+
+
+def test_the_disabled_ai_provider_is_allowed_in_production(environment: None) -> None:
+    """Rules-only is a supported production configuration, not a fallback (spec v0.10.0 §3).
+
+    This is the test that stops `disabled` being "tidied" into the refusal list next to
+    `fake`: the two are not the same kind of thing. `fake` invents answers from checked-in
+    files; `disabled` calls no model at all and lets the deterministic rules stand alone.
+    """
+    production(AI_PROVIDER="disabled")
+
+    settings = get_settings()
+    assert settings.resolved_ai_provider == "disabled"
+    assert settings.ai_enabled is False
+    assert production_problems(settings) == []
+    check_startup(settings)  # does not raise
+    assert create_app() is not None
+
+
+def _ai_provider_choices() -> set[str]:
+    """Every value `AI_PROVIDER` accepts, read off the settings field rather than repeated."""
+    found: set[str] = set()
+    for arg in typing.get_args(Settings.model_fields["ai_provider"].annotation):
+        if isinstance(arg, str):
+            found.add(arg)
+        else:
+            found.update(a for a in typing.get_args(arg) if isinstance(a, str))
+    return found
+
+
+def test_only_openai_and_disabled_are_accepted_in_production(environment: None) -> None:
+    """The allowlist is the rule; anything not on it is refused, whatever it is called."""
+    from app.core.startup import PRODUCTION_AI_PROVIDERS
+
+    assert {"openai", "disabled"} == PRODUCTION_AI_PROVIDERS
+    for provider in ("openai", "disabled"):
+        production(AI_PROVIDER=provider, OPENAI_API_KEY="sk-not-a-real-key")
+        assert production_problems(get_settings()) == []
+    for provider in _ai_provider_choices() - PRODUCTION_AI_PROVIDERS:
+        production(AI_PROVIDER=provider)
+        assert any("AI_PROVIDER" in problem for problem in production_problems(get_settings())), (
+            f"{provider} must be refused in production"
+        )
+
+
+def test_an_unset_ai_provider_cannot_resolve_to_fake_in_production(environment: None) -> None:
+    """Without a key, production resolves to `disabled` — never to the fixture provider."""
+    production(AI_PROVIDER="", OPENAI_API_KEY="")
+
+    settings = get_settings()
+    assert settings.ai_provider is None
+    assert settings.resolved_ai_provider == "disabled"
+    assert production_problems(settings) == []
 
 
 @pytest.mark.parametrize("email", ["admin@example.com", "Admin@Example.com", "ops@example.com"])

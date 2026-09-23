@@ -13,6 +13,12 @@ from app.core.security import InsecureConfigurationError, check_jwt_secret
 
 PLACEHOLDER_DOMAIN = "@example.com"
 
+# The AI providers production accepts. `disabled` is **deliberately** on this list, not an
+# oversight to tidy away: rules-only is a supported configuration and the MVP's default
+# (spec v0.10.0 §3), so the deterministic rules run and no LLM is called at all. `fake`
+# answers from checked-in files, which is why it is the one refused here.
+PRODUCTION_AI_PROVIDERS = frozenset({"openai", "disabled"})
+
 
 def production_problems(settings: Settings) -> list[str]:
     """Every reason this configuration may not run in production. Empty means it may."""
@@ -29,8 +35,14 @@ def production_problems(settings: Settings) -> list[str]:
         problems.append("demo fixtures are enabled; they exist only under local/development/ci")
     if settings.crm_destination == "fake":
         problems.append("CRM_DESTINATION=fake is an in-database stand-in, not a destination")
-    if settings.ai_provider == "fake" or settings.resolved_ai_provider == "fake":
-        problems.append("AI_PROVIDER=fake answers from checked-in files; use openai or disabled")
+    # `resolved_ai_provider` is what the pipeline will actually talk to: an explicit
+    # AI_PROVIDER, or what the key and the environment resolve to. Checking the resolution
+    # rather than the raw setting means an unset AI_PROVIDER cannot smuggle `fake` in.
+    if settings.resolved_ai_provider not in PRODUCTION_AI_PROVIDERS:
+        problems.append(
+            f"AI_PROVIDER={settings.resolved_ai_provider} answers from checked-in files; "
+            "use openai (a real key) or disabled (rules only)"
+        )
     email = settings.admin_email.strip().lower()
     if email == "admin@example.com" or email.endswith(PLACEHOLDER_DOMAIN):
         problems.append(

@@ -207,13 +207,24 @@ export function HealthPage() {
         </Metric>
 
         <Metric title="AI today" testId="m-ai">
-          <p className="text-sm">
-            {report.ai.provider}: {report.ai.calls_today} of {report.ai.call_cap} calls, reuse rate{" "}
-            {rate(report.ai.reuse_rate)} ({report.ai.reused_today}/{report.ai.classifications_today}).
-            Spent ${report.ai.spent_today_usd.toFixed(2)} of ${report.ai.budget_usd.toFixed(2)}{" "}
-            {report.ai.prices_configured ? "" : "(prices not configured: counted by calls)"}, which is{" "}
-            {rate(report.ai.budget_ratio)} of the budget (alert at {percent(t.ai_budget_ratio)})
-          </p>
+          {/* Rules-only is a supported configuration, so "off" is the whole report: quoting a
+              0-of-500 call count against a budget nobody is spending reads as a fault. */}
+          {report.ai.provider === "disabled" ? (
+            <p className="text-sm" data-testid="ai-off">
+              AI is off. Opportunities come from the deterministic rules alone, and no model is
+              called, so there is no budget to report.
+            </p>
+          ) : (
+            <p className="text-sm">
+              {report.ai.provider}: {report.ai.calls_today} of {report.ai.call_cap} calls, reuse
+              rate {rate(report.ai.reuse_rate)} ({report.ai.reused_today}/
+              {report.ai.classifications_today}). Spent ${report.ai.spent_today_usd.toFixed(2)} of $
+              {report.ai.budget_usd.toFixed(2)}{" "}
+              {report.ai.prices_configured ? "" : "(prices not configured: counted by calls)"},
+              which is {rate(report.ai.budget_ratio)} of the budget (alert at{" "}
+              {percent(t.ai_budget_ratio)})
+            </p>
+          )}
         </Metric>
 
         <Metric title="Data quality" testId="m-quality">

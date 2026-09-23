@@ -1,7 +1,7 @@
 "use client";
 
 import { Card, Checkbox, Input, Select } from "@/components/ui";
-import { SERVICES } from "@/lib/api";
+import { RECENCY_OPTIONS, SERVICES } from "@/lib/api";
 
 export type QueueFilterState = {
   status: "pending" | "needs_enrichment";
@@ -9,6 +9,8 @@ export type QueueFilterState = {
   city: string;
   min_score: string;
   q: string;
+  /** Days, as the option's value; "" is "Any time". */
+  within: string;
   include_weak: boolean;
 };
 
@@ -18,13 +20,16 @@ export const EMPTY_FILTERS: QueueFilterState = {
   city: "",
   min_score: "",
   q: "",
+  within: "",
   include_weak: false,
 };
 
 /** Whether anything but the status tab is narrowing the queue, which changes what an
  *  empty result means: widen the filters, rather than run a search. */
 export function isFiltered(value: QueueFilterState): boolean {
-  return Boolean(value.service || value.city.trim() || value.min_score || value.q.trim());
+  return Boolean(
+    value.service || value.city.trim() || value.min_score || value.q.trim() || value.within,
+  );
 }
 
 export function QueueFilters({
@@ -66,6 +71,19 @@ export function QueueFilters({
           onChange={(event) => set("q", event.target.value)}
           placeholder="Name or domain"
         />
+        {/* "Found within" is about when the business was *first found*, not when a source
+            last handed the same record over again — see GET /review-queue's docstring. */}
+        <Select
+          label="Found within"
+          value={value.within}
+          onChange={(event) => set("within", event.target.value)}
+        >
+          {RECENCY_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </Select>
         <Checkbox
           label="Show weak signals"
           className="pb-2"

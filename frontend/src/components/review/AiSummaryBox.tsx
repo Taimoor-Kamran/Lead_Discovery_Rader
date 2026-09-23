@@ -2,11 +2,19 @@ import { AiLabel } from "@/components/AiLabel";
 import { Card, Disclosure } from "@/components/ui";
 import type { AISummary } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
-import { industryLabel } from "@/lib/labels";
+import { aiStatusLabel, buyingIntentLabel, industryLabel } from "@/lib/labels";
 
 /**
  * The model's summary — labelled, muted and last in the argument, because it is the only
  * part that is not a stored fact. Plain text only; nothing here is evidence.
+ *
+ * Every code the model speaks is read in words with the code in the tooltip, and every
+ * multi-valued field is a list of elements rather than one joined string: a reader has to be
+ * able to tell two unknowns apart, and a joined run-on hides where one ends.
+ *
+ * This whole component is only mounted when the AI layer is switched on. With
+ * `AI_PROVIDER=disabled` the review page renders nothing here at all, rather than a box
+ * saying an answer is missing.
  */
 export function AiSummaryBox({ ai }: { ai: AISummary | null | undefined }) {
   if (!ai) {
@@ -32,11 +40,21 @@ export function AiSummaryBox({ ai }: { ai: AISummary | null | undefined }) {
           {ai.industry_matches_listing === false ? " — does not match the listing" : ""}
         </dd>
         <dt>Buying intent</dt>
-        <dd>{ai.buying_intent ?? "unknown"}</dd>
+        <dd title={ai.buying_intent ?? undefined} data-testid="buying-intent">
+          {ai.buying_intent ? buyingIntentLabel(ai.buying_intent) : "unknown"}
+        </dd>
         {ai.unknowns.length ? (
           <>
             <dt>Unknowns</dt>
-            <dd>{ai.unknowns.join("; ")}</dd>
+            <dd>
+              <ul className="flex list-disc flex-col gap-0.5 pl-4" data-testid="ai-unknowns">
+                {ai.unknowns.map((unknown) => (
+                  <li key={unknown} data-testid="ai-unknown">
+                    {unknown}
+                  </li>
+                ))}
+              </ul>
+            </dd>
           </>
         ) : null}
       </dl>
@@ -48,8 +66,8 @@ export function AiSummaryBox({ ai }: { ai: AISummary | null | undefined }) {
             <dt>Prompt</dt>
             <dd className="font-mono">{ai.prompt_version}</dd>
             <dt>Status</dt>
-            <dd>
-              {ai.status}
+            <dd title={ai.status}>
+              {aiStatusLabel(ai.status)}
               {ai.escalated ? " — escalated" : ""}
             </dd>
           </dl>

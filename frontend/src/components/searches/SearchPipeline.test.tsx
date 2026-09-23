@@ -66,7 +66,7 @@ describe("Search pipeline view", () => {
     expect(screen.getByTestId("stage-audit").textContent).toContain("QuotaExceededError: PageSpeed cap");
     expect(screen.getByTestId("stage-classification").querySelector('[data-testid="stage-status"]')?.textContent).toBe("not started");
     expect(screen.getByTestId("review-link").getAttribute("href")).toBe("/review?city=Austin");
-    expect(screen.getByTestId("est-ai").textContent).toContain("AI is disabled");
+    expect(screen.getByTestId("est-ai").textContent).toContain("AI is off");
     expect(screen.getByRole("button", { name: "Run again" })).toBeTruthy();
   });
 

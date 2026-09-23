@@ -6,7 +6,15 @@
 import { render, type RenderOptions } from "@testing-library/react";
 import { vi } from "vitest";
 import { ToastProvider } from "@/components/ui";
-import type { LeadDetail, LeadRead, Me, QueueItem, ReviewDetail, ReviewOpportunity } from "@/lib/api";
+import type {
+  LeadDetail,
+  LeadRead,
+  Me,
+  QueueItem,
+  ReviewDetail,
+  ReviewOpportunity,
+  SourceRecord,
+} from "@/lib/api";
 import { AuthProvider, type AuthStatus } from "@/lib/auth";
 
 export type RouteHandler =
@@ -118,6 +126,7 @@ export function queueItem(overrides: Partial<QueueItem> = {}): QueueItem {
       },
     ],
     weak_hidden: 1,
+    sources: ["google_places"],
     ...overrides,
   };
 }
@@ -204,6 +213,22 @@ export function reviewDetail(overrides: Partial<ReviewDetail> = {}): ReviewDetai
     suppressions: [],
     undo_window_minutes: 30,
     weak_confidence: 0.4,
+    sources: [sourceRecord()],
+    linked_profiles: { page_url: null, profiles: [] },
+    ai_enabled: true,
+    ...overrides,
+  };
+}
+
+/** One discovered record behind a business, as the "Where this came from" block reads it. */
+export function sourceRecord(overrides: Partial<SourceRecord> = {}): SourceRecord {
+  return {
+    code: "google_places",
+    name: "Google Places API (New)",
+    source_record_id: "ChIJbarton1",
+    source_url: "https://maps.invalid/ChIJbarton1",
+    discovered_at: "2026-09-18T10:00:00Z",
+    last_seen_at: "2026-09-22T10:00:00Z",
     ...overrides,
   };
 }
@@ -231,6 +256,7 @@ export function leadRead(overrides: Partial<LeadRead> = {}): LeadRead {
     top_evidence: null,
     rule_reason: "Audit found the site is served over http.",
     ai_rationale: "The model also read a 2016 copyright line.",
+    sources: ["google_places"],
     crm: {
       id: "crm-1",
       status: "synced",
@@ -262,6 +288,9 @@ export function leadDetail(overrides: Partial<LeadDetail> = {}): LeadDetail {
     business: base.business,
     audit: null,
     opportunity: reviewOpportunity({ review_status: "approved", lock_version: 1 }),
+    sources: base.sources,
+    linked_profiles: base.linked_profiles,
+    ai_enabled: true,
     ...overrides,
   };
 }

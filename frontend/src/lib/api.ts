@@ -44,6 +44,9 @@ export type SuppressionCreate = Schemas["SuppressionCreate"];
 export type SuppressionPage = Schemas["Page_SuppressionRead_"];
 export type UserPage = Schemas["Page_UserRead_"];
 export type AISummary = Schemas["AISummaryRead"];
+export type SourceRecord = Schemas["SourceRecordRead"];
+export type LinkedProfiles = Schemas["LinkedProfilesRead"];
+export type LinkedProfile = Schemas["LinkedProfileRead"];
 export type CrmStatus = Schemas["CrmStatusRead"];
 export type CrmLead = Schemas["CrmLeadRead"];
 export type CrmLeadPage = Schemas["Page_CrmLeadRead_"];
@@ -325,9 +328,20 @@ export type QueueQuery = {
   min_score?: number;
   include_weak?: boolean;
   q?: string;
+  /** "First found within N days", measured on the earliest discovered_at of the business. */
+  discovered_within_days?: number;
   limit?: number;
   cursor?: string;
 };
+
+/** The windows the "Found within" control offers. 24 hours and "1 day" are the same window. */
+export const RECENCY_OPTIONS: readonly { value: string; label: string }[] = [
+  { value: "", label: "Any time" },
+  { value: "1", label: "24 hours" },
+  { value: "3", label: "3 days" },
+  { value: "7", label: "7 days" },
+  { value: "30", label: "30 days" },
+];
 
 export function getReviewQueue(query: QueueQuery = {}): Promise<QueuePage> {
   return get<QueuePage>("/review-queue", query);
@@ -352,13 +366,17 @@ export function undoDecision(decisionId: string): Promise<UndoResult> {
   return post<UndoResult>(`/review-decisions/${decisionId}/undo`);
 }
 
-export function getLeads(query: {
+export type LeadQuery = {
   service?: string;
   assigned_to?: string;
   city?: string;
+  /** "First found within N days", measured on the earliest discovered_at of the business. */
+  discovered_within_days?: number;
   limit?: number;
   cursor?: string;
-} = {}): Promise<LeadPage> {
+};
+
+export function getLeads(query: LeadQuery = {}): Promise<LeadPage> {
   return get<LeadPage>("/leads", query);
 }
 
