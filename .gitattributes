@@ -1,0 +1,21 @@
+# Check every text file out with LF line endings, on every OS. A Windows checkout would
+# otherwise turn LF into CRLF (Git for Windows' default core.autocrlf=true), which breaks
+# the shell scripts, the Makefile and the .env files the containers read.
+* text=auto eol=lf
+
+# Windows-only scripts, should any ever be added, keep CRLF.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Never touch these.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.pdf binary
+*.dump binary
