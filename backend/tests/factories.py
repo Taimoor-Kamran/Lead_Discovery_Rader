@@ -43,6 +43,14 @@ def finding(code: str, *, text: str | None = None, url: str | None = PAGE_URL) -
         wording["year"] = 2016
     if code == "slow_mobile":
         wording["score"] = 41
+    if code == "images_without_alt":
+        wording.update(missing=37, total=41)
+    if code == "unlabelled_form_fields":
+        wording.update(count=4, noun="form fields")
+    if code == "thin_content":
+        wording.update(words=84, noun="words")
+    if code == "heading_level_skipped":
+        wording.update(higher="h1", lower="h3")
     return findings_module.build(
         code, evidence_text=text or f"evidence for {code}", evidence_url=url, **wording
     ).as_dict()

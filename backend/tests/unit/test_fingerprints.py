@@ -163,3 +163,17 @@ def test_the_generator_meta_maps_onto_a_platform(generator: str, expected: str |
 )
 def test_local_business_types_are_recognised(raw: object, expected: bool) -> None:
     assert is_local_business_type(raw) is expected
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "book service",
+        "schedule a service",
+        "schedule now",
+        "request service",
+        "request an appointment",
+    ],
+)
+def test_the_v0_11_booking_phrases_are_recognised(text: str) -> None:
+    assert booking_text_match(text) is not None

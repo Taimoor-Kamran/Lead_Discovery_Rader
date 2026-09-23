@@ -20,6 +20,7 @@ from typing import Any
 
 from app.modules.audit_web.checks import Checks, clip, value_of
 from app.modules.normalization.schemas import WebsiteKind
+from app.modules.normalization.web import builder_host
 
 
 class Severity(enum.StrEnum):
@@ -39,6 +40,7 @@ class ServiceCategory(enum.StrEnum):
     ecommerce = "ecommerce"
     security = "security"
     web_presence = "web_presence"
+    chat = "chat"
 
 
 # Every wording template must open with one of these, and contain none of the banned
@@ -116,6 +118,12 @@ CATALOGUE: dict[str, FindingSpec] = {
             "Audit could not verify the https certificate for {url}.",
         ),
         FindingSpec(
+            "builder_subdomain",
+            Severity.medium,
+            ServiceCategory.web_design,
+            "Audit found the homepage served from a website-builder subdomain.",
+        ),
+        FindingSpec(
             "no_mobile_viewport",
             Severity.high,
             ServiceCategory.web_design,
@@ -152,10 +160,46 @@ CATALOGUE: dict[str, FindingSpec] = {
             "Audit found no online booking or scheduling link on the homepage.",
         ),
         FindingSpec(
+            "no_live_chat",
+            Severity.medium,
+            ServiceCategory.chat,
+            "Audit found no live chat or messaging widget on the homepage.",
+        ),
+        FindingSpec(
             "no_contact_on_homepage",
             Severity.high,
             ServiceCategory.web_design,
             "Audit found no phone link, email link or contact form on the homepage.",
+        ),
+        FindingSpec(
+            "images_without_alt",
+            Severity.low,
+            ServiceCategory.web_design,
+            "Audit found {missing} of {total} images with no alt text on the homepage.",
+        ),
+        FindingSpec(
+            "unlabelled_form_fields",
+            Severity.low,
+            ServiceCategory.web_design,
+            "Audit found {count} {noun} with no associated label on the homepage.",
+        ),
+        FindingSpec(
+            "thin_content",
+            Severity.low,
+            ServiceCategory.web_design,
+            "Audit found {words} {noun} of visible text on the homepage.",
+        ),
+        FindingSpec(
+            "no_section_headings",
+            Severity.low,
+            ServiceCategory.web_design,
+            "Audit found no section headings below the main heading.",
+        ),
+        FindingSpec(
+            "heading_level_skipped",
+            Severity.low,
+            ServiceCategory.web_design,
+            "Audit found the homepage headings skip a level, from {higher} to {lower}.",
         ),
         FindingSpec(
             "stale_copyright",
@@ -221,6 +265,7 @@ class FindingContext:
     slow_mobile_score: int
     stale_copyright_years: int
     now: datetime
+    thin_content_words: int = 200
 
 
 def for_missing_website(context: FindingContext, *, business_label: str) -> list[Finding]:
@@ -279,6 +324,16 @@ def for_page(
     if value_of(checks, "https") is False:
         findings.append(_from_check(checks, "https", "no_https"))
 
+    host = builder_host(url)
+    if host is not None:
+        findings.append(
+            build(
+                "builder_subdomain",
+                evidence_text=f"The homepage was served from {host}",
+                evidence_url=url,
+            )
+        )
+
     if value_of(checks, "parsed"):
         findings.extend(_content_findings(checks, context))
 
@@ -320,6 +375,11 @@ def _content_findings(checks: Checks, context: FindingContext) -> list[Finding]:
     if not value_of(checks, "booking") and industry in context.booking_industries:
         findings.append(_from_check(checks, "booking", "no_online_booking"))
 
+    if value_of(checks, "live_chat") is False:
+        findings.append(_from_check(checks, "live_chat", "no_live_chat"))
+
+    findings.extend(_page_quality_findings(checks, context))
+
     year = value_of(checks, "copyright_year")
     # `bool` is a subclass of `int`, and "no copyright notice" is `False`: without the
     # second half of this test an absent notice would be read as the year zero and
@@ -330,6 +390,76 @@ def _content_findings(checks: Checks, context: FindingContext) -> list[Finding]:
         and (year <= context.now.year - context.stale_copyright_years)
     ):
         findings.append(_from_check(checks, "copyright_year", "stale_copyright", year=year))
+    return findings
+
+
+def _page_quality_findings(checks: Checks, context: FindingContext) -> list[Finding]:
+    """Counts of things present in the document. Each finding quotes what it counted."""
+    findings: list[Finding] = []
+
+    images = value_of(checks, "images_without_alt")
+    if isinstance(images, dict) and images.get("without_alt"):
+        findings.append(
+            _from_check(
+                checks,
+                "images_without_alt",
+                "images_without_alt",
+                missing=images["without_alt"],
+                total=images["images"],
+            )
+        )
+
+    fields = value_of(checks, "unlabelled_inputs")
+    if isinstance(fields, dict) and fields.get("unlabelled"):
+        count = int(fields["unlabelled"])
+        findings.append(
+            _from_check(
+                checks,
+                "unlabelled_inputs",
+                "unlabelled_form_fields",
+                count=count,
+                noun="form field" if count == 1 else "form fields",
+            )
+        )
+
+    # A page that builds itself with JavaScript has already been reported as such; its
+    # word count describes our fetch, not the page a visitor reads.
+    words = value_of(checks, "word_count")
+    if (
+        isinstance(words, int)
+        and not isinstance(words, bool)
+        and words < context.thin_content_words
+        and not value_of(checks, "js_shell_suspected")
+    ):
+        findings.append(
+            _from_check(
+                checks,
+                "word_count",
+                "thin_content",
+                words=words,
+                noun="word" if words == 1 else "words",
+            )
+        )
+
+    headings = value_of(checks, "heading_structure")
+    if isinstance(headings, dict):
+        if headings.get("sections_below_h1") == 0:
+            check = checks["heading_structure"]
+            findings.append(
+                build(
+                    "no_section_headings",
+                    evidence_text=headings.get("first_h1") or check.evidence_text,
+                    evidence_url=check.evidence_url or value_of(checks, "final_url"),
+                )
+            )
+        skips = headings.get("skips") or []
+        if skips:
+            higher, _, lower = str(skips[0]).partition(" to ")
+            findings.append(
+                _from_check(
+                    checks, "heading_structure", "heading_level_skipped", higher=higher, lower=lower
+                )
+            )
     return findings
 
 

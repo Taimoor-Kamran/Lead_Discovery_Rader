@@ -86,6 +86,7 @@ def audit_business(
         booking_industries=frozenset(item.lower() for item in settings.audit_booking_industries),
         slow_mobile_score=settings.audit_slow_mobile_score,
         stale_copyright_years=settings.audit_stale_copyright_years,
+        thin_content_words=settings.audit_thin_content_words,
         now=started,
     )
 

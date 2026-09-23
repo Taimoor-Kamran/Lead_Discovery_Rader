@@ -26,7 +26,10 @@ from app.core.models import created_at_column, uuid_pk
 # audit-2: `tls_valid` is null (not true) on a page served over http; a presence check on
 # a parsed page answers false rather than null when the thing is absent; snippet evidence
 # comes from the page's visible text instead of a window cut out of its HTML.
-RULES_VERSION = "audit-2"
+# audit-3 (v0.11.0): booking is also recognised from button labels and booking-page link
+# paths; new checks `live_chat`, `images_without_alt`, `unlabelled_inputs`, `word_count`
+# and `heading_structure`, and the findings built on them plus `builder_subdomain`.
+RULES_VERSION = "audit-3"
 
 
 class AuditStatus(enum.StrEnum):

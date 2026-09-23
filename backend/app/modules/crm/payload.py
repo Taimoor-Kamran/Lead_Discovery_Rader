@@ -37,6 +37,7 @@ SERVICE_LABELS: dict[str, str] = {
     "website_design": "Website redesign",
     "seo_gbp": "SEO / Google profile",
     "booking_setup": "Online booking",
+    "ai_chat_setup": "Chat assistant",
     "ads_social": "Ads & social",
 }
 

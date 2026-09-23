@@ -62,10 +62,56 @@ BOOKING_SIGNATURES: tuple[Signature, ...] = (
 # Link text (or a button label) that offers to book without naming a tool. Kept narrow on
 # purpose: "contact us" is not booking, and guessing would invent a fact.
 BOOKING_TEXT_PATTERNS: tuple[re.Pattern[str], ...] = (
-    re.compile(r"\bbook\s+(now|online|an?\s+appointment|a\s+service)\b"),
-    re.compile(r"\bschedule\s+(online|service|an?\s+appointment|a\s+visit)\b"),
-    re.compile(r"\brequest\s+(a\s+)?quote\b"),
+    re.compile(r"\bbook\s+(now|online|an?\s+appointment|a\s+service|service)\b"),
+    re.compile(r"\bschedule\s+(online|now|a\s+service|service|an?\s+appointment|a\s+visit)\b"),
+    re.compile(r"\brequest\s+(a\s+)?(quote|service|an?\s+appointment)\b"),
     re.compile(r"\bbook\s+a\s+(consultation|call)\b"),
+)
+
+# A link whose *path* is a booking page, whatever its text says (an icon, an image, a
+# label in another language). Matched against whole path segments, never substrings, so
+# `/books` or `/bookkeeping` is not booking.
+BOOKING_HREF_SEGMENTS = frozenset(
+    {
+        "book",
+        "booking",
+        "bookings",
+        "book-now",
+        "book-online",
+        "book-a-service",
+        "book-service",
+        "book-appointment",
+        "book-an-appointment",
+        "schedule",
+        "schedule-service",
+        "schedule-online",
+        "schedule-appointment",
+        "schedule-an-appointment",
+        "appointment",
+        "appointments",
+        "request-service",
+    }
+)
+
+# --- live chat and messaging ---------------------------------------------------------
+
+# Script hosts and globals of the chat widgets the spec names. Hosts, not brand names: the
+# bare word "crisp" is a WordPress CSS token (`--wp--preset--shadow--crisp`) on every
+# block-theme site, and "drift" or "intercom" are ordinary words a page can print.
+CHAT_SIGNATURES: tuple[Signature, ...] = (
+    Signature("intercom", "Intercom", ("widget.intercom.io", "js.intercomcdn.com")),
+    Signature("drift", "Drift", ("js.driftt.com", "js.drift.com")),
+    Signature("tawk", "Tawk.to", ("embed.tawk.to",)),
+    Signature("crisp", "Crisp", ("client.crisp.chat",)),
+    Signature(
+        "hubspot_chat",
+        "HubSpot chat",
+        ("js.usemessages.com", "js-na1.usemessages.com", "hubspot-messages-iframe"),
+    ),
+    Signature("zendesk", "Zendesk", ("static.zdassets.com", "ze-snippet", "zopim.com")),
+    Signature("tidio", "Tidio", ("code.tidio.co",)),
+    Signature("livechat", "LiveChat", ("cdn.livechatinc.com",)),
+    Signature("facebook_chat", "Facebook Customer Chat", ("fb-customerchat", "xfbml.customerchat")),
 )
 
 # --- e-commerce ----------------------------------------------------------------------
@@ -298,6 +344,7 @@ def is_local_business_type(raw: object) -> bool:
 
 ALL_SIGNATURE_GROUPS: tuple[tuple[str, tuple[Signature, ...]], ...] = (
     ("booking", BOOKING_SIGNATURES),
+    ("chat", CHAT_SIGNATURES),
     ("ecommerce", ECOMMERCE_SIGNATURES),
     ("tech", TECH_SIGNATURES),
     ("social", SOCIAL_PLATFORMS),

@@ -82,6 +82,8 @@ class Settings(BaseSettings):
     audit_max_age_days: int = 30
     audit_slow_mobile_score: int = 50
     audit_stale_copyright_years: int = 3
+    # Fewer words of visible homepage text than this is reported as `thin_content`.
+    audit_thin_content_words: int = 200
     audit_page_text_max_chars: int = 20_000
     psi_rps: float = 1.0
     psi_daily_call_cap: int = 200

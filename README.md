@@ -296,9 +296,9 @@ reads nothing.
 
 ## How AI classification works — and what it is not allowed to do
 
-After the audits, every business gets **opportunities**: which of the agency's four
-services fits (`website_design`, `seo_gbp`, `booking_setup`, `ads_social`), why, with
-verbatim evidence, a confidence and a four-part score. Everything stays
+After the audits, every business gets **opportunities**: which of the agency's five
+services fits (`website_design`, `seo_gbp`, `booking_setup`, `ai_chat_setup`,
+`ads_social`), why, with verbatim evidence, a confidence and a four-part score. Everything stays
 `review_status = pending` — a human decides in v0.6.0, and nothing is exported before then.
 
 ```

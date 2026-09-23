@@ -55,11 +55,17 @@ SERVICES: dict[str, ServiceSpec] = {
                 "unreachable",
                 "no_https",
                 "tls_invalid",
+                "builder_subdomain",
                 "no_mobile_viewport",
                 "stale_copyright",
                 "no_contact_on_homepage",
                 "slow_mobile",
                 "js_shell_suspected",
+                "images_without_alt",
+                "unlabelled_form_fields",
+                "thin_content",
+                "no_section_headings",
+                "heading_level_skipped",
             ),
         ),
         ServiceSpec(
@@ -68,6 +74,7 @@ SERVICES: dict[str, ServiceSpec] = {
             ("missing_title", "missing_meta_description", "no_h1", "no_structured_data"),
         ),
         ServiceSpec("booking_setup", "Online booking setup", ("no_online_booking",)),
+        ServiceSpec("ai_chat_setup", "Chat assistant", ("no_live_chat",)),
         # Triggered by a check, not a finding: `checks.social_links.value == []`.
         ServiceSpec("ads_social", "Ads (Google/Meta) & social media", ()),
     )
