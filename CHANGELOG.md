@@ -59,6 +59,12 @@ Format: `## [vX.Y.Z] - YYYY-MM-DD` followed by Added / Changed / Fixed.
 
 - `buying_intent` rendered as the raw code `none_detected` on the review detail page,
   breaking v0.9.0's own "codes are read, not shown" rule.
+- **A backup-retention test that failed on a date rather than on a change**
+  (`backend/tests/integration/test_backup.py`, from v0.8.0). It seeded "older" dumps from
+  the wall clock but wrote the new one at a hardcoded `2026-09-21 02:00`, and retention
+  sorts by the timestamp in the filename — so from 2026-09-23 the file seeded "2 days ago"
+  sorted above the new one and `make check` went red on a machine where nothing had
+  changed. Every stamp now comes from the same `now`.
 
 ## [v0.9.0] - 2026-09-21
 

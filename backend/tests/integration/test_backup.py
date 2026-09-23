@@ -69,11 +69,15 @@ def test_create_backup_writes_a_named_dump_and_keeps_only_the_newest(
 ) -> None:
     make_user(db, Role.admin)
     backup_dir.mkdir(parents=True, exist_ok=True)
+    # Every stamp comes from the same `now` as the dump below, never from the real clock.
+    # Retention sorts by the timestamp in the filename, so a file seeded "2 days ago" by the
+    # wall clock sorts *above* a fixed `now` once today is two days past it — which made this
+    # test start failing on a date rather than on a change.
+    now = datetime(2026, 9, 21, 2, 0, 0, tzinfo=UTC)
     for days_ago in (5, 4, 3, 2):
-        stamp = datetime.now(UTC) - timedelta(days=days_ago)
-        (backup_dir / backup.backup_name(stamp)).write_bytes(b"old")
+        (backup_dir / backup.backup_name(now - timedelta(days=days_ago))).write_bytes(b"old")
 
-    result = backup.create_backup(now=datetime(2026, 9, 21, 2, 0, 0, tzinfo=UTC))
+    result = backup.create_backup(now=now)
 
     assert result.file.name == "radar-20260921-020000.dump"
     assert result.file.size_bytes > 0
