@@ -34,7 +34,10 @@ export const FINDING_LABELS: Record<string, string> = {
   heading_level_skipped: "Heading levels skipped",
   stale_copyright: "Outdated copyright year",
   slow_mobile: "Slow on mobile",
+  low_accessibility_score: "Low accessibility score",
+  low_best_practices_score: "Low best-practices score",
   js_shell_suspected: "Page built with JavaScript (audit may be incomplete)",
+  few_reviews: "Few Google reviews",
   robots_blocked: "Blocked by robots.txt",
 };
 

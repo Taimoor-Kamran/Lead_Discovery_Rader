@@ -14,7 +14,7 @@ import { Badge, Card, Chip, PageHeader, SkeletonLines, useToast } from "@/compon
 import { ApiError, getLeadDetail, retryCrmLead, type LeadDetail as LeadDetailData } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { loadFailed } from "@/lib/errors";
-import { CRM_ACTION_LABELS, formatDateTime, formatPhone, orUnknown, percent, place, score } from "@/lib/format";
+import { CRM_ACTION_LABELS, formatDateTime, formatPhone, listingRating, orUnknown, percent, place, score } from "@/lib/format";
 import { auditStatusLabel, industryLabel, serviceLabel, sourceLabel } from "@/lib/labels";
 import { canManageCrm } from "@/lib/roles";
 
@@ -127,6 +127,12 @@ export function LeadDetail({ opportunityId }: { opportunityId: string }) {
             </dd>
           </div>
           <div>
+            <dt className="text-sm text-ink-soft">Listing rating</dt>
+            <dd className="text-md" data-testid="listing-rating">
+              {listingRating(business.rating, business.user_rating_count)}
+            </dd>
+          </div>
+          <div>
             <dt className="text-sm text-ink-soft">Industry</dt>
             <dd className="text-md" title={business.industry ?? undefined}>
               {industryLabel(business.industry)}
@@ -180,7 +186,7 @@ export function LeadDetail({ opportunityId }: { opportunityId: string }) {
                 <FindingList findings={findings} />
               </div>
               <div className="print-hide mt-4 border-t border-line pt-3">
-                <h3 className="mb-2 text-base font-semibold text-ink">Speed</h3>
+                <h3 className="mb-2 text-base font-semibold text-ink">Speed and quality</h3>
                 <PsiPanel psi={(audit.psi as Record<string, unknown> | null) ?? null} />
               </div>
             </>

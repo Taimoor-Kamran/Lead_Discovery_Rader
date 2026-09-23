@@ -55,6 +55,17 @@ describe("psiLines", () => {
       null,
     ]);
   });
+  it("adds accessibility and best practices only when PageSpeed scored them", () => {
+    const scored = psiLines({ performance_score: 92, accessibility_score: 58, best_practices_score: 67 });
+    expect(scored.slice(4).map((l) => [l.label, l.value, l.rating])).toEqual([
+      ["Accessibility", "58/100", "needs work"],
+      ["Best practices", "67/100", "needs work"],
+    ]);
+    const unscored = psiLines({ performance_score: 92, accessibility_score: null });
+    expect(unscored.map((l) => l.label)).not.toContain("Accessibility");
+    expect(unscored.map((l) => l.label)).not.toContain("Best practices");
+    expect(unscored.map((l) => l.value)).not.toContain("0/100");
+  });
   it("says unknown for what PSI did not report, and nothing at all without a measurement", () => {
     const [scoreLine] = psiLines({ performance_score: null, lcp_ms: 900 });
     expect(scoreLine.value).toBe("unknown");

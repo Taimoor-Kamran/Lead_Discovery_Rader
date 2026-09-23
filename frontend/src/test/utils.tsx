@@ -191,6 +191,8 @@ export function reviewDetail(overrides: Partial<ReviewDetail> = {}): ReviewDetai
       domain: "bartoncreekplumbing.invalid",
       website_kind: "own_site",
       business_status: "operational",
+      rating: 4.3,
+      user_rating_count: 27,
       created_at: "2026-09-20T10:00:00Z",
       updated_at: "2026-09-20T10:00:00Z",
       latest_audit: null,
