@@ -61,8 +61,10 @@ touches a live API — the tests run entirely on recorded responses.
   first live call. Discovery is metered, capped and rate limited, but a budget alert is
   the only thing that catches a mistake nobody predicted.
 - Check the current [Places pricing](https://developers.google.com/maps/documentation/places/web-service/usage-and-billing):
-  the default `PLACES_FIELD_MASK` asks for phone, website and address components, which
-  fall into the **Enterprise** SKU. Trim the mask if you want the cheaper Pro tier.
+  the default `PLACES_FIELD_MASK` asks for phone, website, address components, rating
+  and review count, which fall into the **Enterprise** SKU. Trim the mask if you want the
+  cheaper Pro tier. `reviews` and `editorialSummary` are never requested: they are
+  Enterprise + Atmosphere.
 - Check the current [Maps Platform terms](https://cloud.google.com/maps-platform/terms)
   for how long Places content may be stored, and set `PLACES_CONTENT_TTL_DAYS` to match
   (default 30). Place IDs may be kept indefinitely.

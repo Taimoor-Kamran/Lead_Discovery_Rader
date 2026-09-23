@@ -3,6 +3,51 @@
 All notable changes, one section per merged spec. Newest first.
 Format: `## [vX.Y.Z] - YYYY-MM-DD` followed by Added / Changed / Fixed.
 
+## [v0.11.0] - 2026-09-23
+
+### Added
+
+- **Page-quality counts from the homepage already fetched** — no new request, no key:
+  images with no `alt` attribute (`images_without_alt`, quoting the first three tags),
+  form fields with no associated label (`unlabelled_form_fields`), visible word count
+  below `AUDIT_THIN_CONTENT_WORDS` (`thin_content`), and heading structure
+  (`no_section_headings`, `heading_level_skipped`). Each is a count with its evidence,
+  never a judgement, and all map to `website_design`.
+- **Live chat detection and a fifth service.** Intercom, Drift, Tawk.to, Crisp, HubSpot
+  chat, Zendesk, Tidio, LiveChat and Facebook Customer Chat are recognised by script host;
+  a homepage with none produces `no_live_chat`, which maps to the new **Chat assistant**
+  service `ai_chat_setup`.
+- **`builder_subdomain`**: a homepage *served from* a website-builder subdomain is a
+  `website_design` signal. The same builder on the business's own domain is not.
+- **PageSpeed accessibility and best-practices scores**, requested in the same call as
+  performance and stored on `website_audits` (`accessibility_score`,
+  `best_practices_score`, migration `0009_deeper_audit`). Below
+  `AUDIT_QUALITY_SCORE_THRESHOLD` (90) they produce `low_accessibility_score` /
+  `low_best_practices_score`. The lead page's Speed block is now **Speed and quality**.
+  Built against constructed fixtures: no `PAGESPEED_API_KEY` exists yet.
+- **Listing rating and review count** (`places.rating`, `places.userRatingCount` in the
+  field mask), stored on `businesses` through survivorship with per-field provenance, shown
+  in the facts panels and as a review-count chip in the review queue. Fewer than
+  `PLACES_FEW_REVIEWS` (20) produces `few_reviews`, mapped to `seo_gbp`, citing the
+  listing's own page. `reviews` and `editorialSummary` are never requested.
+- The label guard test now covers finding codes, so a finding without a label fails.
+
+### Changed
+
+- **Booking detection is wider**: button labels, submit inputs, `role="button"`,
+  `aria-label`/`title` on icon buttons, and links whose path is a booking page
+  (`/book-online`, `/schedule-service`, `/appointments`, …) all count, as well as the
+  widget scripts and link text that already did.
+- **`wixstudio.com` and eight other per-customer builder domains** are now builder
+  subdomains, so their businesses no longer share one domain identity.
+- **Without `PAGESPEED_API_KEY`, PageSpeed is not called.** Every score is null and the
+  audit records why, instead of spending a quota shared by every keyless caller.
+- Audit rules version `audit-3`.
+
+### Deferred
+
+- The richer `classify-2` prompt (spec scope item 3), until AI is switched back on.
+
 ## [v0.10.0] - 2026-09-22
 
 ### Added
