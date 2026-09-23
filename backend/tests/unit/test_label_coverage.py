@@ -21,6 +21,7 @@ from app.modules.adapters.demo_fixture import DemoFixtureAdapter
 from app.modules.adapters.google_places.adapter import GooglePlacesAdapter
 from app.modules.ai.models import ClassificationStatus
 from app.modules.ai.schema import BuyingIntent
+from app.modules.audit_web.findings import CATALOGUE
 from app.modules.audit_web.fingerprints import SOCIAL_PLATFORMS
 from app.modules.audit_web.models import AuditStatus
 from app.modules.normalization.schemas import BusinessStatus, WebsiteKind
@@ -88,6 +89,7 @@ def test_every_social_platform_the_audit_records_has_a_label() -> None:
         ("BUSINESS_STATUS_LABELS", {status.value for status in BusinessStatus}),
         ("SOURCE_LABELS", {source.value for source in OpportunitySource}),
         ("SERVICE_LABELS", set(SERVICES)),
+        ("FINDING_LABELS", set(CATALOGUE)),
     ],
 )
 def test_every_enum_value_the_api_emits_has_a_label(table: str, codes: set[str]) -> None:
