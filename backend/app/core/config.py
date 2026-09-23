@@ -87,6 +87,8 @@ class Settings(BaseSettings):
     audit_thin_content_words: int = 200
     # A PageSpeed accessibility or best-practices score below this is reported as a finding.
     audit_quality_score_threshold: int = 90
+    # Below this the same finding is `medium` rather than `low` (graded, v0.11.0).
+    audit_quality_score_medium_below: int = 70
     # A Places listing with fewer reviews than this is reported as `few_reviews`.
     places_few_reviews: int = 20
     audit_page_text_max_chars: int = 20_000

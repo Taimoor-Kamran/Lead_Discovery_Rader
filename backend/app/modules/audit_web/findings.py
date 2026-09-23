@@ -255,13 +255,18 @@ def build(
     *,
     evidence_text: str | None = None,
     evidence_url: str | None = None,
+    severity: Severity | None = None,
     **wording: object,
 ) -> Finding:
-    """Instantiate one catalogue entry. An unknown code is a programming error."""
+    """Instantiate one catalogue entry. An unknown code is a programming error.
+
+    `severity` overrides the catalogue's only where a finding is graded by what it
+    measured (the PageSpeed quality scores); the catalogue entry holds the mildest grade.
+    """
     spec = CATALOGUE[code]
     return Finding(
         code=spec.code,
-        severity=spec.severity,
+        severity=severity or spec.severity,
         service_category=spec.service_category,
         message=spec.wording.format(**wording),
         evidence_text=evidence_text,
@@ -285,6 +290,7 @@ class FindingContext:
     now: datetime
     thin_content_words: int = 200
     quality_score_threshold: int = 90
+    quality_score_medium_below: int = 70
 
 
 def for_missing_website(context: FindingContext, *, business_label: str) -> list[Finding]:
@@ -444,7 +450,12 @@ QUALITY_SCORES = (
 def _quality_score_findings(
     psi: Mapping[str, Any], context: FindingContext, url: str | None
 ) -> list[Finding]:
-    """Lighthouse's category scores, reported below the threshold. A null is never a zero."""
+    """Lighthouse's category scores, reported below the threshold. A null is never a zero.
+
+    Graded by the score itself (a decision made during the v0.11.0 build): below
+    `quality_score_medium_below` (70) is `medium`, from there up to the threshold (90) is
+    `low`, and at or above the threshold nothing is reported.
+    """
     findings: list[Finding] = []
     for key, code, label in QUALITY_SCORES:
         score = psi.get(key)
@@ -455,6 +466,11 @@ def _quality_score_findings(
                 build(
                     code,
                     score=int(score),
+                    severity=(
+                        Severity.medium
+                        if score < context.quality_score_medium_below
+                        else Severity.low
+                    ),
                     evidence_text=(
                         f"PageSpeed Insights scored {label} {int(score)}/100 "
                         f"({psi.get('strategy') or 'mobile'})"
@@ -535,7 +551,7 @@ def _page_quality_findings(checks: Checks, context: FindingContext) -> list[Find
     return findings
 
 
-def _from_check(checks: Checks, check_key: str, code: str, **wording: object) -> Finding:
+def _from_check(checks: Checks, check_key: str, code: str, **wording: Any) -> Finding:
     """Build a finding from the check that triggered it, carrying its evidence over."""
     check = checks.get(check_key)
     return build(

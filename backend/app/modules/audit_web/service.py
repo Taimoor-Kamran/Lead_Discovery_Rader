@@ -89,6 +89,7 @@ def audit_business(
         stale_copyright_years=settings.audit_stale_copyright_years,
         thin_content_words=settings.audit_thin_content_words,
         quality_score_threshold=settings.audit_quality_score_threshold,
+        quality_score_medium_below=settings.audit_quality_score_medium_below,
         now=started,
     )
 

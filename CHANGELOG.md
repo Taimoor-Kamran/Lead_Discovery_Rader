@@ -23,7 +23,8 @@ Format: `## [vX.Y.Z] - YYYY-MM-DD` followed by Added / Changed / Fixed.
   performance and stored on `website_audits` (`accessibility_score`,
   `best_practices_score`, migration `0009_deeper_audit`). Below
   `AUDIT_QUALITY_SCORE_THRESHOLD` (90) they produce `low_accessibility_score` /
-  `low_best_practices_score`. The lead page's Speed block is now **Speed and quality**.
+  `low_best_practices_score`, graded `medium` below `AUDIT_QUALITY_SCORE_MEDIUM_BELOW` (70)
+  and `low` from there up to 90. The lead page's Speed block is now **Speed and quality**.
   Verified live with a key; the test fixture is a recorded response
   (`scripts/psi_smoke.py --record`, new).
 - **Listing rating and review count** (`places.rating`, `places.userRatingCount` in the

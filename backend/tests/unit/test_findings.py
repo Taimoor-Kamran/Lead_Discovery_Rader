@@ -656,3 +656,34 @@ def test_enough_reviews_or_an_unknown_count_produces_nothing() -> None:
     assert for_listing(20, few_reviews=20) == []
     assert for_listing(None, few_reviews=20) == []
     assert for_listing(0, few_reviews=20)[0].message == "Listing shows 0 reviews."
+
+
+@pytest.mark.parametrize(
+    ("value", "severity"),
+    [(58, "medium"), (69, "medium"), (70, "low"), (88, "low"), (89, "low"), (90, None)],
+)
+def test_score_findings_are_graded_by_the_score(value: int, severity: str | None) -> None:
+    produced = {
+        f.code: f
+        for f in for_page(
+            page(COMPLETE_PAGE),
+            scored(accessibility_score=value, best_practices_score=value),
+            context(),
+        )
+    }
+
+    for code in ("low_accessibility_score", "low_best_practices_score"):
+        if severity is None:
+            assert code not in produced
+        else:
+            assert produced[code].severity.value == severity
+
+
+def test_the_medium_cut_is_configurable() -> None:
+    [finding, _] = for_page(
+        page(COMPLETE_PAGE),
+        scored(accessibility_score=75, best_practices_score=75),
+        context(quality_score_medium_below=80),
+    )
+
+    assert finding.severity.value == "medium"

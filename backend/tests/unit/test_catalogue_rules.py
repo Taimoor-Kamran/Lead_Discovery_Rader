@@ -216,3 +216,15 @@ def test_rule_reasons_obey_the_wording_rule() -> None:
     for opportunity in rule_opportunities(business, audit):
         lowered = opportunity.reason.lower()
         assert not any(word in lowered for word in BANNED_WORDS), opportunity.reason
+
+
+def test_a_medium_graded_score_finding_carries_medium_confidence() -> None:
+    """The rules read the severity the finding was stored with, not the catalogue's."""
+    business = make_business()
+    graded = {**finding("low_accessibility_score"), "severity": "medium"}
+    audit = make_audit(business, findings=[graded], social_links=["facebook"])
+
+    [opportunity] = rule_opportunities(business, audit)
+
+    assert opportunity.service == "website_design"
+    assert opportunity.confidence == 0.6
