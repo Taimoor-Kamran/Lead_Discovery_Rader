@@ -60,6 +60,9 @@ class Settings(BaseSettings):
     places_field_mask: str = DEFAULT_PLACES_FIELD_MASK
     places_max_results_per_job: int = 60
     places_daily_call_cap: int = 200
+    # A run may make this many times the Places calls its estimate says it needs; one call
+    # more fails it. The daily cap is too coarse to catch a runaway run.
+    places_run_call_cap_multiplier: int = Field(default=4, ge=1)
     places_rps: float = 5.0
     places_content_ttl_days: int = 30
 
