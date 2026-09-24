@@ -18,6 +18,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+import httpx
 from redis import Redis
 
 from app.core.config import Settings, get_settings
@@ -40,6 +41,14 @@ PSI_STRATEGY = "mobile"
 PSI_FIXTURE_FILENAME = "psi.json"
 # The Lighthouse categories one request asks for. PSI returns only the ones requested.
 PSI_CATEGORIES = ("performance", "accessibility", "best-practices")
+# PSI sends nothing until its Lighthouse run finishes, which on a live batch took 15-50 s.
+# The shared client's 20 s read timeout cut 4 of 9 calls short on 2026-09-24; each retry
+# then answered at once (Google had finished the run), so the timeout only cost 20 s and a
+# unit of quota per business. 60 s lets a normal run finish on its first attempt.
+PSI_TIMEOUT = httpx.Timeout(connect=5.0, read=60.0, write=20.0, pool=5.0)
+# One retry for a transient failure (a 5xx, a timeout); worst case ~2 x 65 s per business,
+# which `AUDIT_SECONDS_PER_BUSINESS` covers.
+PSI_MAX_ATTEMPTS = 2
 NO_KEY_REASON = "No PAGESPEED_API_KEY is configured, so PageSpeed Insights was not called"
 CONTENT_TTL_DAYS_UNLIMITED = 0
 
@@ -176,13 +185,18 @@ class NetworkPageSpeedClient:
             "url": url,
             "strategy": self._strategy,
             "category": list(PSI_CATEGORIES),
-            # PSI takes its key as a query parameter; the client's secret list keeps it
-            # out of every log line and error body.
-            "key": self._api_key,
         }
         target = f"{self._endpoint}?{_encode(query)}"
         try:
-            return self._http.request_json("GET", target, parse=parse_psi)
+            return self._http.request_json(
+                "GET",
+                target,
+                # In a header, never the URL: a URL is logged, cached and echoed by
+                # libraries this code does not control. Until v0.11.0 the key travelled
+                # as `&key=` and httpx wrote it, in plain text, into the worker log.
+                headers={"X-Goog-Api-Key": self._api_key},
+                parse=parse_psi,
+            )
         except AdapterError as exc:
             # Quota, auth, 5xx and unparseable bodies all land here. None of them is
             # allowed to fail the audit around them.
@@ -303,6 +317,8 @@ def build_psi_client(
         ),
         sleeper=sleeper,
         secrets=[api_key] if api_key else [],
+        max_attempts=PSI_MAX_ATTEMPTS,
+        timeout=PSI_TIMEOUT,
     )
     network = NetworkPageSpeedClient(http, api_key=api_key, endpoint=endpoint)
     if config.fixtures_allowed:

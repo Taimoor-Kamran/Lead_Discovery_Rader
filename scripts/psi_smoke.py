@@ -25,6 +25,7 @@ from app.modules.audit_web.psi import (
     PSI_CATEGORIES,
     PSI_ENDPOINT,
     PSI_STRATEGY,
+    PSI_TIMEOUT,
     parse_psi,
 )
 
@@ -43,16 +44,17 @@ def main() -> int:
         print("PAGESPEED_API_KEY is not set; nothing was called.", file=sys.stderr)
         return 2
 
-    query = {
-        "url": args.url,
-        "strategy": PSI_STRATEGY,
-        "category": list(PSI_CATEGORIES),
-        "key": key,
-    }
-    http = ApiHttpClient(source=PAGESPEED_SOURCE_NAME, secrets=[key])
+    query = {"url": args.url, "strategy": PSI_STRATEGY, "category": list(PSI_CATEGORIES)}
+    # One attempt, with the application's PSI timeout: a smoke check spends one call.
+    http = ApiHttpClient(
+        source=PAGESPEED_SOURCE_NAME, secrets=[key], max_attempts=1, timeout=PSI_TIMEOUT
+    )
     try:
         payload: dict[str, Any] = http.request_json(
-            "GET", f"{PSI_ENDPOINT}?{urlencode(query, doseq=True)}", parse=lambda body: body
+            "GET",
+            f"{PSI_ENDPOINT}?{urlencode(query, doseq=True)}",
+            headers={"X-Goog-Api-Key": key},  # as the application sends it: never in the URL
+            parse=lambda body: body,
         )
     finally:
         http.close()

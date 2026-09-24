@@ -14,6 +14,8 @@ from pydantic import SecretStr
 from app.core.http import ApiHttpClient
 from app.modules.audit_web.psi import (
     PSI_ENDPOINT,
+    PSI_MAX_ATTEMPTS,
+    PSI_TIMEOUT,
     FixturePageSpeedClient,
     NetworkPageSpeedClient,
     PageSpeedUnavailableError,
@@ -128,7 +130,22 @@ def test_the_client_asks_for_the_mobile_strategy(mock_http: respx.MockRouter) ->
     assert "url=https%3A%2F%2Fexample.test%2F" in request_url
 
 
-def test_the_key_travels_in_the_query_and_never_in_an_error(mock_http: respx.MockRouter) -> None:
+def test_the_key_travels_in_a_header_and_never_in_the_url(mock_http: respx.MockRouter) -> None:
+    """Until v0.11.0 the key went as `&key=`, and httpx logged the URL with it in."""
+    sentinel = "psi-key-SENTINEL-do-not-log"
+    route = mock_http.get(url__startswith=PSI_ENDPOINT).mock(
+        return_value=httpx.Response(200, json=lighthouse())
+    )
+
+    client(mock_http, api_key=sentinel).analyse(URL)
+
+    request = route.calls[0].request
+    assert request.headers["X-Goog-Api-Key"] == sentinel
+    assert sentinel not in str(request.url)
+    assert "key=" not in request.url.query.decode()
+
+
+def test_the_key_never_reaches_an_error(mock_http: respx.MockRouter) -> None:
     sentinel = "psi-key-SENTINEL-do-not-log"
     mock_http.get(url__startswith=PSI_ENDPOINT).mock(
         return_value=httpx.Response(400, json={"error": {"message": f"bad key {sentinel}"}})
@@ -138,6 +155,33 @@ def test_the_key_travels_in_the_query_and_never_in_an_error(mock_http: respx.Moc
         client(mock_http, api_key=sentinel).analyse(URL)
 
     assert sentinel not in exc.value.reason
+
+
+def test_the_production_client_waits_sixty_seconds_and_tries_twice(
+    mock_http: respx.MockRouter,
+) -> None:
+    """A Lighthouse run takes 15-50 s; a 20 s read timeout cut 4 of 9 live calls short."""
+    route = mock_http.get(url__startswith=PSI_ENDPOINT).mock(
+        side_effect=httpx.ReadTimeout("no answer yet")
+    )
+    clock = FakeClock()
+    psi = build_psi_client(
+        settings=_settings(pagespeed_api_key=SecretStr("psi-test-key")),
+        redis_client=fakeredis.FakeStrictRedis(),
+        clock=clock,
+        sleeper=clock.sleep,
+        meter=lambda call: None,
+    )
+
+    with pytest.raises(PageSpeedUnavailableError) as exc:
+        psi.analyse("https://www.real-host-with-no-demo-fixture.com/")
+
+    assert route.call_count == PSI_MAX_ATTEMPTS == 2
+    assert all(
+        call.request.extensions["timeout"]["read"] == PSI_TIMEOUT.read == 60.0
+        for call in route.calls
+    ), "the timeout httpx actually applied to each attempt"
+    assert "TransientError" in exc.value.reason
 
 
 def test_a_quota_error_is_reported_as_unavailable_rather_than_raised(
