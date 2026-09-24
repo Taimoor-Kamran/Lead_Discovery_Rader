@@ -68,6 +68,33 @@ Format: `## [vX.Y.Z] - YYYY-MM-DD` followed by Added / Changed / Fixed.
   (60 results really took 5 calls, not 3). It now shows the enforced per-run safety limit
   as "at most N" (`places_max_calls`, replacing `places_calls`), and the "not enough calls
   left" blocker compares that maximum with what is left today.
+- **The PageSpeed key no longer reaches the logs.** PSI took the key as `&key=` in the
+  URL, and httpx logged every request URL at INFO: the key sat in plain text in the worker
+  log (5 lines; the Google Places key, sent in a header, never appeared). The key now
+  travels in the `X-Goog-Api-Key` header (confirmed with one live call), `httpx` and
+  `httpcore` log at WARNING only, the scrubber redacts credentials in any URL query, and
+  it now scrubs every `SecretStr` setting rather than a hand-kept list that had missed
+  the PageSpeed key. `test_no_key_in_logged_urls.py` fails if a key can reach a URL or a
+  log line again. **Rotate the PageSpeed key** that was logged.
+- **A run's time limit is no longer RQ's default of 180 s.** Every run was held to it,
+  and an audit of more than about five businesses could not finish. Runs now get
+  `JOB_TIMEOUT_SECONDS` (1800), and an audit run `AUDIT_SECONDS_PER_BUSINESS` (150) for
+  each business if that is more.
+- **Reaching the time limit fails the run as a timeout — it is no longer recorded as one
+  business's failed audit.** RQ raised its timeout as an `Exception`; the audit loop's
+  per-business handler caught it, stored the business it was on as `failed`, and the run
+  carried on and could report done. The limit is now raised as `RunTimedOut`, a
+  `BaseException` no `except Exception` can swallow; the run is failed with the reason
+  at once, not retried. Two past audits carry the false failure (Hoffman Electric
+  Company, run `be6a2868`, which reported done; Harlow Beauty and Hair Salon, run
+  `270495a2`) — re-audit both from their lead pages.
+- **The watchdog judges a running run by its last progress, not its start.** A healthy
+  audit of 54 businesses takes about 30 minutes one at a time, and was failed as "worker
+  lost" at 30 minutes however well it was going. `job_runs.updated_at` (migration
+  `0010_job_run_heartbeat`) is moved by every checkpoint, and the watchdog reads that.
+- **PageSpeed waits 60 s for an answer instead of 20 s.** Lighthouse takes 15-50 s; the
+  shared 20 s read timeout cut 4 of 9 live calls short, each retried at the cost of 20 s
+  and a unit of quota. PSI now has its own 60 s read timeout and at most two attempts.
 
 ### Deferred
 
