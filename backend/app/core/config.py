@@ -250,6 +250,12 @@ class Settings(BaseSettings):
     scheduler_enabled: bool = True
     scheduler_tick_seconds: float = 15.0
     watchdog_stale_minutes: int = 30
+    # The time limit RQ enforces on one run (v0.11.0). Before it was set, every run got
+    # RQ's default of 180 s, which an audit of more than ~5 businesses cannot meet.
+    job_timeout_seconds: int = Field(default=1800, ge=60)
+    # An audit run's limit is this per business, or `job_timeout_seconds` if that is more:
+    # fetches with the per-host throttle (~15 s) plus PageSpeed at worst (2 x 65 s).
+    audit_seconds_per_business: int = Field(default=150, ge=10)
     # JSON logs also go to `LOG_DIR/LOG_FILE` with daily rotation when LOG_DIR is set.
     log_dir: str = ""
     log_file: str = "app.log"

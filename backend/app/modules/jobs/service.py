@@ -450,9 +450,32 @@ def enqueue_run(
     # would be circular.
     from app.workers.tasks import execute_job_run
 
-    get_queue().enqueue(execute_job_run, str(run.id), job_id=str(run.id))
+    get_queue().enqueue(
+        execute_job_run,
+        str(run.id),
+        job_id=str(run.id),
+        job_timeout=run_time_limit_seconds(session, run),
+    )
     logger.info("job run enqueued", extra={"job_run_id": str(run.id), "kind": kind})
     return run
+
+
+def run_time_limit_seconds(session: Session, run: JobRun) -> int:
+    """The time limit RQ holds this run to — never RQ's own default of 180 s.
+
+    An audit run is sized by the businesses it will audit, one at a time; everything else
+    gets `JOB_TIMEOUT_SECONDS`. The limit covers the whole job, retries included. Reaching
+    it fails the run as a timeout (`RunTimedOut`), never as one business's failed audit.
+    """
+    settings = get_settings()
+    limit = settings.job_timeout_seconds
+    parent = (run.params or {}).get("parent_run_id")
+    if run.kind == AUDIT_JOB_KIND and parent:
+        from app.modules.audit_web.service import businesses_for_run
+
+        count = len(businesses_for_run(session, uuid.UUID(str(parent))))
+        limit = max(limit, count * settings.audit_seconds_per_business)
+    return limit
 
 
 def run_inline(

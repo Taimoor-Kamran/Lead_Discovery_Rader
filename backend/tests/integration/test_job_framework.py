@@ -436,6 +436,7 @@ def test_a_second_executor_hands_the_run_to_the_watchdog_not_to_rq(
     run = enqueue_run(db, search_job_id=None, kind=DEMO_JOB_KIND, actor_id=sales_user.id)
     transition(db, run, JobRunStatus.running)
     run.started_at = datetime.now(UTC) - timedelta(minutes=45)
+    run.updated_at = run.started_at  # and no progress since
     db.commit()
     run_id = run.id
 

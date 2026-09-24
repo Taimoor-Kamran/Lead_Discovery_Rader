@@ -86,6 +86,9 @@ class JobRun(Base):
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = created_at_column()
+    # The run's heartbeat: every write moves it, and `checkpoint` writes it even when
+    # nothing else changed. The watchdog judges a `running` run by it (v0.11.0).
+    updated_at: Mapped[datetime] = updated_at_column()
 
     @property
     def is_terminal(self) -> bool:

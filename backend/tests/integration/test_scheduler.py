@@ -172,6 +172,7 @@ def _running_since(db: Session, kind: str, started_at: datetime) -> JobRun:
     db.flush()
     transition(db, run, JobRunStatus.running)
     run.started_at = started_at
+    run.updated_at = started_at  # and no progress since
     db.commit()
     return run
 
@@ -199,6 +200,28 @@ def test_the_watchdog_fails_a_stuck_run_with_worker_lost_and_alerts(
     assert alert.active and not alert.acknowledged
     assert alert.details["job_run_id"] == str(stuck.id)
     assert "worker lost" in alert.message
+
+
+def test_a_long_run_that_is_still_making_progress_is_left_alone(
+    db: Session, fake_redis: fakeredis.FakeStrictRedis
+) -> None:
+    """Staleness is time since the last progress, not since the start (v0.11.0): a
+    54-business audit takes about 30 minutes one at a time and is alive throughout."""
+    now = datetime.now(UTC)
+    working = _running_since(db, DEMO_JOB_KIND, now - timedelta(minutes=45))
+    working.updated_at = now - timedelta(minutes=2)  # a checkpoint two minutes ago
+    silent = _running_since(db, DEMO_JOB_KIND, now - timedelta(minutes=45))
+    silent.updated_at = now - timedelta(minutes=35)
+    db.commit()
+
+    run = enqueue_run(db, search_job_id=None, kind=f"{SCHEDULED_KIND_PREFIX}{JOB_WATCHDOG}")
+    assert tasks.execute_job_run(run.id) is JobRunStatus.done
+
+    db.expire_all()
+    assert working.status is JobRunStatus.running
+    assert silent.status is JobRunStatus.failed
+    assert silent.error == WORKER_LOST
+    assert "no progress" in WORKER_LOST
 
 
 def test_the_watchdog_never_fails_itself(db: Session, fake_redis: Any) -> None:
@@ -291,3 +314,14 @@ def test_the_watchdog_leaves_a_queued_run_that_still_has_its_job_alone(
     watchdog = db.get(JobRun, run.id)
     assert watchdog is not None and watchdog.result_summary is not None
     assert watchdog.result_summary["stale_runs_failed"] == 0
+
+
+def test_every_checkpoint_is_a_heartbeat_even_when_nothing_else_changed(db: Session) -> None:
+    """Discovery checkpoints between records without always moving `progress_done`."""
+    hour_ago = datetime.now(UTC) - timedelta(hours=1)
+    run = _running_since(db, DEMO_JOB_KIND, hour_ago)
+
+    tasks.checkpoint(db, run)
+
+    db.expire_all()
+    assert run.updated_at > hour_ago + timedelta(minutes=59)

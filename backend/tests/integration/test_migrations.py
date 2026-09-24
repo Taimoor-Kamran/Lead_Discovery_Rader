@@ -82,6 +82,7 @@ def _enums(engine: object) -> set[str]:
 DEEPER_AUDIT_COLUMNS = {
     "website_audits": {"accessibility_score", "best_practices_score"},
     "businesses": {"rating", "user_rating_count"},
+    "job_runs": {"updated_at"},  # 0010_job_run_heartbeat
 }
 
 
@@ -89,8 +90,12 @@ def _columns(engine: Engine, table: str) -> set[str]:
     return {c["name"] for c in inspect(engine).get_columns(table)}
 
 
-def test_one_step_down_removes_only_the_v0_11_columns_and_comes_back(database_url: str) -> None:
-    """`downgrade -1` undoes exactly the newest migration (v0.11.0): four nullable columns."""
+def test_down_to_v0_8_removes_only_the_v0_11_columns_and_comes_back(database_url: str) -> None:
+    """Down to `0008_hardening` undoes exactly v0.11.0's two migrations: five columns.
+
+    Named by revision, not `-1`: v0.11.0 gained a second migration, and a count silently
+    changed what this test checked.
+    """
     url = _fresh_database(database_url)
     config = alembic_config(url)
     command.upgrade(config, "head")
@@ -98,7 +103,7 @@ def test_one_step_down_removes_only_the_v0_11_columns_and_comes_back(database_ur
     tables_at_head = set(inspect(engine).get_table_names())
     engine.dispose()
 
-    command.downgrade(config, "-1")
+    command.downgrade(config, "0008_hardening")
     engine = create_engine(url)
     assert set(inspect(engine).get_table_names()) == tables_at_head
     for table, columns in DEEPER_AUDIT_COLUMNS.items():
