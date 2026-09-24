@@ -7,7 +7,7 @@ import { me, renderWithProviders, routeFetch, router } from "@/test/utils";
 const ESTIMATE = {
   max_results: 60,
   uses_places: true,
-  places_calls: 3,
+  places_max_calls: 12,
   places_used_today: 2,
   places_daily_cap: 200,
   places_remaining_today: 198,
@@ -85,7 +85,9 @@ describe("Searches page", () => {
     renderWithProviders(<Searches />, { user: me("sales_rep") });
 
     await waitFor(() => expect(screen.getByTestId("estimate")).toBeTruthy());
-    expect(screen.getByTestId("est-places").textContent).toContain("≈ 3");
+    // The enforced safety limit, shown as "at most N" — never a "≈" guess.
+    expect(screen.getByTestId("est-places").querySelector(".font-mono")?.textContent).toBe("12");
+    expect(screen.getByTestId("estimate").textContent).toContain("Google Places calls (at most)");
     expect(screen.getByTestId("est-places").textContent).toContain("198 of 200 left today");
     expect(screen.getByTestId("est-ai").textContent).toContain("$1.75 of $2.00");
 
@@ -116,7 +118,7 @@ describe("Searches page", () => {
       "GET /sources": { status: 200, body: SOURCES },
       "POST /search-jobs/estimate": {
         status: 200,
-        body: { ...ESTIMATE, places_remaining_today: 1, can_run: false, blockers: ["This run needs about 3 Google Places call(s) but only 1 of today's 200 remain."] },
+        body: { ...ESTIMATE, places_remaining_today: 1, can_run: false, blockers: ["This run may make up to 12 Google Places call(s) but only 1 of today's 200 remain."] },
       },
     });
     renderWithProviders(<Searches />, { user: me("admin") });

@@ -107,7 +107,9 @@ class CostEstimate(BaseModel):
 
     max_results: int
     uses_places: bool
-    places_calls: int
+    # The per-run safety limit the worker enforces (`run_call_ceiling`), so the most the run
+    # can spend. Not a typical figure: Places page sizes vary, so none can be exact.
+    places_max_calls: int
     places_used_today: int
     places_daily_cap: int
     places_remaining_today: int

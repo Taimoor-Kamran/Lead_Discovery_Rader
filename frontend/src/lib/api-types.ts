@@ -1655,10 +1655,10 @@ export interface components {
             pagespeed_remaining_today: number;
             /** Pagespeed Used Today */
             pagespeed_used_today: number;
-            /** Places Calls */
-            places_calls: number;
             /** Places Daily Cap */
             places_daily_cap: number;
+            /** Places Max Calls */
+            places_max_calls: number;
             /** Places Remaining Today */
             places_remaining_today: number;
             /** Places Used Today */

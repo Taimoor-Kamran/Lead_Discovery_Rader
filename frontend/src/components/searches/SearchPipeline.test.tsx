@@ -55,7 +55,7 @@ describe("Search pipeline view", () => {
     routeFetch({
       "GET /search-jobs/job-1": { status: 200, body: JOB },
       "GET /search-jobs/job-1/pipeline": { status: 200, body: PIPELINE },
-      "GET /search-jobs/job-1/estimate": { status: 200, body: { max_results: 60, uses_places: true, places_calls: 3, places_used_today: 0, places_daily_cap: 200, places_remaining_today: 200, pagespeed_calls: 60, pagespeed_used_today: 0, pagespeed_daily_cap: 200, pagespeed_remaining_today: 200, ai_enabled: false, ai_provider: "disabled", ai_calls: 0, ai_calls_used_today: 0, ai_daily_call_cap: 500, ai_budget_usd: 2, ai_spent_today_usd: 0, ai_budget_remaining_usd: 2, can_run: true, blockers: [] } },
+      "GET /search-jobs/job-1/estimate": { status: 200, body: { max_results: 60, uses_places: true, places_max_calls: 12, places_used_today: 0, places_daily_cap: 200, places_remaining_today: 200, pagespeed_calls: 60, pagespeed_used_today: 0, pagespeed_daily_cap: 200, pagespeed_remaining_today: 200, ai_enabled: false, ai_provider: "disabled", ai_calls: 0, ai_calls_used_today: 0, ai_daily_call_cap: 500, ai_budget_usd: 2, ai_spent_today_usd: 0, ai_budget_remaining_usd: 2, can_run: true, blockers: [] } },
     });
     renderWithProviders(<SearchPipeline searchJobId="job-1" />, { user: me("sales_rep") });
 

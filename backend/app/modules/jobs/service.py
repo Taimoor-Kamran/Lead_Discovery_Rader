@@ -182,9 +182,6 @@ def industries() -> list[IndustryOption]:
     )
 
 
-PLACES_PAGE_SIZE = 20
-
-
 def _uses_places(session: Session, source_ids: list[uuid.UUID]) -> bool:
     """Whether the run would call Google Places. No sources = the default source."""
     from app.modules.adapters.google_places.adapter import SOURCE_NAME as GOOGLE_PLACES
@@ -201,11 +198,10 @@ def estimate(
     session: Session, *, max_results: int | None, source_ids: list[uuid.UUID]
 ) -> CostEstimate:
     """What one run would cost against today's caps and budget. Nothing is called."""
-    import math
-
     from app.core.ratelimit import DailyCallCap
     from app.core.redis import get_redis
     from app.modules.adapters.google_places.adapter import SOURCE_NAME as GOOGLE_PLACES
+    from app.modules.adapters.google_places.adapter import effective_limit, run_call_ceiling
     from app.modules.ai.budget import AIBudget
     from app.modules.audit_web.psi import PAGESPEED_SOURCE_NAME
 
@@ -218,7 +214,9 @@ def estimate(
         redis, source=GOOGLE_PLACES, cap=settings.places_daily_call_cap
     ).used()
     places_remaining = max(settings.places_daily_call_cap - places_used, 0)
-    places_calls = math.ceil(wanted / PLACES_PAGE_SIZE) if uses_places else 0
+    # The enforced ceiling, not a guess: Places page sizes vary between identical requests,
+    # so no exact count can be promised, but the run can never spend more than this.
+    places_max_calls = run_call_ceiling(effective_limit(wanted)) if uses_places else 0
 
     psi_used = DailyCallCap(
         redis, source=PAGESPEED_SOURCE_NAME, cap=settings.psi_daily_call_cap
@@ -230,16 +228,16 @@ def estimate(
     ai_calls = wanted if ai_enabled else 0
 
     blockers: list[str] = []
-    if places_calls > places_remaining:
+    if places_max_calls > places_remaining:
         blockers.append(
-            f"This run needs about {places_calls} Google Places call(s) but only "
+            f"This run may make up to {places_max_calls} Google Places call(s) but only "
             f"{places_remaining} of today's {settings.places_daily_call_cap} remain. "
             "Wait for UTC midnight, lower the results, or raise PLACES_DAILY_CALL_CAP."
         )
     return CostEstimate(
         max_results=wanted,
         uses_places=uses_places,
-        places_calls=places_calls,
+        places_max_calls=places_max_calls,
         places_used_today=places_used,
         places_daily_cap=settings.places_daily_call_cap,
         places_remaining_today=places_remaining,

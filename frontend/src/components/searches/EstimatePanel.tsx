@@ -11,10 +11,12 @@ export function EstimatePanel({ estimate }: { estimate: CostEstimate | null }) {
         Cost estimate for {estimate.max_results} results
       </h3>
       <dl className="grid grid-cols-1 gap-x-8 gap-y-1.5 text-base sm:grid-cols-2">
-        <dt className="text-ink-soft">Google Places calls</dt>
+        {/* The per-run safety limit the worker enforces, not a guess: Places page sizes vary
+            between identical requests, so an exact count cannot be promised, but this can. */}
+        <dt className="text-ink-soft">Google Places calls (at most)</dt>
         <dd data-testid="est-places">
           {estimate.uses_places ? (
-            <span className="font-mono tabular-nums">≈ {estimate.places_calls}</span>
+            <span className="font-mono tabular-nums">{estimate.places_max_calls}</span>
           ) : (
             "none (no Places source)"
           )}
