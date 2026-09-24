@@ -33,6 +33,13 @@ Format: `## [vX.Y.Z] - YYYY-MM-DD` followed by Added / Changed / Fixed.
   `PLACES_FEW_REVIEWS` (20) produces `few_reviews`, mapped to `seo_gbp`, citing the
   listing's own page. `reviews` and `editorialSummary` are never requested.
 - The label guard test now covers finding codes, so a finding without a label fails.
+- **A per-run safety limit on Places calls**: `PLACES_RUN_CALL_CAP_MULTIPLIER` (default
+  4) × ceil(results / 20), counted per job run across worker retries, checked before the
+  daily cap. Reaching it fails the run at once with the count, saying it is a safety limit
+  and not a quota.
+- `scripts/places_smoke.py`: a human-run live walk of Places pages (one call by default),
+  printing each page's place count and token, with `--limit` to page the way discovery
+  does and `--record` for an empty page.
 
 ### Changed
 
@@ -45,6 +52,22 @@ Format: `## [vX.Y.Z] - YYYY-MM-DD` followed by Added / Changed / Fixed.
 - **Without `PAGESPEED_API_KEY`, PageSpeed is not called.** Every score is null and the
   audit records why, instead of spending a quota shared by every keyless caller.
 - Audit rules version `audit-3`.
+
+### Fixed
+
+- **Discovery no longer pages until a cap stops it.** Asked for fewer than 20 near its
+  limit, Places answered with short pages and then an empty one that still carried a
+  token; discovery followed it until the daily cap refused a call — 500 billable calls for
+  four runs of a 52-result search. Every page now asks for 20 and the last is trimmed
+  locally, and the walk stops on any page that brings no new place (empty, or all
+  repeats). The regression test replays the recorded empty page.
+- **A rate-limit wait that gives up no longer spends a daily-cap slot.** The slot was
+  reserved before the wait and never returned; every guard now hands back what it claimed
+  for a request that was not sent.
+- **The cost estimate's Places figure** was ceil(results / 20), which assumed full pages
+  (60 results really took 5 calls, not 3). It now shows the enforced per-run safety limit
+  as "at most N" (`places_max_calls`, replacing `places_calls`), and the "not enough calls
+  left" blocker compares that maximum with what is left today.
 
 ### Deferred
 
