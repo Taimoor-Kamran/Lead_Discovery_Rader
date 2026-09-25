@@ -1176,6 +1176,30 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * AIAttemptRead
+         * @description The newest classification attempt for the business, whether or not it produced output.
+         *
+         *     `AISummaryRead` only ever carries a row with output, so a call that failed left the
+         *     page looking exactly like a business that was never classified (spec v0.11.1). This is
+         *     that attempt, told apart: its status, when, and the error it recorded.
+         */
+        AIAttemptRead: {
+            /**
+             * Classification Id
+             * Format: uuid
+             */
+            classification_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Error */
+            error: string | null;
+            /** Status */
+            status: string;
+        };
         /** AIClassificationRead */
         AIClassificationRead: {
             /**
@@ -2882,6 +2906,7 @@ export interface components {
          */
         ReviewDetail: {
             ai: components["schemas"]["AISummaryRead"] | null;
+            ai_attempt: components["schemas"]["AIAttemptRead"] | null;
             /** Ai Enabled */
             ai_enabled: boolean;
             audit: components["schemas"]["WebsiteAuditDetail"] | null;

@@ -164,6 +164,7 @@ export function reviewOpportunity(overrides: Partial<ReviewOpportunity> = {}): R
     website_audit_id: "audit-1",
     ai_classification_id: null,
     ai: null,
+    ai_attempt: null,
     assigned_to: null,
     decided_at: null,
     decided_by: null,

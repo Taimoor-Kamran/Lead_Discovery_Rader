@@ -189,6 +189,20 @@ class AISummaryRead(BaseModel):
     created_at: datetime
 
 
+class AIAttemptRead(BaseModel):
+    """The newest classification attempt for the business, whether or not it produced output.
+
+    `AISummaryRead` only ever carries a row with output, so a call that failed left the
+    page looking exactly like a business that was never classified (spec v0.11.1). This is
+    that attempt, told apart: its status, when, and the error it recorded.
+    """
+
+    classification_id: uuid.UUID
+    status: str
+    error: str | None
+    created_at: datetime
+
+
 class ReviewOpportunity(OpportunityDetail):
     service_name: str
     history: list[ReviewDecisionRead]
@@ -205,6 +219,7 @@ class ReviewDetail(BaseModel):
     business: BusinessDetail
     audit: WebsiteAuditDetail | None
     ai: AISummaryRead | None
+    ai_attempt: AIAttemptRead | None
     opportunities: list[ReviewOpportunity]
     suppressed: bool
     suppressions: list[SuppressionRead]

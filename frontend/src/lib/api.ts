@@ -44,6 +44,7 @@ export type SuppressionCreate = Schemas["SuppressionCreate"];
 export type SuppressionPage = Schemas["Page_SuppressionRead_"];
 export type UserPage = Schemas["Page_UserRead_"];
 export type AISummary = Schemas["AISummaryRead"];
+export type AIAttempt = Schemas["AIAttemptRead"];
 export type SourceRecord = Schemas["SourceRecordRead"];
 export type LinkedProfiles = Schemas["LinkedProfilesRead"];
 export type LinkedProfile = Schemas["LinkedProfileRead"];

@@ -52,6 +52,7 @@ from app.modules.review.models import Decision, ReviewDecision
 from app.modules.review.schemas import (
     NOT_A_FIT_REASON_CODES,
     REJECT_REASON_CODES,
+    AIAttemptRead,
     AISummaryRead,
     BatchItemResult,
     BatchReviewRequest,
@@ -893,6 +894,7 @@ def review_detail(
         business=businesses.detail(session, business),
         audit=audits.detail(latest, include_page_text=False) if latest is not None else None,
         ai=_ai_summary(session, business.id),
+        ai_attempt=_ai_attempt(session, business.id),
         opportunities=[
             _review_opportunity(
                 session,
@@ -1030,6 +1032,23 @@ def _ai_summary(session: Session, business_id: uuid.UUID) -> AISummaryRead | Non
         industry_matches_listing=output.get("industry_matches_listing"),
         buying_intent=output.get("buying_intent"),
         unknowns=[str(item) for item in unknowns],
+        created_at=row.created_at,
+    )
+
+
+def _ai_attempt(session: Session, business_id: uuid.UUID) -> AIAttemptRead | None:
+    row = session.scalars(
+        select(AIClassification)
+        .where(AIClassification.business_id == business_id)
+        .order_by(AIClassification.created_at.desc(), AIClassification.id.desc())
+        .limit(1)
+    ).first()
+    if row is None:
+        return None
+    return AIAttemptRead(
+        classification_id=row.id,
+        status=row.status.value,
+        error=row.error,
         created_at=row.created_at,
     )
 
