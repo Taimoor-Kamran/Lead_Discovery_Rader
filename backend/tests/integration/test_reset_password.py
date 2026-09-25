@@ -4,7 +4,9 @@ A reset that left old sessions working would be no reset at all, so the tests th
 are the ones proving a token minted before the reset stops being accepted.
 """
 
+import getpass
 import os
+import sys
 from collections.abc import Iterator
 
 import pytest
@@ -180,6 +182,64 @@ def test_the_command_reports_an_unknown_email(
 
     assert code == 2
     assert "No user has the email" in capsys.readouterr().out
+
+
+class _Stdin:
+    """Stands in for `sys.stdin`: a terminal or not, and nothing to read either way."""
+
+    def __init__(self, tty: bool) -> None:
+        self._tty = tty
+
+    def isatty(self) -> bool:
+        return self._tty
+
+
+def test_without_new_password_or_a_terminal_the_command_says_why_and_changes_nothing(
+    db: Session,
+    sales_user: User,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # What `NEW_PASSWORD=... make reset-password` did before v0.11.2: the variable never
+    # reached the container, and getpass died with a bare EOFError.
+    monkeypatch.delenv("NEW_PASSWORD", raising=False)
+    monkeypatch.setattr(sys, "stdin", _Stdin(tty=False))
+
+    def no_prompt(prompt: str = "") -> str:
+        raise AssertionError("getpass must not be reached without a terminal")
+
+    monkeypatch.setattr(getpass, "getpass", no_prompt)
+
+    code = cli.main(["reset-password", "--email", sales_user.email])
+    db.expire_all()
+
+    assert code == 2
+    out = capsys.readouterr().out
+    assert "NEW_PASSWORD is not set" in out
+    assert "-e NEW_PASSWORD" in out, "names the fix for a bare docker compose run"
+    assert "Nothing was changed" in out
+    assert db.get(User, sales_user.id).token_version == 1  # type: ignore[union-attr]
+
+
+def test_at_a_terminal_without_new_password_the_command_still_prompts(
+    db: Session, sales_user: User, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("NEW_PASSWORD", raising=False)
+    monkeypatch.setattr(sys, "stdin", _Stdin(tty=True))
+    prompts: list[str] = []
+
+    def typed(prompt: str = "") -> str:
+        prompts.append(prompt)
+        return NEW_PASSWORD
+
+    monkeypatch.setattr(getpass, "getpass", typed)
+
+    code = cli.main(["reset-password", "--email", sales_user.email])
+    db.expire_all()
+
+    assert code == 0
+    assert prompts == ["New password: ", "Repeat new password: "]
+    assert db.get(User, sales_user.id).token_version == 2  # type: ignore[union-attr]
 
 
 def test_the_command_is_listed_in_the_usage_line(capsys: pytest.CaptureFixture[str]) -> None:

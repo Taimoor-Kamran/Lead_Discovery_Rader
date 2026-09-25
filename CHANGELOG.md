@@ -28,6 +28,10 @@ Format: `## [vX.Y.Z] - YYYY-MM-DD` followed by Added / Changed / Fixed.
 
 ### Fixed
 
+- `NEW_PASSWORD='...' make reset-password EMAIL=...`, as the README documents, works: the
+  recipe passes the variable into the container (`-e NEW_PASSWORD`, value never on the
+  command line). Before, the container never saw it and the command died with a bare
+  `EOFError`. With no `NEW_PASSWORD` and no terminal the CLI now exits 2 and says why.
 - `specs/v0.10.0.md` was committed with CRLF line endings before `.gitattributes` existed
   and still checked out that way; renormalized to LF.
 

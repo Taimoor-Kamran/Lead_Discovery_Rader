@@ -97,10 +97,13 @@ reset-demo-data: $(ENV_DEP) ## Put the demo review state back to freshly loaded 
 recompute-businesses: $(ENV_DEP) ## Re-run survivorship for every business (add ARGS="--business-id ID")
 	$(COMPOSE) run --rm api python -m app.cli recompute-businesses $(ARGS)
 
-# Prompts for the password twice; it is never passed on the command line.
+# Prompts for the password twice; it is never passed on the command line. For a scripted
+# reset, `NEW_PASSWORD=... make reset-password EMAIL=...`: `-e NEW_PASSWORD` (no value)
+# hands the variable into the container only when it is set here, so the password never
+# appears in this command line either. Without it the container never sees it.
 reset-password: $(ENV_DEP) ## Reset one user's password: make reset-password EMAIL=you@example.com
 	@if [ -z "$(EMAIL)" ]; then echo "usage: make reset-password EMAIL=you@example.com"; exit 2; fi
-	$(COMPOSE) run --rm api python -m app.cli reset-password --email "$(EMAIL)"
+	$(COMPOSE) run --rm -e NEW_PASSWORD api python -m app.cli reset-password --email "$(EMAIL)"
 
 # Costs real money and needs GOOGLE_PLACES_API_KEY. Set a budget alert first.
 places-smoke: $(ENV_DEP) ## One live Google Places call: make places-smoke ARGS="--industry plumber --city Austin --state TX"
