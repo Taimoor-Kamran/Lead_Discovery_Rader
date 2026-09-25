@@ -98,7 +98,8 @@ Format: `## [vX.Y.Z] - YYYY-MM-DD` followed by Added / Changed / Fixed.
 
 ### Deferred
 
-- The richer `classify-2` prompt (spec scope item 3), until AI is switched back on.
+- The richer `classify-2` prompt (spec scope item 3): a prompt version bump invalidates the
+  whole reuse cache, so switching the prompt costs a full reclassification whenever it happens.
 
 ## [v0.10.0] - 2026-09-22
 
