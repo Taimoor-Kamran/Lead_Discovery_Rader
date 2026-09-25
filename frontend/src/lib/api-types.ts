@@ -1176,6 +1176,30 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * AIAttemptRead
+         * @description The newest classification attempt for the business, whether or not it produced output.
+         *
+         *     `AISummaryRead` only ever carries a row with output, so a call that failed left the
+         *     page looking exactly like a business that was never classified (spec v0.11.1). This is
+         *     that attempt, told apart: its status, when, and the error it recorded.
+         */
+        AIAttemptRead: {
+            /**
+             * Classification Id
+             * Format: uuid
+             */
+            classification_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Error */
+            error: string | null;
+            /** Status */
+            status: string;
+        };
         /** AIClassificationRead */
         AIClassificationRead: {
             /**
@@ -1718,6 +1742,11 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /**
+             * Data Providers
+             * @default []
+             */
+            data_providers: components["schemas"]["DataProviderRead"][];
             /** Destination */
             destination: string;
             /** Due At */
@@ -1825,6 +1854,20 @@ export interface components {
          * @enum {string}
          */
         CrmSyncStatus: "ok" | "failed";
+        /**
+         * DataProviderRead
+         * @description A third-party data provider the source says must be shown with its result.
+         *
+         *     Places returns these as `attributions[]` ("A set of data provider that must be shown
+         *     with this result"); they are shown beside the Google Maps attribution wherever the
+         *     business's Places data is (spec v0.11.1). Most places carry none.
+         */
+        DataProviderRead: {
+            /** Provider */
+            provider: string;
+            /** Provider Uri */
+            provider_uri: string | null;
+        };
         /** DataQuality */
         DataQuality: {
             /** Businesses Total */
@@ -2337,6 +2380,11 @@ export interface components {
             /** City */
             city: string | null;
             crm?: components["schemas"]["CrmLeadStatusRead"] | null;
+            /**
+             * Data Providers
+             * @default []
+             */
+            data_providers: components["schemas"]["DataProviderRead"][];
             /** Industry */
             industry: string | null;
             /** Lock Version */
@@ -2443,6 +2491,11 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /**
+             * Data Providers
+             * @default []
+             */
+            data_providers: components["schemas"]["DataProviderRead"][];
             /** Decided At */
             decided_at: string | null;
             /** Decided By */
@@ -2753,6 +2806,11 @@ export interface components {
             business_id: string;
             /** City */
             city: string | null;
+            /**
+             * Data Providers
+             * @default []
+             */
+            data_providers: components["schemas"]["DataProviderRead"][];
             /** Display Name */
             display_name: string;
             /** Industry */
@@ -2882,10 +2940,16 @@ export interface components {
          */
         ReviewDetail: {
             ai: components["schemas"]["AISummaryRead"] | null;
+            ai_attempt: components["schemas"]["AIAttemptRead"] | null;
             /** Ai Enabled */
             ai_enabled: boolean;
             audit: components["schemas"]["WebsiteAuditDetail"] | null;
             business: components["schemas"]["BusinessDetail"];
+            /**
+             * Data Providers
+             * @default []
+             */
+            data_providers: components["schemas"]["DataProviderRead"][];
             linked_profiles: components["schemas"]["LinkedProfilesRead"];
             /** Opportunities */
             opportunities: components["schemas"]["ReviewOpportunity"][];
@@ -3253,6 +3317,11 @@ export interface components {
              * Format: uuid
              */
             created_by: string;
+            /**
+             * Data Providers
+             * @default []
+             */
+            data_providers: components["schemas"]["DataProviderRead"][];
             /** Domain */
             domain: string | null;
             /**

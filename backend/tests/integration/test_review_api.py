@@ -753,6 +753,42 @@ def test_detail_has_facts_audit_ai_opportunities_and_history(
 # --- suppression effects --------------------------------------------------------------
 
 
+def test_detail_tells_a_failed_classification_from_none(
+    client: TestClient, db: Session, reviewer: User
+) -> None:
+    """Spec v0.11.1: a failed call used to leave `ai` null, the same as never classified."""
+    from app.modules.ai.client import LLMError
+    from app.modules.opportunities import service as classification
+    from tests.integration.test_classification_run import make_tools
+
+    never = make_business(db, name="Never Classified")
+    make_audit(db, never)
+    failed = make_business(db, name="Failed Classification")
+    make_audit(db, failed)
+    tools = make_tools(
+        LLMError("OpenAI did not answer: APIConnectionError: Connection error.", retryable=True)
+    )
+    classification.classify(db, failed, tools=tools)
+    db.commit()
+
+    def detail(business: Business) -> dict[str, Any]:
+        response = client.get(
+            f"/api/v1/review-queue/{business.id}", headers=auth_headers(client, reviewer)
+        )
+        assert response.status_code == 200, response.text
+        body: dict[str, Any] = response.json()
+        return body
+
+    assert detail(never)["ai"] is None
+    assert detail(never)["ai_attempt"] is None
+    body = detail(failed)
+    assert body["ai"] is None
+    assert body["ai_attempt"]["status"] == "error"
+    assert body["ai_attempt"]["error"] == (
+        "OpenAI did not answer: APIConnectionError: Connection error."
+    )
+
+
 def test_after_do_not_contact_the_business_leaves_the_queue_and_the_leads(
     client: TestClient,
     db: Session,
@@ -899,6 +935,8 @@ def test_no_contact_data_beyond_the_business_fields_reaches_a_lead(
         "ai_rationale",
         # Source codes, not people: which registry rows the business was built from.
         "sources",
+        # Data providers Places requires shown (v0.11.1): companies, never people.
+        "data_providers",
         "crm",
     }
     # The CRM block is about the record, never about a person.

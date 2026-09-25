@@ -6,6 +6,7 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 from app.modules.compliance.models import SuppressionSource
+from app.modules.discovery.schemas import DataProviderRead
 
 
 class SuppressionCreate(BaseModel):
@@ -30,3 +31,5 @@ class SuppressionRead(BaseModel):
     lifted_at: datetime | None
     lifted_by: uuid.UUID | None
     active: bool
+    # Third-party data providers Places requires shown with the business (v0.11.1).
+    data_providers: list[DataProviderRead] = []

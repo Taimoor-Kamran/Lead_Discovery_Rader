@@ -18,11 +18,13 @@ BOT_USER_AGENT_NAME = "LeadDiscoveryRadarBot/0.4"
 
 # The response fields we ask Places for. Anything not listed here is never returned, so
 # widening this string is the only way to widen what we store — and it changes the SKU.
+# `places.attributions` (v0.11.1) is billed in the Essentials IDs Only SKU, below the rest,
+# so it does not change what a call costs; its providers must be shown with the result.
 DEFAULT_PLACES_FIELD_MASK = (
     "places.id,places.displayName,places.formattedAddress,places.addressComponents,"
     "places.location,places.nationalPhoneNumber,places.internationalPhoneNumber,"
     "places.websiteUri,places.businessStatus,places.types,places.primaryType,"
-    "places.rating,places.userRatingCount,nextPageToken"
+    "places.rating,places.userRatingCount,places.attributions,nextPageToken"
 )
 
 
@@ -84,6 +86,14 @@ class Settings(BaseSettings):
     # for the pipeline to re-run it.
     audit_content_ttl_days: int = 90
     audit_max_age_days: int = 30
+    # A `failed` audit is our own fault, not a fact about the site, so it is due again
+    # after this many hours rather than hiding the business for AUDIT_MAX_AGE_DAYS.
+    audit_failed_retry_hours: int = 6
+    # An `unreachable` site is re-tried after these many days, one step per consecutive
+    # unreachable audit; past the last step it waits AUDIT_MAX_AGE_DAYS like any other.
+    audit_unreachable_backoff_days: Annotated[list[int], NoDecode] = Field(
+        default_factory=lambda: [1, 3, 7]
+    )
     audit_slow_mobile_score: int = 50
     audit_stale_copyright_years: int = 3
     # Fewer words of visible homepage text than this is reported as `thin_content`.
@@ -152,6 +162,12 @@ class Settings(BaseSettings):
     ai_page_text_max_chars: int = 8_000
     ai_timeout_seconds: float = 60.0
     ai_max_retries: int = 2
+    # After the SDK's own quick retries, a connection that could not be made at all is
+    # tried again after each of these pauses (spec v0.11.1). Timeouts, auth and quota
+    # errors are not. Empty turns it off.
+    ai_connection_retry_delays_seconds: Annotated[list[float], NoDecode] = Field(
+        default_factory=lambda: [5.0, 10.0, 20.0]
+    )
     ai_raw_output_max_chars: int = 20_000
     # `buying_intent = explicit` survives the guardrails only when a valid evidence quote
     # contains one of these. Anything else is `none_detected`: intent is never guessed.
@@ -278,6 +294,8 @@ class Settings(BaseSettings):
         "resolution_source_priority",
         "audit_booking_industries",
         "ai_explicit_intent_patterns",
+        "audit_unreachable_backoff_days",
+        "ai_connection_retry_delays_seconds",
         mode="before",
     )
     @classmethod

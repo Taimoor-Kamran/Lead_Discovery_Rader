@@ -174,6 +174,7 @@ describe("BusinessReview", () => {
               id: "s1",
               business_id: "biz-1",
               business_name: "Barton Creek Plumbing",
+              data_providers: [],
               domain: "bartoncreekplumbing.invalid",
               phone_e164: "+15125550100",
               reason: "asked",

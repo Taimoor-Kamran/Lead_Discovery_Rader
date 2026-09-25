@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ErrorNote } from "@/components/ErrorNote";
+import { GoogleMapsAttribution } from "@/components/GoogleMapsAttribution";
 import { SafeLink } from "@/components/SafeLink";
 import { CrmBadge } from "@/components/crm/CrmBadge";
 import { EvidenceList, type Evidence } from "@/components/review/EvidenceList";
@@ -149,6 +150,8 @@ export function LeadDetail({ opportunityId }: { opportunityId: string }) {
             </dd>
           </div>
         </dl>
+        {/* The letterhead is Places data: attributed in its own card, on screen and on paper. */}
+        <GoogleMapsAttribution providers={lead.data_providers} className="-mx-2.5 mt-2" />
       </Card>
 
       <div className="print-tight grid grid-cols-1 gap-5 lg:grid-cols-2">

@@ -278,7 +278,7 @@ export function BusinessReview({ businessId }: { businessId: string }) {
               where an AI answer would have gone (spec v0.10.0 §3). Only an explicit `false`
               hides it: a response that does not carry the flag must not hide what the model
               did say. */}
-          {detail.ai_enabled === false ? null : <AiSummaryBox ai={detail.ai} />}
+          {detail.ai_enabled === false ? null : <AiSummaryBox ai={detail.ai} attempt={detail.ai_attempt} />}
         </div>
 
         <div className="order-1 flex min-w-0 flex-col gap-3 lg:order-2 lg:sticky lg:top-4 lg:self-start">

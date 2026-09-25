@@ -14,6 +14,7 @@ import {
 import { ApiError, decideMatchCandidate, getMatchCandidates, type MatchCandidate } from "@/lib/api";
 import { loadFailed } from "@/lib/errors";
 import { orUnknown, place, score } from "@/lib/format";
+import { GoogleMapsAttribution } from "@/components/GoogleMapsAttribution";
 
 export function Duplicates() {
   const { show } = useToast();
@@ -124,6 +125,8 @@ export function Duplicates() {
                   </div>
                 </div>
               </div>
+              {/* Both sides are Places data: attributed inside the pair's card (v0.11.1). */}
+              <GoogleMapsAttribution providers={candidate.data_providers} className="-mx-2.5 mt-2" />
             </Card>
           </li>
         ))}

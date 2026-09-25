@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ErrorNote } from "@/components/ErrorNote";
+import { GoogleMapsAttribution, distinctProviders } from "@/components/GoogleMapsAttribution";
 import { SafeLink } from "@/components/SafeLink";
 import { CrmBadge } from "@/components/crm/CrmBadge";
 import { ReasonLines } from "@/components/review/ReasonLines";
@@ -241,6 +242,10 @@ export function Leads() {
             ))}
           </TBody>
         </Table>
+        {/* Every row is Places data; the attribution sits in the same container (v0.11.1). */}
+        {items.length ? (
+          <GoogleMapsAttribution providers={distinctProviders(items)} className="sticky left-0 border-t border-line" />
+        ) : null}
       </TableWrap>
 
       <Pagination

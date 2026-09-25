@@ -27,6 +27,7 @@ from app.modules.audit_web.checks import EVIDENCE_MAX_CHARS
 from app.modules.audit_web.models import WebsiteAudit
 from app.modules.businesses.models import Business
 from app.modules.discovery.models import DiscoveredRecord
+from app.modules.discovery.providers import data_providers as data_providers
 from app.modules.review.schemas import LinkedProfileRead, LinkedProfilesRead, SourceRecordRead
 from app.modules.sources.models import Source
 

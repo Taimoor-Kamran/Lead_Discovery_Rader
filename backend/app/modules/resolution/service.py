@@ -458,6 +458,7 @@ def list_candidates(
 
 def detail(session: Session, candidate: MatchCandidate) -> MatchCandidateDetail:
     from app.modules.businesses import service as businesses_service
+    from app.modules.discovery import providers
     from app.modules.discovery import service as discovery_service
 
     business = session.get(Business, candidate.business_id)
@@ -478,4 +479,10 @@ def detail(session: Session, candidate: MatchCandidate) -> MatchCandidateDetail:
         business_id=candidate.business_id,
         record=(discovery_service.summarize(record, source_name) if record is not None else None),
         business=(businesses_service.summarize(business) if business is not None else None),
+        data_providers=providers.merge(
+            providers.parse((record.raw_payload or {}).get("attributions") if record else None),
+            providers.data_providers(session, [candidate.business_id]).get(
+                candidate.business_id, []
+            ),
+        ),
     )

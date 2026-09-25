@@ -12,6 +12,7 @@ import {
 } from "@/lib/api";
 import { Button, Dialog, Input, Select, Textarea } from "@/components/ui";
 import { place, REASON_LABELS } from "@/lib/format";
+import { GoogleMapsAttribution } from "@/components/GoogleMapsAttribution";
 
 export type DecisionFields = {
   reason_code?: string;
@@ -275,6 +276,9 @@ function DuplicatePicker({
           ))}
         </ul>
       ) : null}
+      {/* The search results are Places data, and this dialog covers the page's own
+          attribution, so they carry their own (v0.11.1). */}
+      {businesses.length ? <GoogleMapsAttribution className="-mx-2.5" /> : null}
       {candidates.length > 1 ? (
         <fieldset className="flex flex-col gap-1">
           <legend className="text-sm font-medium text-ink-soft">Which opportunity?</legend>

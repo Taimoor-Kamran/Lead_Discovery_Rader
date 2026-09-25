@@ -373,6 +373,63 @@ def test_the_leads_list_carries_the_source_column(
     assert body["items"][0]["sources"] == ["google_places"]
 
 
+# --- data providers Places requires shown (v0.11.1) ---------------------------------------
+
+PROVIDER = {"provider": "Example Data Co", "providerUri": "https://data.invalid/"}
+
+
+def with_attributions(record: DiscoveredRecord, *items: dict[str, Any]) -> None:
+    record.raw_payload = {"id": record.source_record_id, "attributions": list(items)}
+
+
+def test_the_places_data_providers_reach_every_screen_that_shows_the_business(
+    client: TestClient, db: Session, places: Source, demo: Source, reviewer: User
+) -> None:
+    business = make_business(db)
+    with_attributions(make_record(db, places, business), PROVIDER)
+    # The same provider twice, one without a name (ignored), and one with no link.
+    with_attributions(
+        make_record(db, places, business),
+        PROVIDER,
+        {"providerUri": "https://nameless.invalid/"},
+        {"provider": "Second Source"},
+    )
+    make_record(db, demo, business)
+    opportunity = approve(db, business, reviewer)
+    db.commit()
+
+    expected = [
+        {"provider": "Example Data Co", "provider_uri": "https://data.invalid/"},
+        {"provider": "Second Source", "provider_uri": None},
+    ]
+    queue_business = make_business(db, name="Still In The Queue")
+    with_attributions(make_record(db, places, queue_business), PROVIDER)
+    make_opportunity(db, queue_business)
+    db.commit()
+
+    queue = get(client, reviewer, "/api/v1/review-queue")
+    assert queue["items"][0]["data_providers"] == [expected[0]]
+    detail = get(client, reviewer, f"/api/v1/review-queue/{business.id}")
+    assert detail["data_providers"] == expected
+    leads = get(client, reviewer, "/api/v1/leads")
+    assert leads["items"][0]["data_providers"] == expected
+    lead = get(client, reviewer, f"/api/v1/leads/{opportunity.id}")
+    assert lead["lead"]["data_providers"] == expected
+
+
+def test_a_business_whose_payload_names_no_provider_has_none(
+    client: TestClient, db: Session, places: Source, reviewer: User
+) -> None:
+    business = make_business(db)
+    record = make_record(db, places, business)
+    record.raw_payload = None  # purged
+    make_record(db, places, business)
+    make_opportunity(db, business)
+    db.commit()
+
+    assert get(client, reviewer, "/api/v1/review-queue")["items"][0]["data_providers"] == []
+
+
 # --- "found within" -----------------------------------------------------------------------
 
 

@@ -44,6 +44,7 @@ from app.modules.compliance import service as compliance
 from app.modules.compliance.models import SuppressionSource
 from app.modules.crm import service as crm
 from app.modules.crm.schemas import CrmLeadStatusRead
+from app.modules.discovery.schemas import DataProviderRead
 from app.modules.opportunities import service as opportunities
 from app.modules.opportunities.catalogue import SERVICES
 from app.modules.opportunities.models import Opportunity, OpportunitySource, ReviewStatus
@@ -52,6 +53,7 @@ from app.modules.review.models import Decision, ReviewDecision
 from app.modules.review.schemas import (
     NOT_A_FIT_REASON_CODES,
     REJECT_REASON_CODES,
+    AIAttemptRead,
     AISummaryRead,
     BatchItemResult,
     BatchReviewRequest,
@@ -741,6 +743,7 @@ def review_queue(
     open_rows = _open_opportunities(session, business_ids, status)
     latest = audits.latest_audits(session, business_ids)
     sources = provenance.source_codes(session, business_ids)
+    providers = provenance.data_providers(session, business_ids)
     items = [
         _queue_item(
             business,
@@ -751,6 +754,7 @@ def review_queue(
             sources.get(business.id, []),
             weak=weak,
             include_weak=include_weak,
+            data_providers=providers.get(business.id, []),
         )
         for business, score, weak_hidden in rows
     ]
@@ -782,6 +786,7 @@ def _queue_item(
     *,
     weak: Decimal,
     include_weak: bool,
+    data_providers: list[DataProviderRead] | None = None,
 ) -> QueueItem:
     shown = [row for row in rows if include_weak or row.confidence >= weak]
     return QueueItem(
@@ -818,6 +823,7 @@ def _queue_item(
         ],
         weak_hidden=weak_hidden,
         sources=sources,
+        data_providers=data_providers or [],
         rating=business.rating,
         user_rating_count=business.user_rating_count,
     )
@@ -893,6 +899,8 @@ def review_detail(
         business=businesses.detail(session, business),
         audit=audits.detail(latest, include_page_text=False) if latest is not None else None,
         ai=_ai_summary(session, business.id),
+        ai_attempt=_ai_attempt(session, business.id),
+        data_providers=provenance.data_providers(session, [business.id]).get(business.id, []),
         opportunities=[
             _review_opportunity(
                 session,
@@ -1034,6 +1042,23 @@ def _ai_summary(session: Session, business_id: uuid.UUID) -> AISummaryRead | Non
     )
 
 
+def _ai_attempt(session: Session, business_id: uuid.UUID) -> AIAttemptRead | None:
+    row = session.scalars(
+        select(AIClassification)
+        .where(AIClassification.business_id == business_id)
+        .order_by(AIClassification.created_at.desc(), AIClassification.id.desc())
+        .limit(1)
+    ).first()
+    if row is None:
+        return None
+    return AIAttemptRead(
+        classification_id=row.id,
+        status=row.status.value,
+        error=row.error,
+        created_at=row.created_at,
+    )
+
+
 # --- leads --------------------------------------------------------------------------------
 
 
@@ -1088,6 +1113,7 @@ def list_leads(
     outputs = _ai_outputs(session, [o for o, _ in rows])
     crm_blocks = crm.status_blocks(session, [business.id for _, business in rows])
     sources = provenance.source_codes(session, [business.id for _, business in rows])
+    providers = provenance.data_providers(session, [business.id for _, business in rows])
     return Page[LeadRead](
         items=[
             _lead(
@@ -1097,6 +1123,7 @@ def list_leads(
                 outputs,
                 crm_blocks.get(business.id),
                 sources.get(business.id, []),
+                providers.get(business.id, []),
             )
             for opportunity, business in rows
         ],
@@ -1149,6 +1176,7 @@ def lead_detail(
             outputs,
             crm_block,
             provenance.source_codes(session, [business.id]).get(business.id, []),
+            provenance.data_providers(session, [business.id]).get(business.id, []),
         ),
         business=businesses.detail(session, business),
         sources=provenance.source_records(session, business.id),
@@ -1176,6 +1204,7 @@ def _lead(
     outputs: dict[uuid.UUID, dict[str, Any]],
     crm_block: CrmLeadStatusRead | None = None,
     sources: list[str] | None = None,
+    data_providers: list[DataProviderRead] | None = None,
 ) -> LeadRead:
     """`sources` is the business's distinct source codes, for the leads list's column."""
     rule_reason, ai_rationale = split_reason(opportunity, _output_of(opportunity, outputs))
@@ -1202,6 +1231,7 @@ def _lead(
         rule_reason=rule_reason,
         ai_rationale=ai_rationale,
         sources=sources or [],
+        data_providers=data_providers or [],
         crm=crm_block,
     )
 

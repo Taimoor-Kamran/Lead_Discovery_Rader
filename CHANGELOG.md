@@ -3,6 +3,46 @@
 All notable changes, one section per merged spec. Newest first.
 Format: `## [vX.Y.Z] - YYYY-MM-DD` followed by Added / Changed / Fixed.
 
+## [v0.11.1] - 2026-09-25
+
+### Fixed
+
+- **A failed audit no longer hides a business for 30 days.** `needs_audit` now reads the
+  newest audit's status: `failed` (a fault on our side) is due again after
+  `AUDIT_FAILED_RETRY_HOURS` (6); `unreachable` backs off `AUDIT_UNREACHABLE_BACKOFF_DAYS`
+  (1, 3, 7 days) by consecutive unreachable audits, then waits the normal
+  `AUDIT_MAX_AGE_DAYS`; everything else keeps the 30 days. Hoffman Electric Company and
+  Harlow Beauty and Hair Salon, stuck behind false `failed` audits since v0.11.0, become
+  due on the next run.
+- **A failed AI classification says so.** The review detail carries the newest attempt
+  (`ai_attempt`); the AI box shows a failed, schema-invalid or budget-skipped attempt with
+  its recorded error instead of "No AI classification", and flags a failure newer than the
+  summary still on screen.
+
+### Added
+
+- **Google Maps attribution** on every screen that shows Places data: review queue and
+  detail (and the decision dialog's business search), leads list and detail, duplicates,
+  CRM and suppressions. Built to Google's current Places policy page (2026-09-24): the
+  attribution is "Google Maps", not "Powered by Google", as Google's official unmodified
+  logo with the label "Google Maps", never translated, inside the content's container.
+- `places.attributions` in the field mask (Essentials IDs Only SKU: no cost change). The
+  third-party data providers Places says "must be shown with this result" appear beside
+  the logo.
+- **Connection retries for OpenAI**: after the SDK's quick retries, a connection that
+  could not be made is tried again after each of `AI_CONNECTION_RETRY_DELAYS_SECONDS`
+  (5, 10, 20). Timeouts, auth and quota errors are not. Once a call has spent every pause,
+  later calls fail at once until one connects, so a run with the network gone stays
+  inside its time limit.
+
+### Diagnosed
+
+- The 12 OpenAI `APIConnectionError`s of 2026-09-25 (35% of 34 calls) were the host
+  laptop entering Modern Standby: the Windows System log shows standby entered at 01:05:47
+  UTC, 8 s before the first failure; Wi-Fi disconnected by "Adaptive Connected Standby" at
+  01:06:00 and by policy at 01:07:07; after wake at 03:08:50 the Wi-Fi reconnected at
+  03:09:17. A laptop artefact, not a product fault. See the spec's implementation notes.
+
 ## [v0.11.0] - 2026-09-23
 
 ### Added

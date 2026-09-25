@@ -8,7 +8,7 @@ is handed to the SDK once and appears in no log line: the logging module redacts
 
 import time
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import Any
 
 import httpx
@@ -59,6 +59,14 @@ def _error_body(exc: openai.APIStatusError) -> str:
     return " ".join(part for part in parts if part).strip()[:ERROR_BODY_MAX_CHARS]
 
 
+class _ConnectionFailedError(Exception):
+    """A connection that could not be made at all: the one failure `complete` waits out."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+        self.message = message
+
+
 class OpenAIClient:
     provider = "openai"
 
@@ -72,6 +80,8 @@ class OpenAIClient:
         limiter: Limiter | None = None,
         base_url: str | None = None,
         http_client: httpx.Client | None = None,
+        connection_retry_delays: Sequence[float] = (),
+        sleeper: Callable[[float], None] = time.sleep,
     ) -> None:
         if not api_key:
             raise LLMError("OPENAI_API_KEY is not set")
@@ -84,12 +94,55 @@ class OpenAIClient:
         )
         self._meter = meter
         self._limiter = limiter
+        self._connection_retry_delays = list(connection_retry_delays)
+        self._sleeper = sleeper
+        # Set when a call has waited out every pause and still could not connect; cleared
+        # by the next call that does. While set, calls fail without pausing, so a run with
+        # the network gone spends the pauses once, not once per business, and stays well
+        # inside its JOB_TIMEOUT_SECONDS.
+        self._unreachable = False
         self._endpoint = f"{base_url.rstrip('/')}/chat/completions" if base_url else OPENAI_ENDPOINT
 
     def close(self) -> None:
         self._client.close()
 
     def complete(self, request: LLMRequest) -> LLMResult:
+        """One call, retried after a pause while the network itself is down (spec v0.11.1).
+
+        The SDK already retries a failed connection, but within a second or two. The
+        production failures of 2026-09-25 were the host's Wi-Fi going away in Modern
+        Standby and taking ~27 s to come back after wake, which that cannot bridge. So a
+        connection that could not be made is tried again after each of
+        AI_CONNECTION_RETRY_DELAYS_SECONDS. Nothing else is: not a timeout (the request
+        may have reached OpenAI and been billed; the SDK has retried it already), and
+        never an auth, quota or other status error.
+        """
+        started = time.perf_counter()
+        delays = [] if self._unreachable else self._connection_retry_delays
+        attempt = 1
+        while True:
+            try:
+                result = self._attempt(request, attempt)
+                self._unreachable = False
+                return result
+            except _ConnectionFailedError as failed:
+                if attempt > len(delays):
+                    self._unreachable = bool(self._connection_retry_delays)
+                    tries = f" (after {attempt} attempts)" if attempt > 1 else ""
+                    raise LLMError(
+                        f"{failed.message}{tries}"[:ERROR_BODY_MAX_CHARS],
+                        retryable=True,
+                        latency_ms=_elapsed_ms(started),
+                    ) from failed.__cause__
+                delay = delays[attempt - 1]
+                logger.warning(
+                    "OpenAI could not be reached; trying again",
+                    extra={"attempt": attempt, "retry_in_seconds": delay},
+                )
+                self._sleeper(delay)
+                attempt += 1
+
+    def _attempt(self, request: LLMRequest, attempt: int) -> LLMResult:
         if self._limiter is not None:
             self._limiter.acquire()
         started = time.perf_counter()
@@ -110,7 +163,12 @@ class OpenAIClient:
                 },
             )
         except openai.APIStatusError as exc:
-            self._record(started, status_code=exc.status_code, error_class=type(exc).__name__)
+            self._record(
+                started,
+                status_code=exc.status_code,
+                error_class=type(exc).__name__,
+                attempt=attempt,
+            )
             retryable = exc.status_code in RETRYABLE_STATUSES or exc.status_code >= 500
             raise LLMError(
                 f"OpenAI answered {exc.status_code}: {type(exc).__name__}: {_error_body(exc)}",
@@ -119,21 +177,24 @@ class OpenAIClient:
                 latency_ms=_elapsed_ms(started),
             ) from exc
         except openai.APIConnectionError as exc:
-            self._record(started, error_class=type(exc).__name__)
+            self._record(started, error_class=type(exc).__name__, attempt=attempt)
+            reason = f"OpenAI did not answer: {type(exc).__name__}: {exc}"
+            if not isinstance(exc, openai.APITimeoutError):
+                raise _ConnectionFailedError(reason) from exc
             raise LLMError(
-                f"OpenAI did not answer: {type(exc).__name__}: {exc}"[:ERROR_BODY_MAX_CHARS],
+                reason[:ERROR_BODY_MAX_CHARS],
                 retryable=True,
                 latency_ms=_elapsed_ms(started),
             ) from exc
         except openai.OpenAIError as exc:
-            self._record(started, error_class=type(exc).__name__)
+            self._record(started, error_class=type(exc).__name__, attempt=attempt)
             raise LLMError(
                 f"OpenAI call failed: {type(exc).__name__}: {exc}"[:ERROR_BODY_MAX_CHARS],
                 latency_ms=_elapsed_ms(started),
             ) from exc
 
         latency_ms = _elapsed_ms(started)
-        self._record(started, status_code=200)
+        self._record(started, status_code=200, attempt=attempt)
         if not response.choices:
             raise LLMError("OpenAI returned no choices")
         message = response.choices[0].message
@@ -150,14 +211,19 @@ class OpenAIClient:
         )
 
     def _record(
-        self, started: float, *, status_code: int | None = None, error_class: str | None = None
+        self,
+        started: float,
+        *,
+        status_code: int | None = None,
+        error_class: str | None = None,
+        attempt: int = 1,
     ) -> None:
         if self._meter is None:
             return
         record = ApiCallRecord(
             source=OPENAI_SOURCE_NAME,
             endpoint=self._endpoint,
-            attempt=1,
+            attempt=attempt,
             duration_ms=int((time.perf_counter() - started) * 1000),
             status_code=status_code,
             error_class=error_class,
@@ -224,6 +290,8 @@ def build_openai_client(
         meter=meter,
         limiter=limiter,
         base_url=base_url,
+        connection_retry_delays=config.ai_connection_retry_delays_seconds,
+        sleeper=sleeper,
     )
 
 

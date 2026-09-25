@@ -11,6 +11,7 @@ from app.modules.audit_web.schemas import WebsiteAuditDetail
 from app.modules.businesses.schemas import BusinessDetail
 from app.modules.compliance.schemas import SuppressionRead
 from app.modules.crm.schemas import CrmLeadStatusRead, CrmSyncAttemptRead
+from app.modules.discovery.schemas import DataProviderRead
 from app.modules.opportunities.models import OpportunitySource, ReviewStatus
 from app.modules.opportunities.schemas import OpportunityDetail
 from app.modules.review.models import Decision
@@ -167,6 +168,8 @@ class QueueItem(BaseModel):
     weak_hidden: int
     # The distinct source codes behind the business, for the queue's source column.
     sources: list[str]
+    # Third-party data providers the source requires shown with the business (v0.11.1).
+    data_providers: list[DataProviderRead] = []
 
 
 # --- detail -------------------------------------------------------------------------------
@@ -189,6 +192,20 @@ class AISummaryRead(BaseModel):
     created_at: datetime
 
 
+class AIAttemptRead(BaseModel):
+    """The newest classification attempt for the business, whether or not it produced output.
+
+    `AISummaryRead` only ever carries a row with output, so a call that failed left the
+    page looking exactly like a business that was never classified (spec v0.11.1). This is
+    that attempt, told apart: its status, when, and the error it recorded.
+    """
+
+    classification_id: uuid.UUID
+    status: str
+    error: str | None
+    created_at: datetime
+
+
 class ReviewOpportunity(OpportunityDetail):
     service_name: str
     history: list[ReviewDecisionRead]
@@ -205,6 +222,9 @@ class ReviewDetail(BaseModel):
     business: BusinessDetail
     audit: WebsiteAuditDetail | None
     ai: AISummaryRead | None
+    ai_attempt: AIAttemptRead | None
+    # Third-party data providers the source requires shown with the business (v0.11.1).
+    data_providers: list[DataProviderRead] = []
     opportunities: list[ReviewOpportunity]
     suppressed: bool
     suppressions: list[SuppressionRead]
@@ -248,6 +268,8 @@ class LeadRead(BaseModel):
     ai_rationale: str | None
     # The distinct source codes behind the business, for the leads list's source column.
     sources: list[str]
+    # Third-party data providers the source requires shown with the business (v0.11.1).
+    data_providers: list[DataProviderRead] = []
     # Where the business's CRM record stands (v0.7.0). Null until a sync was scheduled.
     crm: CrmLeadStatusRead | None = None
 

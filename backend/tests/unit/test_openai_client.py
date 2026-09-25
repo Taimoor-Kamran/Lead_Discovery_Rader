@@ -124,6 +124,130 @@ def test_a_connection_failure_is_retryable(mock_http: respx.MockRouter) -> None:
     assert info.value.retryable is True
 
 
+# --- connection retries (spec v0.11.1) -------------------------------------------------------
+# The 2026-09-25 failures were the host's Wi-Fi dropping in Modern Standby; the SDK's own
+# retries are over in a second or two, so a connection that cannot be made is waited out.
+
+
+def test_a_connection_failure_is_tried_again_after_each_pause(
+    mock_http: respx.MockRouter,
+) -> None:
+    route = mock_http.post(OPENAI_ENDPOINT).mock(
+        side_effect=[
+            httpx.ConnectError("down"),
+            httpx.ConnectError("down"),
+            httpx.Response(200, json=completion("{}")),
+        ]
+    )
+    slept: list[float] = []
+    records: list[ApiCallRecord] = []
+
+    result = client(
+        meter=records.append, connection_retry_delays=[5, 10, 20], sleeper=slept.append
+    ).complete(request())
+
+    assert result.text == "{}"
+    assert route.call_count == 3
+    assert slept == [5, 10]
+    assert [(r.attempt, r.status_code, r.error_class) for r in records] == [
+        (1, None, "APIConnectionError"),
+        (2, None, "APIConnectionError"),
+        (3, 200, None),
+    ]
+
+
+def test_a_connection_that_never_comes_back_fails_after_the_last_pause(
+    mock_http: respx.MockRouter,
+) -> None:
+    route = mock_http.post(OPENAI_ENDPOINT).mock(side_effect=httpx.ConnectError("down"))
+    slept: list[float] = []
+
+    with pytest.raises(LLMError, match=r"APIConnectionError.*\(after 3 attempts\)") as info:
+        client(connection_retry_delays=[1, 2], sleeper=slept.append).complete(request())
+
+    assert info.value.retryable is True
+    assert route.call_count == 3
+    assert slept == [1, 2]
+
+
+def test_once_the_pauses_are_spent_the_next_call_fails_without_pausing_until_one_connects(
+    mock_http: respx.MockRouter,
+) -> None:
+    """A run with the network gone must not spend the pauses once per business."""
+    route = mock_http.post(OPENAI_ENDPOINT).mock(
+        side_effect=[
+            httpx.ConnectError("down"),
+            httpx.ConnectError("down"),
+            httpx.ConnectError("down"),
+            httpx.Response(200, json=completion("{}")),
+            httpx.ConnectError("down"),
+            httpx.Response(200, json=completion("{}")),
+        ]
+    )
+    slept: list[float] = []
+    llm = client(connection_retry_delays=[1], sleeper=slept.append)
+
+    with pytest.raises(LLMError):
+        llm.complete(request())
+    assert slept == [1]
+
+    with pytest.raises(LLMError, match=r"APIConnectionError: Connection error\.$"):
+        llm.complete(request())
+    assert slept == [1], "no pause while the network is known to be down"
+
+    assert llm.complete(request()).text == "{}"
+
+    assert llm.complete(request()).text == "{}", "pauses are back once a call connected"
+    assert slept == [1, 1]
+    assert route.call_count == 6
+
+
+def test_a_timeout_is_not_waited_out(mock_http: respx.MockRouter) -> None:
+    """The request may have reached OpenAI and been billed; the SDK has retried it already."""
+    route = mock_http.post(OPENAI_ENDPOINT).mock(side_effect=httpx.ReadTimeout("slow"))
+    slept: list[float] = []
+
+    with pytest.raises(LLMError, match="APITimeoutError"):
+        client(connection_retry_delays=[1, 2], sleeper=slept.append).complete(request())
+
+    assert route.call_count == 1
+    assert slept == []
+
+
+@pytest.mark.parametrize(
+    ("status", "code"),
+    [
+        (401, "invalid_api_key"),
+        (403, "unsupported_country_region_territory"),
+        (429, "insufficient_quota"),
+    ],
+)
+def test_auth_and_quota_errors_are_not_waited_out(
+    mock_http: respx.MockRouter, status: int, code: str
+) -> None:
+    route = mock_http.post(OPENAI_ENDPOINT).mock(
+        return_value=httpx.Response(status, json={"error": {"message": "no", "code": code}})
+    )
+    slept: list[float] = []
+
+    with pytest.raises(LLMError, match=str(status)):
+        client(connection_retry_delays=[1, 2], sleeper=slept.append).complete(request())
+
+    assert route.call_count == 1
+    assert slept == []
+
+
+def test_the_pauses_come_from_settings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.core.config import get_settings
+
+    monkeypatch.setenv("AI_CONNECTION_RETRY_DELAYS_SECONDS", "2.5, 7")
+    get_settings.cache_clear()
+
+    assert get_settings().ai_connection_retry_delays_seconds == [2.5, 7.0]
+
+
 def test_a_refusal_is_an_error_not_an_answer(mock_http: respx.MockRouter) -> None:
     body = completion("")
     body["choices"][0]["message"]["refusal"] = "I cannot help with that"

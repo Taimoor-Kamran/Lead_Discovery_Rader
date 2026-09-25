@@ -477,14 +477,50 @@ def businesses_for_run(
 
 
 def needs_audit(session: Session, business: Business, *, now: datetime | None = None) -> bool:
-    """Whether the newest audit for this business is missing or too old to trust."""
-    latest = latest_audit(session, business.id)
-    if latest is None:
+    """Whether the newest audit for this business is missing or too old to trust.
+
+    How old is too old depends on what the newest audit says (spec v0.11.1). A `failed`
+    audit is a fault on our side and says nothing about the site, so it is due again after
+    AUDIT_FAILED_RETRY_HOURS; before, one timeout hid a business for a month. An
+    `unreachable` one backs off through AUDIT_UNREACHABLE_BACKOFF_DAYS, a step per
+    consecutive unreachable audit, so a site that was briefly down is looked at again
+    soon and one that is gone settles into the normal AUDIT_MAX_AGE_DAYS. Everything
+    else keeps AUDIT_MAX_AGE_DAYS.
+    """
+    settings = get_settings()
+    if settings.audit_max_age_days <= 0:
         return True
-    max_age = get_settings().audit_max_age_days
-    if max_age <= 0:
+    backoff = settings.audit_unreachable_backoff_days
+    recent = _recent_audits(session, business.id, limit=len(backoff) + 1)
+    if not recent:
         return True
-    return latest.created_at < (now or datetime.now(UTC)) - timedelta(days=max_age)
+    latest = recent[0]
+    if latest.status is AuditStatus.failed:
+        wait = timedelta(hours=settings.audit_failed_retry_hours)
+    elif latest.status is AuditStatus.unreachable:
+        streak = next(
+            (i for i, audit in enumerate(recent) if audit.status is not AuditStatus.unreachable),
+            len(recent),
+        )
+        wait = (
+            timedelta(days=backoff[streak - 1])
+            if streak <= len(backoff)
+            else timedelta(days=settings.audit_max_age_days)
+        )
+    else:
+        wait = timedelta(days=settings.audit_max_age_days)
+    return latest.created_at < (now or datetime.now(UTC)) - wait
+
+
+def _recent_audits(session: Session, business_id: uuid.UUID, *, limit: int) -> list[WebsiteAudit]:
+    return list(
+        session.scalars(
+            select(WebsiteAudit)
+            .where(WebsiteAudit.business_id == business_id)
+            .order_by(WebsiteAudit.created_at.desc(), WebsiteAudit.id.desc())
+            .limit(limit)
+        )
+    )
 
 
 # --- reads --------------------------------------------------------------------------------
