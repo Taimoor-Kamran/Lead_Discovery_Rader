@@ -14,33 +14,41 @@ Three rules hold throughout:
   does not apply, such as a certificate on a page served over http). Reading an audit, a
   person must never have to wonder which of the two a `null` meant.
 * **Nothing is harvested.** Where the spec asks for contact options, only their *presence*
-  and a single example are recorded — never a list of addresses or numbers.
+  and a single example are recorded — never a list of addresses. The exceptions are the
+  business's own published contact points that a listing comparison needs (v0.12.0): at
+  most three `tel:` numbers, and the one `mailto:` address that is quoted as evidence.
 """
 
-import json
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from itertools import pairwise
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urljoin, urlsplit
 
 from bs4 import BeautifulSoup, Tag
 
 from app.core.safe_fetch import FetchOutcome
+from app.modules.audit_web import structured_data
 from app.modules.audit_web.fingerprints import (
+    AMBIGUOUS_EMAIL_DOMAINS,
     BOOKING_HREF_SEGMENTS,
     BOOKING_SIGNATURES,
-    CART_LINK_PATTERNS,
+    BUILDER_LABELS,
+    BUILDER_SIGNATURES,
     CHAT_SIGNATURES,
-    ECOMMERCE_SIGNATURES,
+    FOOTER_PLACEHOLDER_PHRASES,
+    PAGE_PLACEHOLDER_PHRASES,
+    PLACEHOLDER_EMAIL_DOMAINS,
+    PLACEHOLDER_EMAIL_LABELS,
+    PLACEHOLDER_LOCAL_PARTS,
     SOCIAL_PLATFORMS,
     TECH_SIGNATURES,
     booking_text_match,
     find_signatures,
     generator_label,
-    is_local_business_type,
     snippet_forward,
+    trim_to_words,
 )
 
 EVIDENCE_MAX_CHARS = 300
@@ -60,6 +68,22 @@ COPYRIGHT_RANGE_PATTERN = re.compile(
     r"(?:©|&copy;|\(c\)|copyright)[^0-9]{0,40}\d{4}\s*[-\u2013\u2014]\s*(\d{4})",
     re.IGNORECASE,
 )
+# A year printed *directly* after the mark — "© 2035", "Copyright © 2018-2035" — and the
+# range it may end. Only a year in this position is believed when it lies in the future:
+# the looser patterns above allow forty characters of text before the year, and in
+# "© Acme, 2100 Lamar Blvd" that is a street number, not a year (v0.12.0, item 2).
+COPYRIGHT_ADJACENT_PATTERN = re.compile(
+    r"(?:©|&copy;|\(c\)|copyright)(?:\s*(?:©|&copy;|\(c\)))*\s*(\d{4})"
+    r"(?:\s*[-\u2013\u2014]\s*(\d{4}))?(?!\d)",
+    re.IGNORECASE,
+)
+# How far ahead a printed year may be and still be read as a year. Further than this it is
+# more likely a number that happens to follow a copyright mark.
+FUTURE_COPYRIGHT_MAX_YEARS = 30
+# Most `tel:` numbers kept for the listing comparison.
+MAX_TEL_NUMBERS = 3
+# Zoom is treated as blocked below this `maximum-scale` (spec v0.12.0, item 5).
+MIN_MAXIMUM_SCALE = 1.5
 
 
 @dataclass(frozen=True)
@@ -217,7 +241,8 @@ def analyse_html(
     soup = BeautifulSoup(outcome.text, "lxml")
     lowered = outcome.text.lower()
     moment = now or datetime.now(UTC)
-    text = visible_text(soup)
+    cleaned = _cleaned(soup)
+    text = _text_of(cleaned.body or cleaned)
 
     checks: Checks = {}
     checks.update(_meta_checks(soup, url))
@@ -225,11 +250,11 @@ def analyse_html(
     checks.update(_contact_checks(soup, url))
     checks["booking"] = _booking(soup, lowered, url)
     checks["live_chat"] = _live_chat(lowered, url)
-    checks["ecommerce"] = _ecommerce(soup, lowered, url)
     checks["social_links"] = _social_links(soup, url)
-    checks["structured_data"] = _structured_data(soup, url)
+    checks.update(_structured_data(soup, url))
     checks["tech_stack"] = _tech_stack(soup, lowered, url)
     checks["copyright_year"] = _copyright_year(text, url, moment)
+    checks["placeholder_text"] = _placeholder_text(cleaned, text, url)
     checks["js_shell_suspected"] = _js_shell(soup, url, text)
     checks["images_without_alt"] = _images_without_alt(soup, url)
     checks["unlabelled_inputs"] = _unlabelled_inputs(soup, url)
@@ -275,14 +300,48 @@ def _meta_checks(soup: BeautifulSoup, url: str) -> Checks:
         "meta_description_length": CheckResult(
             len(description_text) if description_text else 0, evidence_url=url
         ),
-        "favicon": CheckResult(
-            _favicon(soup) is not None,
-            evidence_text=(
-                str(_favicon(soup)) if _favicon(soup) is not None else 'No <link rel="icon">'
-            ),
-            evidence_url=url,
-        ),
+        "viewport_zoom_blocked": _viewport_zoom(viewport, url),
+        "canonical_url": _canonical(soup, url),
     }
+
+
+def _viewport_zoom(viewport: Tag | None, url: str) -> CheckResult:
+    """Whether the viewport tag asks the browser to stop visitors zooming, and how.
+
+    `user-scalable=no` (or `0`) and a `maximum-scale` below 1.5 each do. A value that is not
+    a number is not read as one: an unreadable `maximum-scale` blocks nothing we can prove.
+    """
+    content = _attr(viewport, "content") if viewport is not None else None
+    if not content:
+        return CheckResult(
+            False, evidence_text='No <meta name="viewport"> content', evidence_url=url
+        )
+    settings: dict[str, str] = {}
+    for part in re.split(r"[,;]", content):
+        key, _, value = part.partition("=")
+        if key.strip():
+            settings[key.strip().lower()] = value.strip().lower()
+    reasons: list[str] = []
+    if settings.get("user-scalable") in ("no", "0"):
+        reasons.append(f"user-scalable={settings['user-scalable']}")
+    maximum = settings.get("maximum-scale")
+    try:
+        if maximum is not None and float(maximum) < MIN_MAXIMUM_SCALE:
+            reasons.append(f"maximum-scale={maximum}")
+    except ValueError:
+        pass
+    return CheckResult(", ".join(reasons) or False, evidence_text=str(viewport), evidence_url=url)
+
+
+def _canonical(soup: BeautifulSoup, url: str) -> CheckResult:
+    """The URL the page names as its own (`<link rel="canonical">`), made absolute."""
+    for tag in find_tags(soup, "link"):
+        rel = tag.get("rel") or []
+        tokens = {str(item).lower() for item in (rel if isinstance(rel, list) else [rel])}
+        href = _attr(tag, "href")
+        if "canonical" in tokens and href:
+            return CheckResult(urljoin(url, href), evidence_text=str(tag), evidence_url=url)
+    return CheckResult(False, evidence_text='No <link rel="canonical">', evidence_url=url)
 
 
 def _content_checks(soup: BeautifulSoup, url: str, text: str) -> Checks:
@@ -294,19 +353,35 @@ def _content_checks(soup: BeautifulSoup, url: str, text: str) -> Checks:
             evidence_text=str(first) if first is not None else "No <h1> with text",
             evidence_url=url,
         ),
+        "h1_count": CheckResult(
+            len(headings),
+            evidence_text=_first_tags(headings) if headings else "No <h1> with text",
+            evidence_url=url,
+        ),
         "visible_text_length": CheckResult(len(text), evidence_url=url),
     }
 
 
 def _contact_checks(soup: BeautifulSoup, url: str) -> Checks:
-    """Presence plus one example. Never a list — this system does no outreach."""
+    """Presence plus one example, and what a listing comparison needs. Never a list."""
     tel = _first_href(soup, "tel:")
     mailto = _first_href(soup, "mailto:")
     form = _contact_form(soup)
+    tel_tags = _hrefs(soup, "tel:")
+    numbers: list[str] = []
+    for tag in tel_tags:
+        number = _tel_number(str(tag["href"]))
+        if number and number not in numbers and len(numbers) < MAX_TEL_NUMBERS:
+            numbers.append(number)
     return {
         "tel_link": CheckResult(
             tel is not None,
             evidence_text=str(tel) if tel is not None else "No tel: link on the homepage",
+            evidence_url=url,
+        ),
+        "tel_numbers": CheckResult(
+            numbers,
+            evidence_text=_first_tags(tel_tags) if tel_tags else "No tel: link on the homepage",
             evidence_url=url,
         ),
         "mailto_link": CheckResult(
@@ -316,6 +391,7 @@ def _contact_checks(soup: BeautifulSoup, url: str) -> Checks:
             ),
             evidence_url=url,
         ),
+        "mailto_address": _mailto_address(soup, url),
         "contact_form": CheckResult(
             form is not None,
             evidence_text=(
@@ -324,6 +400,54 @@ def _contact_checks(soup: BeautifulSoup, url: str) -> Checks:
             evidence_url=url,
         ),
     }
+
+
+def _tel_number(href: str) -> str | None:
+    """The number a `tel:` link dials, as written: `tel:+1-512-555-0100` → `+1-512-555-0100`."""
+    value = unquote(href.strip()[len("tel:") :]).split(";", 1)[0].strip()
+    return value or None
+
+
+def _mailto_address(soup: BeautifulSoup, url: str) -> CheckResult:
+    """The email address the homepage offers, and whether it is a template placeholder.
+
+    Every `mailto:` link is looked at, so a placeholder in the footer is found even when a
+    real address is linked higher up. The placeholder is what is reported when there is
+    one; otherwise the first address, which is the business's own published one.
+    """
+    first: tuple[str, Tag] | None = None
+    for tag in _hrefs(soup, "mailto:"):
+        for address in _mailto_addresses(str(tag["href"])):
+            if is_placeholder_email(address):
+                return CheckResult(
+                    {"address": address, "placeholder": True},
+                    evidence_text=str(tag),
+                    evidence_url=url,
+                )
+            if first is None:
+                first = (address, tag)
+    if first is None:
+        return CheckResult(False, evidence_text="No mailto: link on the homepage", evidence_url=url)
+    return CheckResult(
+        {"address": first[0], "placeholder": False}, evidence_text=str(first[1]), evidence_url=url
+    )
+
+
+def _mailto_addresses(href: str) -> list[str]:
+    """`mailto:a@b.com,c@d.com?subject=x` → `["a@b.com", "c@d.com"]`, lowercased."""
+    target = unquote(href.strip()[len("mailto:") :].split("?", 1)[0])
+    return [part.strip().lower() for part in target.split(",") if "@" in part]
+
+
+def is_placeholder_email(address: str) -> bool:
+    """Whether an address is at a domain no business receives mail at (see fingerprints)."""
+    local, _, domain = address.strip().lower().rpartition("@")
+    domain = domain.rstrip(".")
+    if not local or not domain:
+        return False
+    if domain in PLACEHOLDER_EMAIL_DOMAINS or domain.split(".", 1)[0] in PLACEHOLDER_EMAIL_LABELS:
+        return True
+    return domain in AMBIGUOUS_EMAIL_DOMAINS and local in PLACEHOLDER_LOCAL_PARTS
 
 
 def _booking(soup: BeautifulSoup, lowered: str, url: str) -> CheckResult:
@@ -395,20 +519,6 @@ def _live_chat(lowered: str, url: str) -> CheckResult:
     )
 
 
-def _ecommerce(soup: BeautifulSoup, lowered: str, url: str) -> CheckResult:
-    hits = find_signatures(lowered, ECOMMERCE_SIGNATURES)
-    if hits:
-        return CheckResult(hits[0].label, evidence_text=hits[0].evidence, evidence_url=url)
-    for link in find_tags(soup, "a", href=True):
-        href = str(link["href"]).lower()
-        for pattern in CART_LINK_PATTERNS:
-            if pattern in href:
-                return CheckResult("cart link", evidence_text=str(link), evidence_url=url)
-    return CheckResult(
-        False, evidence_text="No shop platform signature or cart link", evidence_url=url
-    )
-
-
 def _social_links(soup: BeautifulSoup, url: str) -> CheckResult:
     """Which platforms the homepage links to. The links are recorded, never followed."""
     found: dict[str, str] = {}
@@ -431,54 +541,83 @@ def _social_links(soup: BeautifulSoup, url: str) -> CheckResult:
     )
 
 
-def _structured_data(soup: BeautifulSoup, url: str) -> CheckResult:
-    """Whether the page carries LocalBusiness JSON-LD, and the block that says so."""
-    for script in find_tags(soup, "script", attrs={"type": "application/ld+json"}):
-        raw = script.string or script.get_text()
-        if not raw:
-            continue
-        try:
-            parsed = json.loads(raw)
-        except (ValueError, TypeError):
-            continue
-        for node in _json_ld_nodes(parsed):
-            if is_local_business_type(node.get("@type")):
-                return CheckResult(
-                    str(node.get("@type")),
-                    evidence_text=" ".join(raw.split()),
-                    evidence_url=url,
-                )
-    return CheckResult(
-        False, evidence_text="No LocalBusiness JSON-LD block on the homepage", evidence_url=url
-    )
+def _structured_data(soup: BeautifulSoup, url: str) -> Checks:
+    """What structured data the page carries, in any of the three syntaxes (v0.12.0, item 1).
 
-
-def _json_ld_nodes(parsed: object) -> list[dict[str, Any]]:
-    """Flatten a JSON-LD document, including `@graph` and top-level arrays."""
-    nodes: list[dict[str, Any]] = []
-    stack: list[object] = [parsed]
-    while stack:
-        current = stack.pop()
-        if isinstance(current, dict):
-            nodes.append(current)
-            graph = current.get("@graph")
-            if graph is not None:
-                stack.append(graph)
-        elif isinstance(current, list):
-            stack.extend(current)
-    return nodes
+    * `structured_data` — the normalised type of the first LocalBusiness-family item
+      (`Plumber`, never the full schema.org URL), or `False`;
+    * `structured_data_types` — every type seen, so "schema, but not the local kind" can be
+      told from "no schema at all";
+    * `structured_data_errors` — how many JSON-LD blocks do not parse, the first quoted;
+    * `local_business` — the fields of the first LocalBusiness item, or `False`.
+    """
+    found = structured_data.read(soup)
+    first = found.local_businesses[0] if found.local_businesses else None
+    broken = found.broken_blocks[0] if found.broken_blocks else None
+    return {
+        "structured_data": CheckResult(
+            first.type if first is not None else False,
+            evidence_text=(
+                first.evidence
+                if first is not None
+                else "No LocalBusiness structured data (JSON-LD, microdata or RDFa) on the homepage"
+            ),
+            evidence_url=url,
+        ),
+        "structured_data_types": CheckResult(
+            found.types,
+            evidence_text=(
+                ", ".join(found.types) if found.types else "No structured data on the homepage"
+            ),
+            evidence_url=url,
+        ),
+        "structured_data_errors": CheckResult(
+            {
+                "count": len(found.broken_blocks),
+                "type_hint": broken.type_hint if broken is not None else None,
+                "error": broken.error if broken is not None else None,
+            },
+            evidence_text=(
+                broken.raw if broken is not None else "Every JSON-LD block on the homepage parses"
+            ),
+            evidence_url=url,
+        ),
+        "local_business": CheckResult(
+            (
+                {
+                    "type": first.type,
+                    "syntax": first.syntax,
+                    "items": len(found.local_businesses),
+                    **first.fields,
+                }
+                if first is not None
+                else False
+            ),
+            evidence_text=first.evidence if first is not None else None,
+            evidence_url=url,
+        ),
+    }
 
 
 def _tech_stack(soup: BeautifulSoup, lowered: str, url: str) -> CheckResult:
+    """The platforms the page gives away, and — separately — a website builder, if any.
+
+    `platforms` is context and matches loosely. `builder` is a claim made to the business
+    ("built with Wix"), so it needs a generator tag naming the builder or one of the
+    builder's own asset hosts (`BUILDER_SIGNATURES`), never a mere link to the builder.
+    """
     generator_tag = _meta_tag(soup, "generator")
     generator = _attr(generator_tag, "content")
     platforms: list[str] = []
     evidence: list[str] = []
+    builder: dict[str, str] | None = None
 
     if generator:
         label = generator_label(generator)
         if label is not None:
             platforms.append(label)
+            if label in BUILDER_LABELS:
+                builder = {"label": label, "evidence": str(generator_tag)}
         evidence.append(str(generator_tag))
 
     for hit in find_signatures(lowered, TECH_SIGNATURES):
@@ -486,21 +625,34 @@ def _tech_stack(soup: BeautifulSoup, lowered: str, url: str) -> CheckResult:
             platforms.append(hit.label)
             evidence.append(hit.pattern)
 
+    if builder is None:
+        hits = find_signatures(lowered, BUILDER_SIGNATURES)
+        if hits:
+            builder = {"label": hits[0].label, "evidence": hits[0].evidence}
+            if hits[0].label not in platforms:
+                platforms.append(hits[0].label)
+                evidence.append(hits[0].pattern)
+
     return CheckResult(
-        {"generator": generator or None, "platforms": platforms},
+        {"generator": generator or None, "platforms": platforms, "builder": builder},
         evidence_text="; ".join(evidence) if evidence else "No platform signature on the homepage",
         evidence_url=url,
     )
 
 
 def _copyright_year(text: str, url: str, now: datetime) -> CheckResult:
-    """The highest believable year printed next to a copyright mark, and the line it is on.
+    """The highest year printed next to a copyright mark, and the line it is on.
 
     Read from the page's **visible text**, not its HTML. A copyright notice is something a
     visitor reads, so cutting a window out of the markup produced evidence that began and
     ended mid-tag — true, and unreadable. Taken from the text it reads
     "© 2016 Barton Creek Plumbing LLC. All rights reserved.", which is what is actually
     printed at the foot of the page.
+
+    Since v0.12.0 a **future** year is kept too, because it is a finding of its own (a
+    template placeholder, "© 2035"), and a range's later year is always the one that
+    counts: "© 2018-2035" is a future year, never a stale 2018. A future year is only
+    believed when it sits directly after the mark (`COPYRIGHT_ADJACENT_PATTERN`).
     """
     years: list[tuple[int, str]] = []
     for pattern in (COPYRIGHT_RANGE_PATTERN, COPYRIGHT_PATTERN):
@@ -508,12 +660,87 @@ def _copyright_year(text: str, url: str, now: datetime) -> CheckResult:
             year = int(match.group(1))
             if EARLIEST_COPYRIGHT_YEAR <= year <= now.year:
                 years.append((year, snippet_forward(text, match.start(), COPYRIGHT_EVIDENCE_CHARS)))
+    for match in COPYRIGHT_ADJACENT_PATTERN.finditer(text):
+        for group in (1, 2):
+            raw = match.group(group)
+            if raw is None:
+                continue
+            year = int(raw)
+            if now.year < year <= now.year + FUTURE_COPYRIGHT_MAX_YEARS:
+                years.append((year, snippet_forward(text, match.start(), COPYRIGHT_EVIDENCE_CHARS)))
     if not years:
         return CheckResult(
             False, evidence_text="No copyright year on the homepage", evidence_url=url
         )
     best = max(years, key=lambda item: item[0])
     return CheckResult(best[0], evidence_text=best[1], evidence_url=url)
+
+
+def _placeholder_text(cleaned: BeautifulSoup, text: str, url: str) -> CheckResult:
+    """Template text nobody replaced: "Your Company", "Business Name", "Lorem ipsum".
+
+    The footer phrases are only looked for in the footer — a `<footer>`, a
+    `role="contentinfo"` element, or an element whose id or class says footer — and on the
+    line a copyright notice is printed on, because "Company Name" is also an ordinary label
+    in a quote form. "Lorem ipsum" is a placeholder wherever it appears. Whether a phrase is
+    in fact part of the business's own name is decided by the finding, which knows it.
+    """
+    regions: list[str] = []
+    for footer in _footer_regions(cleaned):
+        # A footer's own quote or newsletter form labels its fields "Company Name"; that is
+        # a field label, not placeholder text. `cleaned` is a throwaway copy, and this is
+        # the last thing read from it.
+        for control in find_tags(footer, ["form", "label", "button", "select", "textarea"]):
+            control.decompose()
+        regions.append(_text_of(footer))
+    for match in COPYRIGHT_PATTERN.finditer(text):
+        regions.append(snippet_forward(text, match.start(), COPYRIGHT_EVIDENCE_CHARS))
+
+    found: list[str] = []
+    evidence: str | None = None
+    for region, phrases in (
+        *((region, FOOTER_PLACEHOLDER_PHRASES) for region in regions),
+        (text, PAGE_PLACEHOLDER_PHRASES),
+    ):
+        lowered = region.lower()
+        for phrase in phrases:
+            for match in re.finditer(rf"(?<!\w){re.escape(phrase)}(?!\w)", lowered):
+                printed = region[match.start() : match.end()]
+                # A longer phrase ("your company name") wins over the one inside it.
+                if any(phrase in other.lower() for other in found):
+                    break
+                found.append(printed)
+                if evidence is None:
+                    evidence = trim_to_words(
+                        region, max(match.start() - 60, 0), min(match.end() + 60, len(region))
+                    )
+                break
+    return CheckResult(
+        found[:5] or False,
+        evidence_text=evidence or "No template placeholder text on the homepage",
+        evidence_url=url,
+    )
+
+
+def _footer_regions(cleaned: BeautifulSoup) -> list[Tag]:
+    """The page's footer elements, outermost first, never one inside another."""
+    regions: list[Tag] = []
+    for tag in find_tags(cleaned, True):
+        if tag.name in ("html", "body"):
+            continue
+        marker = " ".join([str(_attr(tag, "id") or ""), str(_attr(tag, "class") or "")]).lower()
+        if (
+            (
+                tag.name == "footer"
+                or str(tag.get("role", "")).lower() == "contentinfo"
+                or "footer" in marker
+            )
+            and not any(region in tag.parents for region in regions)
+            # A wrapper classed `has-footer` around the whole page is not a footer.
+            and tag.find(["h1", "main"]) is None
+        ):
+            regions.append(tag)
+    return regions
 
 
 def _js_shell(soup: BeautifulSoup, url: str, text: str) -> CheckResult:
@@ -666,11 +893,20 @@ def _first_tags(tags: list[Tag]) -> str:
 
 def visible_text(soup: BeautifulSoup) -> str:
     """The text a person would read: no scripts, styles, templates or comments."""
+    cleaned = _cleaned(soup)
+    return _text_of(cleaned.body or cleaned)
+
+
+def _cleaned(soup: BeautifulSoup) -> BeautifulSoup:
+    """A copy of the page with everything a reader never sees removed."""
     clone = BeautifulSoup(str(soup), "lxml")
     for tag in find_tags(clone, ["script", "style", "noscript", "template", "svg"]):
         tag.decompose()
-    body = clone.body or clone
-    return " ".join(body.get_text(" ", strip=True).split())
+    return clone
+
+
+def _text_of(node: BeautifulSoup | Tag) -> str:
+    return " ".join(node.get_text(" ", strip=True).split())
 
 
 def page_text(outcome: FetchOutcome, *, limit: int) -> str | None:
@@ -698,20 +934,17 @@ def _attr(tag: Tag | None, name: str) -> str | None:
     return str(value).strip() if value is not None else None
 
 
-def _favicon(soup: BeautifulSoup) -> Tag | None:
-    for tag in find_tags(soup, "link"):
-        rel = tag.get("rel") or []
-        tokens = {str(item).lower() for item in (rel if isinstance(rel, list) else [rel])}
-        if tokens & {"icon", "shortcut icon", "apple-touch-icon"}:
-            return tag
-    return None
-
-
 def _first_href(soup: BeautifulSoup, prefix: str) -> Tag | None:
-    for tag in find_tags(soup, "a", href=True):
-        if str(tag["href"]).strip().lower().startswith(prefix):
-            return tag
-    return None
+    tags = _hrefs(soup, prefix)
+    return tags[0] if tags else None
+
+
+def _hrefs(soup: BeautifulSoup, prefix: str) -> list[Tag]:
+    return [
+        tag
+        for tag in find_tags(soup, "a", href=True)
+        if str(tag["href"]).strip().lower().startswith(prefix)
+    ]
 
 
 def _contact_form(soup: BeautifulSoup) -> Tag | None:

@@ -61,9 +61,8 @@ def page(body: str, *, url: str = URL) -> dict[str, CheckResult]:
 COMPLETE_PAGE = (
     "<html><head>"
     '<meta name="viewport" content="width=device-width">'
-    "<title>Lone Star Plumbing</title>"
+    "<title>Lone Star Plumbing | Austin, TX</title>"
     '<meta name="description" content="Austin plumbers.">'
-    '<link rel="icon" href="/f.ico">'
     '<script type="application/ld+json">{"@type":"Plumber","name":"Lone Star"}</script>'
     "</head><body><h1>Plumbing in Austin</h1>"
     "<h2>What we do</h2>"
@@ -125,6 +124,23 @@ def test_the_catalogue_covers_every_code_the_spec_names() -> None:
         "js_shell_suspected",
         "few_reviews",
         "robots_blocked",
+        # v0.12.0
+        "no_local_business_schema",
+        "invalid_structured_data",
+        "future_copyright",
+        "default_title",
+        "short_title",
+        "long_title",
+        "viewport_blocks_zoom",
+        "site_builder",
+        "multiple_h1",
+        "placeholder_email",
+        "placeholder_text",
+        "nap_phone_mismatch",
+        "nap_address_mismatch",
+        "listing_website_http",
+        "listing_website_host_mismatch",
+        "no_click_to_call",
     }
 
 
@@ -210,7 +226,7 @@ def test_robots_blocked_carries_the_reason_and_the_robots_url() -> None:
 
     assert codes(produced) == ["robots_blocked"]
     assert produced[0].evidence_url == f"{URL}robots.txt"
-    assert produced[0].service_category is None
+    assert produced[0].service is None
     assert produced[0].severity.value == "info"
 
 

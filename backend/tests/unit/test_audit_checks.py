@@ -169,11 +169,22 @@ def test_an_h1_with_no_text_does_not_count() -> None:
     assert checks_for("<html><body><h1><img src='x.png'></h1></body></html>")["h1_present"] is False
 
 
-def test_a_favicon_link_is_detected() -> None:
-    assert (
-        checks_for('<html><head><link rel="icon" href="/f.ico"></head></html>')["favicon"] is True
+def test_the_two_dead_checks_are_gone() -> None:
+    """`favicon` and `ecommerce` collected data no rule read; v0.12.0 deleted both.
+
+    The reasoning is in the spec's implementation notes: a missing `<link rel="icon">` is
+    not a missing favicon (browsers ask for `/favicon.ico` regardless), and a shop on the
+    page is not a gap in any service this system sells.
+    """
+    body = (
+        '<html><head><link rel="icon" href="/f.ico"></head><body>'
+        '<script src="https://cdn.shopify.com/s/x.js"></script><a href="/cart">Cart</a>'
+        "</body></html>"
     )
-    assert checks_for("<html><head></head></html>")["favicon"] is False
+    found = checks_for(body)
+
+    assert "favicon" not in found
+    assert "ecommerce" not in found
 
 
 # --- contact options -------------------------------------------------------------------
@@ -247,19 +258,7 @@ def test_a_page_with_no_booking_says_so_without_guessing() -> None:
     assert "No known booking widget" in (result["booking"].evidence_text or "")
 
 
-# --- e-commerce, social, structured data, tech ------------------------------------------
-
-
-def test_a_shop_platform_is_named() -> None:
-    body = '<html><body><script src="https://cdn.shopify.com/s/x.js"></script></body></html>'
-
-    assert checks_for(body)["ecommerce"] == "Shopify"
-
-
-def test_a_cart_link_alone_counts_as_ecommerce() -> None:
-    body = '<html><body><a href="/cart">Basket (2)</a></body></html>'
-
-    assert checks_for(body)["ecommerce"] == "cart link"
+# --- social, structured data, tech ------------------------------------------
 
 
 def test_social_links_are_listed_by_platform() -> None:
@@ -299,10 +298,12 @@ def test_json_ld_that_is_not_a_local_business_is_not_counted() -> None:
     assert checks_for(body)["structured_data"] is False
 
 
-def test_broken_json_ld_is_ignored_rather_than_crashing() -> None:
+def test_broken_json_ld_is_counted_rather_than_crashing() -> None:
     body = '<html><head><script type="application/ld+json">{nope}</script></head></html>'
+    found = checks_for(body)
 
-    assert checks_for(body)["structured_data"] is False
+    assert found["structured_data"] is False
+    assert found["structured_data_errors"]["count"] == 1  # type: ignore[index]
 
 
 def test_the_tech_stack_reads_the_generator_and_the_signatures() -> None:
@@ -315,6 +316,7 @@ def test_the_tech_stack_reads_the_generator_and_the_signatures() -> None:
     assert result["tech_stack"].value == {
         "generator": "WordPress 6.5.2",
         "platforms": ["WordPress"],
+        "builder": None,
     }
 
 
@@ -322,6 +324,7 @@ def test_a_page_with_no_platform_signature_reports_an_empty_stack() -> None:
     assert checks_for("<html><body>Plain</body></html>")["tech_stack"] == {
         "generator": None,
         "platforms": [],
+        "builder": None,
     }
 
 

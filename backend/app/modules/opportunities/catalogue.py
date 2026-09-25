@@ -1,14 +1,15 @@
 """The agency's services and the audit findings that point at each one. Data, not code.
 
-Adding a service is a new `ServiceSpec` here and nothing else: the rules, the merge, the
-schema sent to the model and the API all read this table. Every number in it is a
+Adding a service is a new `ServiceSpec` here plus its key in `audit_web.findings.Service`,
+which is where findings are filed under it: the rules, the merge, the schema sent to the
+model and the API all read this table. Every number in it is a
 starting assumption to be calibrated once real opportunities have been reviewed, and is
 therefore written down where it can be argued about.
 """
 
 from dataclasses import dataclass
 
-from app.modules.audit_web.findings import Severity
+from app.modules.audit_web.findings import CATALOGUE, Service, Severity
 
 # Rule opportunities carry `source = "rules"`; an opportunity the AI proposed with valid
 # evidence and no matching rule carries `source = "ai"`; one both found is `rules+ai`.
@@ -40,56 +41,32 @@ NO_OPPORTUNITY_FINDINGS = frozenset({"robots_blocked"})
 class ServiceSpec:
     key: str
     name: str
-    finding_codes: tuple[str, ...]
+
+    @property
+    def finding_codes(self) -> tuple[str, ...]:
+        """The findings filed under this service, in catalogue order. Derived, never listed.
+
+        The finding → service mapping lives in one place, `audit_web.findings.CATALOGUE`
+        (spec v0.12.0, item 3). This used to be a second, hand-kept list that disagreed
+        with the finding's own `service_category`.
+        """
+        return tuple(code for code, spec in CATALOGUE.items() if spec.service == self.key)
 
 
 SERVICES: dict[str, ServiceSpec] = {
     spec.key: spec
     for spec in (
-        ServiceSpec(
-            "website_design",
-            "Website design / redesign",
-            (
-                "no_website",
-                "social_profile_only",
-                "unreachable",
-                "no_https",
-                "tls_invalid",
-                "builder_subdomain",
-                "no_mobile_viewport",
-                "stale_copyright",
-                "no_contact_on_homepage",
-                "slow_mobile",
-                "js_shell_suspected",
-                "images_without_alt",
-                "unlabelled_form_fields",
-                "thin_content",
-                "no_section_headings",
-                "heading_level_skipped",
-                "low_accessibility_score",
-                "low_best_practices_score",
-            ),
-        ),
-        ServiceSpec(
-            "seo_gbp",
-            "SEO / Google Business Profile",
-            (
-                "missing_title",
-                "missing_meta_description",
-                "no_h1",
-                "no_structured_data",
-                "few_reviews",
-            ),
-        ),
-        ServiceSpec("booking_setup", "Online booking setup", ("no_online_booking",)),
-        ServiceSpec("ai_chat_setup", "Chat assistant", ("no_live_chat",)),
+        ServiceSpec(Service.website_design.value, "Website design / redesign"),
+        ServiceSpec(Service.seo_gbp.value, "SEO / Google Business Profile"),
+        ServiceSpec(Service.booking_setup.value, "Online booking setup"),
+        ServiceSpec(Service.ai_chat_setup.value, "Chat assistant"),
         # Triggered by a check, not a finding: `checks.social_links.value == []`.
-        ServiceSpec("ads_social", "Ads (Google/Meta) & social media", ()),
+        ServiceSpec(Service.ads_social.value, "Ads (Google/Meta) & social media"),
     )
 }
 
 FINDING_TO_SERVICE: dict[str, str] = {
-    code: spec.key for spec in SERVICES.values() for code in spec.finding_codes
+    code: spec.service.value for code, spec in CATALOGUE.items() if spec.service is not None
 }
 ADS_SOCIAL = "ads_social"
 

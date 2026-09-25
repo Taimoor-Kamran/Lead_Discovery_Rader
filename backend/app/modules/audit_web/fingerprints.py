@@ -114,27 +114,6 @@ CHAT_SIGNATURES: tuple[Signature, ...] = (
     Signature("facebook_chat", "Facebook Customer Chat", ("fb-customerchat", "xfbml.customerchat")),
 )
 
-# --- e-commerce ----------------------------------------------------------------------
-
-ECOMMERCE_SIGNATURES: tuple[Signature, ...] = (
-    Signature("shopify", "Shopify", ("cdn.shopify.com", "shopify.theme", "myshopify.com")),
-    Signature(
-        "woocommerce",
-        "WooCommerce",
-        ("woocommerce", "wc-add-to-cart", "wp-content/plugins/woocommerce"),
-    ),
-    Signature("bigcommerce", "BigCommerce", ("bigcommerce.com", "cdn11.bigcommerce.com")),
-    Signature(
-        "squarespace_commerce", "Squarespace Commerce", ("squarespace-commerce", "sqs-add-to-cart")
-    ),
-    Signature("magento", "Magento", ("mage/cookies", "magento_theme")),
-    Signature("ecwid", "Ecwid", ("ecwid.com", "ecwid_store")),
-    Signature("square_online", "Square Online", ("square.site/cart", "squareup.com/store")),
-)
-
-# A cart or checkout link is e-commerce whoever built it.
-CART_LINK_PATTERNS: tuple[str, ...] = ("/cart", "/checkout", "add-to-cart", "/basket", "/shop/cart")
-
 # --- tech stack ----------------------------------------------------------------------
 
 TECH_SIGNATURES: tuple[Signature, ...] = (
@@ -156,6 +135,26 @@ TECH_SIGNATURES: tuple[Signature, ...] = (
     Signature("elementor", "Elementor", ("elementor-page", "/elementor/assets")),
     Signature("gtm", "Google Tag Manager", ("googletagmanager.com",)),
 )
+
+# The website builders whose use is itself a finding (v0.12.0, item 6), and the evidence
+# strong enough to say so to the business. Stricter than `TECH_SIGNATURES` on purpose: that
+# table records context and matches `wix.com` anywhere, including in a blog post that links
+# to Wix. These patterns are the builder's own asset hosts and markup, which only a page
+# the builder rendered carries. A generator tag naming the builder counts too.
+BUILDER_SIGNATURES: tuple[Signature, ...] = (
+    Signature("wix", "Wix", ("static.wixstatic.com", "static.parastorage.com", "_wixcssimports")),
+    Signature(
+        "squarespace",
+        "Squarespace",
+        ("static1.squarespace.com", "assets.squarespace.com", "sqs-block"),
+    ),
+    Signature("godaddy_builder", "GoDaddy Website Builder", ("img1.wsimg.com/isteam",)),
+    Signature(
+        "duda", "Duda", ("irp.cdn-website.com", "lirp.cdn-website.com", "multiscreensite.com")
+    ),
+    Signature("weebly", "Weebly", ("editmysite.com", "weebly-footer")),
+)
+BUILDER_LABELS = frozenset(signature.label for signature in BUILDER_SIGNATURES)
 
 # `<meta name="generator">` values, which say it outright.
 GENERATOR_LABELS: tuple[tuple[str, str], ...] = (
@@ -189,49 +188,214 @@ SOCIAL_PLATFORMS: tuple[Signature, ...] = (
     Signature("google", "Google", ("google.com/maps", "g.page", "goo.gl/maps", "maps.app.goo.gl")),
 )
 
+# --- template placeholders -------------------------------------------------------------
+
+# Email domains no business receives mail at: documentation names and the defaults website
+# templates ship with. `info@mysite.com` is Wix's; every enquiry sent to it is lost.
+PLACEHOLDER_EMAIL_DOMAINS = frozenset(
+    {
+        "example.com",
+        "example.org",
+        "example.net",
+        "mysite.com",
+        "domain.com",
+        "yourdomain.com",
+        "yoursite.com",
+        "yourwebsite.com",
+        "yourcompany.com",
+        "yourbusiness.com",
+        "company.com",
+        "website.com",
+    }
+)
+# The first label of a domain that is a placeholder whatever follows it:
+# `yourdomain.co.uk`, `mysite.net`.
+PLACEHOLDER_EMAIL_LABELS = frozenset(
+    {"example", "mysite", "yourdomain", "yoursite", "yourwebsite", "yourcompany", "yourbusiness"}
+)
+# `email.com` is a real free-mail provider, so an address there is only a placeholder when
+# its local part is one a template would print. `jane.doe@email.com` is somebody.
+AMBIGUOUS_EMAIL_DOMAINS = frozenset({"email.com"})
+PLACEHOLDER_LOCAL_PARTS = frozenset(
+    {"your", "youremail", "yourname", "name", "email", "info", "hello", "contact", "user", "test"}
+)
+
+# Text a template prints until someone replaces it. Looked for in the footer (and on the
+# line a copyright notice is printed on), because "Company Name" is also an ordinary form
+# label in a quote form further up the page.
+FOOTER_PLACEHOLDER_PHRASES: tuple[str, ...] = (
+    "your company name",
+    "your business name",
+    "company name",
+    "business name",
+    "your company",
+    "your business",
+    "your name here",
+    "insert text here",
+)
+# Placeholder text that is one anywhere on the page.
+PAGE_PLACEHOLDER_PHRASES: tuple[str, ...] = ("lorem ipsum",)
+
 # --- JSON-LD ---------------------------------------------------------------------------
 
-# schema.org LocalBusiness plus the subtypes a local-services dataset actually meets.
+# schema.org's whole LocalBusiness subtree (schema.org 26, lowercased), plus three names
+# seen on real local-services sites that are not schema.org types but mean the same thing.
+# v0.12.0 widened this from 41 entries: once "structured data, but no LocalBusiness" became
+# a finding of its own, a real subtype missing here would be a false statement about the
+# business, so the list is now the full tree rather than the types we happened to meet.
 LOCAL_BUSINESS_TYPES = frozenset(
     {
         "localbusiness",
+        # direct subtypes
+        "animalshelter",
+        "archiveorganization",
+        "automotivebusiness",
+        "childcare",
+        "dentist",
+        "drycleaningorlaundry",
+        "emergencyservice",
+        "employmentagency",
+        "entertainmentbusiness",
+        "financialservice",
+        "foodestablishment",
+        "governmentoffice",
+        "healthandbeautybusiness",
         "homeandconstructionbusiness",
-        "plumber",
+        "internetcafe",
+        "legalservice",
+        "library",
+        "lodgingbusiness",
+        "medicalbusiness",
+        "professionalservice",
+        "radiostation",
+        "realestateagent",
+        "recyclingcenter",
+        "selfstorage",
+        "shoppingcenter",
+        "sportsactivitylocation",
+        "store",
+        "televisionstation",
+        "touristinformationcenter",
+        "travelagency",
+        # automotive
+        "autobodyshop",
+        "autodealer",
+        "autopartsstore",
+        "autorental",
+        "autorepair",
+        "autowash",
+        "gasstation",
+        "motorcycledealer",
+        "motorcyclerepair",
+        # emergency
+        "firestation",
+        "hospital",
+        "policestation",
+        # entertainment
+        "adultentertainment",
+        "amusementpark",
+        "artgallery",
+        "casino",
+        "comedyclub",
+        "movietheater",
+        "nightclub",
+        # financial
+        "accountingservice",
+        "automatedteller",
+        "bankorcreditunion",
+        "insuranceagency",
+        # food
+        "bakery",
+        "barorpub",
+        "brewery",
+        "cafeorcoffeeshop",
+        "distillery",
+        "fastfoodrestaurant",
+        "icecreamshop",
+        "restaurant",
+        "winery",
+        # government
+        "postoffice",
+        # health and beauty
+        "beautysalon",
+        "dayspa",
+        "hairsalon",
+        "healthclub",
+        "nailsalon",
+        "tattooparlor",
+        # home and construction
         "electrician",
-        "hvacbusiness",
-        "roofingcontractor",
         "generalcontractor",
+        "hvacbusiness",
         "housepainter",
         "locksmith",
         "movingcompany",
-        "professionalservice",
-        "legalservice",
+        "plumber",
+        "roofingcontractor",
+        # legal
         "attorney",
-        "accountingservice",
-        "insuranceagency",
-        "realestateagent",
-        "automotivebusiness",
-        "autorepair",
-        "autobodyshop",
-        "medicalbusiness",
-        "dentist",
+        "notary",
+        # lodging
+        "bedandbreakfast",
+        "campground",
+        "hostel",
+        "hotel",
+        "motel",
+        "resort",
+        "vacationrental",
+        # medical
+        "communityhealth",
+        "dermatology",
+        "dietnutrition",
+        "medicalclinic",
+        "optician",
+        "pharmacy",
         "physician",
+        "individualphysician",
+        "physiciansoffice",
+        "covidtestingfacility",
         "veterinarycare",
-        "healthandbeautybusiness",
-        "beautysalon",
-        "hairsalon",
-        "dayspa",
-        "healthclub",
-        "sportsactivitylocation",
-        "childcare",
-        "foodestablishment",
-        "restaurant",
-        "cafeorcoffeeshop",
-        "bakery",
+        # sports
+        "bowlingalley",
+        "exercisegym",
+        "golfcourse",
+        "publicswimmingpool",
+        "skiresort",
+        "sportsclub",
+        "stadiumorarena",
+        "tenniscomplex",
+        # stores
+        "bikestore",
+        "bookstore",
+        "clothingstore",
+        "computerstore",
+        "conveniencestore",
+        "departmentstore",
+        "electronicsstore",
+        "florist",
+        "furniturestore",
+        "gardenstore",
+        "grocerystore",
+        "hardwarestore",
+        "hobbyshop",
+        "homegoodsstore",
+        "jewelrystore",
+        "liquorstore",
+        "mensclothingstore",
+        "mobilephonestore",
+        "movierentalstore",
+        "musicstore",
+        "officeequipmentstore",
+        "outletstore",
+        "pawnshop",
+        "petstore",
+        "shoestore",
+        "sportinggoodsstore",
+        "tireshop",
+        "toystore",
+        "wholesalestore",
+        # not schema.org types, but written by real sites to mean one
         "bar",
-        "store",
-        "selfstorage",
-        "emergencyservice",
         "cleaningservice",
         "pestcontrolservice",
         "landscaping",
@@ -333,19 +497,45 @@ def generator_label(generator: str) -> str | None:
     return None
 
 
+def schema_type_name(raw: object) -> str | None:
+    """A schema.org type as its bare name: `schema.org/Plumber` (as a full https URL) → `Plumber`.
+
+    Handles the three spellings sites use — a full URL (with or without a trailing slash),
+    a `schema:` CURIE and the bare name — and keeps the name's own casing. `None` for
+    anything that is not a non-empty string.
+    """
+    if not isinstance(raw, str):
+        return None
+    value = raw.strip().rstrip("/")
+    if value.lower().startswith("schema:"):
+        value = value[len("schema:") :]
+    name = value.replace("#", "/").split("/")[-1].strip()
+    return name or None
+
+
+def schema_type_names(raw: object) -> list[str]:
+    """Every type named by an `@type` / `itemtype` / `typeof` value, a string or a list."""
+    values: Sequence[object] = raw if isinstance(raw, list) else [raw]
+    names: list[str] = []
+    for value in values:
+        # `itemtype` and `typeof` may name several types in one space-separated string.
+        parts = value.split() if isinstance(value, str) else [value]
+        for part in parts:
+            name = schema_type_name(part)
+            if name is not None and name not in names:
+                names.append(name)
+    return names
+
+
 def is_local_business_type(raw: object) -> bool:
     """Whether a JSON-LD `@type` (a string or a list) is LocalBusiness or a subtype."""
-    values: Sequence[object] = raw if isinstance(raw, list) else [raw]
-    for value in values:
-        if isinstance(value, str) and value.strip().lower().split("/")[-1] in LOCAL_BUSINESS_TYPES:
-            return True
-    return False
+    return any(name.lower() in LOCAL_BUSINESS_TYPES for name in schema_type_names(raw))
 
 
 ALL_SIGNATURE_GROUPS: tuple[tuple[str, tuple[Signature, ...]], ...] = (
     ("booking", BOOKING_SIGNATURES),
     ("chat", CHAT_SIGNATURES),
-    ("ecommerce", ECOMMERCE_SIGNATURES),
+    ("builder", BUILDER_SIGNATURES),
     ("tech", TECH_SIGNATURES),
     ("social", SOCIAL_PLATFORMS),
 )

@@ -14,7 +14,7 @@
     "ai_skipped_budget": 0,
     "businesses": 31,
     "est_cost_usd": 0.0,
-    "opportunities_created": 102,
+    "opportunities_created": 103,
     "opportunities_updated": 0
   },
   "businesses": {
@@ -867,8 +867,8 @@
         "seo_gbp": {
           "source": "rules",
           "confidence": [
-            0.856,
-            0.856
+            0.914,
+            0.914
           ],
           "ai_agrees": null
         },
@@ -1001,6 +1001,14 @@
           "confidence": [
             0.4,
             0.4
+          ],
+          "ai_agrees": false
+        },
+        "seo_gbp": {
+          "source": "rules",
+          "confidence": [
+            0.76,
+            0.76
           ],
           "ai_agrees": false
         }

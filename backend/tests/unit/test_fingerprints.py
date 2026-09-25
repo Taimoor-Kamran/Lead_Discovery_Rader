@@ -9,7 +9,6 @@ import pytest
 from app.modules.audit_web.fingerprints import (
     ALL_SIGNATURE_GROUPS,
     BOOKING_SIGNATURES,
-    ECOMMERCE_SIGNATURES,
     TECH_SIGNATURES,
     Signature,
     booking_text_match,
@@ -46,9 +45,9 @@ def test_every_signature_matches_a_snippet_containing_it(group: str, signature: 
 def test_a_signature_is_reported_once_even_with_several_patterns_present() -> None:
     page = "cdn.shopify.com and myshopify.com both appear"
 
-    hits = find_signatures(page, ECOMMERCE_SIGNATURES)
+    hits = find_signatures(page, TECH_SIGNATURES)
 
-    assert [hit.key for hit in hits] == ["shopify"]
+    assert [hit.key for hit in hits] == ["shopify_platform"]
 
 
 def test_a_page_with_no_signature_matches_nothing() -> None:

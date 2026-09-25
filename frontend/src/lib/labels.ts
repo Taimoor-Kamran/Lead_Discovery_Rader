@@ -39,6 +39,22 @@ export const FINDING_LABELS: Record<string, string> = {
   js_shell_suspected: "Page built with JavaScript (audit may be incomplete)",
   few_reviews: "Few Google reviews",
   robots_blocked: "Blocked by robots.txt",
+  site_builder: "Built with a website builder",
+  viewport_blocks_zoom: "Blocks zooming on phones",
+  default_title: "Page title doesn't name the business",
+  short_title: "Very short page title",
+  long_title: "Page title too long for search results",
+  multiple_h1: "More than one main heading",
+  no_local_business_schema: "Structured data, but not LocalBusiness",
+  invalid_structured_data: "Broken structured data",
+  nap_phone_mismatch: "Site phone differs from listing",
+  nap_address_mismatch: "Site address differs from listing",
+  listing_website_http: "Listing links to the http:// site",
+  listing_website_host_mismatch: "Listing website differs (www)",
+  no_click_to_call: "No click-to-call link",
+  placeholder_email: "Placeholder email address",
+  placeholder_text: "Template placeholder text",
+  future_copyright: "Copyright year in the future",
 };
 
 /** How an opportunity was arrived at, not where a fact came from. See SOURCE_NAME_LABELS. */

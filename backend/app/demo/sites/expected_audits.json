@@ -94,6 +94,8 @@
       "case": "The listing gives http; the site redirects to https, which the audit follows.",
       "status": "done",
       "findings": [
+        "listing_website_http",
+        "nap_phone_mismatch",
         "no_live_chat",
         "thin_content"
       ],
@@ -117,7 +119,8 @@
         "no_h1",
         "no_live_chat",
         "no_online_booking",
-        "no_structured_data"
+        "no_structured_data",
+        "short_title"
       ],
       "psi_score": 52
     },
@@ -316,6 +319,7 @@
         "no_online_booking",
         "no_section_headings",
         "no_structured_data",
+        "site_builder",
         "thin_content",
         "unlabelled_form_fields"
       ],

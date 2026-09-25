@@ -3483,6 +3483,8 @@ export interface components {
         WebsiteAuditDetail: {
             /** Accessibility Score */
             accessibility_score?: number | null;
+            /** Audit Logic Version */
+            audit_logic_version: number;
             /** Best Practices Score */
             best_practices_score?: number | null;
             /**
@@ -3551,6 +3553,8 @@ export interface components {
         WebsiteAuditSummary: {
             /** Accessibility Score */
             accessibility_score?: number | null;
+            /** Audit Logic Version */
+            audit_logic_version: number;
             /** Best Practices Score */
             best_practices_score?: number | null;
             /**
