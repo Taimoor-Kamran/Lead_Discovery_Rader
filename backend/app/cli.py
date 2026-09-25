@@ -372,6 +372,18 @@ def reset_password(argv: list[str]) -> int:
     from_env = os.environ.get("NEW_PASSWORD")
     if from_env is not None:
         password = from_env
+    elif not sys.stdin.isatty():
+        # No terminal to type into and no NEW_PASSWORD: say why, instead of the bare
+        # EOFError getpass would raise. Until v0.11.2 this is what a documented
+        # `NEW_PASSWORD=... make reset-password` produced, because the Makefile did not
+        # hand the variable into the container.
+        print(
+            "NEW_PASSWORD is not set and there is no terminal to type a password into. "
+            "If you did set NEW_PASSWORD, it did not reach this command: `make "
+            "reset-password` passes it into the container; a bare `docker compose run` "
+            "needs `-e NEW_PASSWORD`. Nothing was changed."
+        )
+        return 2
     else:
         password = getpass.getpass("New password: ")
         if password != getpass.getpass("Repeat new password: "):

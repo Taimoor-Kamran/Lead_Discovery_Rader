@@ -3,6 +3,38 @@
 All notable changes, one section per merged spec. Newest first.
 Format: `## [vX.Y.Z] - YYYY-MM-DD` followed by Added / Changed / Fixed.
 
+## [v0.11.2] - 2026-09-26
+
+### Added
+
+- **`README-WINDOWS.md`**: one path from a clean Windows PC to a review queue with real
+  businesses in it — WSL2 Ubuntu 24.04 + Docker Desktop, the same `make` targets we use.
+  Covers what the testing build is and is not, prerequisites with the versions it was
+  checked against and the WSL2 memory/disk settings, line endings, the three keys (where,
+  cost, what breaks without each), every `.env.prod` value a first-time operator touches,
+  first run with the success output of each step, a guided first search through review,
+  approval and CRM, stopping / backing up / wiping, and a symptom-first troubleshooting
+  section (sleep during a run, ports, dev vs prod projects, `make migrate` without
+  `PROD=1`, WSL2 memory and disk, and what the walkthrough turned up). Parts not run on a
+  fresh Windows PC are marked as such in the document.
+- `.env.prod.example`: `WEB_PORT` and `API_PORT` (the moved-ports fix edits them rather
+  than appending duplicates), and a comment on every value the guide mentions, including
+  why `PLACES_DAILY_CALL_CAP` stays at 200.
+
+### Changed
+
+- The main README's two-route Windows section (WSL2 and PowerShell) is replaced by a link
+  to `README-WINDOWS.md`. The PowerShell route is gone; see the spec's implementation notes.
+
+### Fixed
+
+- `NEW_PASSWORD='...' make reset-password EMAIL=...`, as the README documents, works: the
+  recipe passes the variable into the container (`-e NEW_PASSWORD`, value never on the
+  command line). Before, the container never saw it and the command died with a bare
+  `EOFError`. With no `NEW_PASSWORD` and no terminal the CLI now exits 2 and says why.
+- `specs/v0.10.0.md` was committed with CRLF line endings before `.gitattributes` existed
+  and still checked out that way; renormalized to LF.
+
 ## [v0.11.1] - 2026-09-25
 
 ### Fixed
