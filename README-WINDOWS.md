@@ -358,7 +358,7 @@ can change the line endings, see section 3.)
 
 | Line | What to put there |
 |---|---|
-| `ADMIN_EMAIL=` | Your own e-mail address. It is the account you sign in with. It must not end in `@example.com`; the app refuses to start with one. No e-mail is ever sent to it. |
+| `ADMIN_EMAIL=` | Your own e-mail address. It is the account you sign in with, and no e-mail is ever sent to it. It must be an ordinary address: not `@example.com` (the app refuses to start with one), and not on a reserved ending such as `.local`, `.test`, `.invalid` or `.localhost` (creating the account fails, see *Troubleshooting*). |
 | `GOOGLE_PLACES_API_KEY=` | The `radar-places` key from 5.1. |
 | `PAGESPEED_API_KEY=` | The `radar-pagespeed` key from 5.2. |
 | `BOT_CONTACT=` | Your website or e-mail address. When the app visits a business's homepage it identifies itself and includes this, so a site owner can reach a person. |
@@ -422,8 +422,10 @@ builds everything. Later starts take under a minute.
 make prod-up
 ```
 
-Success: the last lines list the five parts, each ending in **Healthy**, and you get the
-prompt back:
+It prints a great deal while it builds. If your connection is slow you will see many lines
+like `WARN  Tarball download average speed 13 KiB/s ... is below 50 KiB/s`; they are
+harmless. Success: the last lines list the five parts, each ending in **Healthy** (the
+order may differ), and you get the prompt back:
 
 ```text
  ✔ Container radar-prod-redis-1     Healthy
@@ -441,15 +443,19 @@ prompt back:
 make migrate PROD=1
 ```
 
-Success: a list of `Running upgrade ...` lines, then the data sources it registered, and
-the prompt back:
+Success: a list of `INFO ... Running upgrade ...` lines, then the data sources it
+registered — **four** of them — and the prompt back:
 
 ```text
-sources: 3 registered, 0 created
+Synced 4 source(s):
+  google_places        kind=api       enabled=True
+  pagespeed_insights   kind=api       enabled=True
+  openai               kind=api       enabled=True
+  airtable             kind=api       enabled=True
 ```
 
-(See the note on this output under *Troubleshooting* → *"A source count that does not
-match"*.)
+If it says **5** sources and one of them is `demo_fixture`, the command went to the wrong
+database: see *Troubleshooting* → *"`Synced 5 source(s)` with a `demo_fixture` line"*.
 
 **Step 3 — create your administrator account.**
 
@@ -457,13 +463,15 @@ match"*.)
 make seed-admin PROD=1
 ```
 
-Success:
+Success (among a few other lines):
 
 ```text
-Admin you@yourcompany.com created (id 1).
+Admin you@yourcompany.com created (id 80dc2512-1927-45f5-8d92-4d239ff1e582).
 Generated password: ...
-This is shown ONCE and cannot be recovered. Save it now ...
+This is shown ONCE and cannot be recovered. Save it now — if you lose it, use `make reset-password EMAIL=...`.
 ```
+
+The id is a long random code and yours will differ.
 
 **Copy that password somewhere safe now** (a password manager, or on paper). It is not
 shown again. If you lose it, see *Stopping, restarting and starting over*.
@@ -501,12 +509,15 @@ network connection, and the audit stage fails for every business it was working 
    (24 h)* it says *No API calls in the last 24 h.* This is where you will see the traffic
    the search generates.
 2. **Set up the search.** Open **Searches**. Pick an **Industry** (for example
-   *Plumber*), keep **City and state**, and type a **City** and **State** (a US city,
+   *Plumbing*), keep **City and state**, and type a **City** and **State** (a US city,
    for example `Austin` and `TX`). Set **Max results** to `20` and click outside the box.
-3. **Read the estimate** that appears under the form before you run anything: how many
-   Google Places requests the search will make *at most*, how many of today's cap remain,
-   and how many PageSpeed calls to expect. If **Save and run** is greyed out, hover over it:
-   it says why (usually that the daily cap would not cover it).
+3. **Read the estimate** (*Cost estimate for 20 results*) under the form before you run
+   anything. For twenty results it says **Google Places calls (at most) 4 — 200 of 200
+   left today** and **PageSpeed calls (at most) 20**. The 4 is the per-search safety limit
+   from 6.3, not a forecast: a twenty-result search normally makes 1 or 2 Places requests.
+   *AI calls* says *AI is off — this run costs nothing beyond the calls above*. If **Save
+   and run** is greyed out, hover over it: it says why (usually that the daily cap would
+   not cover it).
 4. **Run it.** Click **Save and run**. The search's page opens with four stages:
    **Discovery** (asking Google Places), **Resolution** (merging duplicates),
    **Audit** (visiting each homepage and measuring it with PageSpeed) and
@@ -534,8 +545,9 @@ network connection, and the audit stage fails for every business it was working 
    **Export CSV (new)**: a spreadsheet downloads to your Windows *Downloads* folder, with one
    row per approved business, ready for Excel.
 9. **See the traffic.** Back on **Health**, *External API error rate (24 h)* now shows each
-   service the search used and how many calls it made — `google_places`,
-   `pagespeed_insights` and (for the homepage visits) the website fetches. Google's own
+   service the search used and how many calls it made to it — `google_places` and
+   `pagespeed_insights`. (The visits to each business's homepage are ordinary web page
+   loads, not API calls, and are not counted here.) Google's own
    count is in the Cloud console → *APIs & Services* → *Enabled APIs & services* → click
    the API → *Metrics*. Google's figures can take a few minutes to appear.
 
@@ -552,7 +564,7 @@ All of these run in **Ubuntu**, inside `~/lead-discovery-radar`.
 | **Stop** the app. Your data is kept. | `make prod-down` |
 | **Start** it again, or apply a change you made to `.env.prod` | `make prod-up` |
 | See whether each part is running | `make prod-ps` |
-| Watch what it is doing (press **Ctrl+C** to stop watching; the app keeps running) | `make prod-logs` |
+| Watch what it is doing (press **Ctrl+C** to stop watching; the app keeps running, and the `make: *** ... Error 130` line that follows is normal) | `make prod-logs` |
 | Choose a new password if you lost yours | `make reset-password EMAIL=you@yourcompany.com PROD=1` |
 
 In the reset command, use your own `ADMIN_EMAIL`. It asks for the new password twice.
@@ -567,8 +579,14 @@ comes back by itself once Docker Desktop has started.
 make backup PROD=1
 ```
 
-Success: it prints the file it wrote, for example
-`backups/radar-20260926-143000.dump`. The app also does this every night at 02:00 and keeps
+Success: among some lines of log output, it prints the file it wrote:
+
+```text
+Backup written: /app/backups/radar-20260926-143000.dump (80714 bytes)
+The dump holds the database only. Copy .env.prod somewhere safe separately.
+```
+
+`/app/backups` is the app's name for the `backups` folder inside `~/lead-discovery-radar`. The app also does this every night at 02:00 and keeps
 the newest fourteen.
 
 **Copy the backup off this machine** — that is what makes it a backup. To see the folder
@@ -593,7 +611,8 @@ asks you to type a confirmation first):
 make restore FILE=backups/radar-20260926-143000.dump PROD=1
 ```
 
-Use the name of your own file.
+Use the name of your own file. It asks you to type `RESTORE` and the file name, stops
+the app, restores, and ends with `Restored radar-....dump; api and worker are back up.`
 
 ### Wipe everything and start clean
 
@@ -661,8 +680,10 @@ Get-NetTCPConnection -LocalPort 3000,8000 -State Listen | Select-Object LocalAdd
   itself — usually a second copy of this app. See the next entry.
 - Anything else (for example `node`), close that program, then run `make prod-up` again.
 
-If you cannot close it, you can move the app to other ports: add these lines to the end of
-`.env.prod` and run `make prod-up`. The address then becomes <http://127.0.0.1:3001>.
+If you cannot close it, you can move the app to other ports. Open `.env.prod` with
+`nano .env.prod`, change these five lines so they read as below (each one is already in
+the file), save, and run `make prod-up`. The address then becomes
+<http://127.0.0.1:3001>.
 
 ```text
 WEB_PORT=3001
@@ -694,26 +715,33 @@ make down
 
 Then `make prod-up` again.
 
-### "A source count that does not match", or *"Source: Google Places — not registered yet, run make sync-sources"* on the Searches page
+### `Synced 5 source(s)` with a `demo_fixture` line, `created .env from .env.example`, or `relation "users" does not exist`
 
-**Why.** `make migrate` (or `make sync-sources`, or `make seed-admin`) was run **without**
-`PROD=1`. Without it, the command does not touch your app at all: it quietly creates a
-settings file called `.env` and starts a separate, empty developer database, and does its
-work there. The printed source count (`sources: 3 registered, 3 created`, when you
-expected `0 created` on a second run) belongs to that other database, and your app still
-has no tables or no sources.
+**Why.** `make migrate` (or `make sync-sources`, `make seed-admin`, `make backup` …) was run
+**without** `PROD=1`. Without it, the command does not touch your app at all: it quietly
+creates a settings file called `.env`, starts a separate, empty developer database, and
+does its work there. The tell-tale signs are the first line of its output,
 
-**Fix.** Stop the developer copy it started, then run the command again with `PROD=1`:
+```text
+created .env from .env.example — set JWT_SECRET and ADMIN_EMAIL before using it for real
+```
+
+and a source list of **five**, including `demo_fixture`, where your app has **four**. It may
+also spend a few minutes building something first. Your app is unchanged: if this was your
+first `make migrate`, its database still has no tables, and `make seed-admin PROD=1` fails
+with `relation "users" does not exist`.
+
+**Fix.** Stop the developer copy it started (this does not touch your app or its data),
+then run the command again with `PROD=1`:
 
 ```bash
 make down
 make migrate PROD=1
 ```
 
-The first line of the wrong run said `created .env from .env.example`; that file is
-harmless and can stay.
+The `.env` file it created is harmless and can stay.
 
-### "Refusing to start in environment 'production'", or `make prod-up` says a container is **unhealthy**
+### `make prod-up` ends with `container radar-prod-worker-1 is unhealthy` (or `api`), and "Refusing to start in environment 'production'"
 
 **Why.** Before starting, the app checks `.env.prod` and refuses an unsafe setting. See
 the reasons with:
@@ -726,14 +754,29 @@ make prod-logs
 `ADMIN_EMAIL` is empty or ends in `@example.com`, or `JWT_SECRET` is too short because the
 commands in 6.1 were skipped. Fix the lines it names, then `make prod-up` again.
 
-### `password authentication failed for user "radar"` in `make prod-logs`
+### The sign-in page shows **API health — Status: degraded, Database: down**
+
+The sign-in page has a small *API health* box under the form. If it says *Database: down*,
+signing in fails with *"Couldn't reach the API"*, and `make prod-logs` shows
+`password authentication failed for user "radar"`, then:
 
 **Why.** The database was created with one password and `.env.prod` now has another —
-usually because 6.1 was run a second time after the first start. The database keeps the
-password it was created with.
+usually because the commands in 6.1 were run a second time after the first start. The
+database keeps the password it was created with. Note that `make prod-up` still reports
+every part as **Healthy** in this state; the *API health* box is where it shows.
 
-**Fix.** If you have a copy of the old `.env.prod`, put it back. Otherwise, and only if
-there is nothing in the app you need, wipe and start clean (section 9).
+**Fix.** If you have a copy of the old `.env.prod`, put it back and run `make prod-up`.
+Otherwise, and only if there is nothing in the app you need, wipe and start clean
+(section 9) — and do not run 6.1 again afterwards.
+
+### `ADMIN_EMAIL / ADMIN_PASSWORD are not usable: value is not a valid email address`
+
+Shown by `make seed-admin PROD=1`, usually ending *"The part after the @-sign is a
+special-use or reserved name that cannot be used with email."* The address in
+`ADMIN_EMAIL` ends in a reserved name such as `.local`, `.test`, `.invalid` or
+`.localhost` — common for internal company addresses. The app starts with it but cannot
+create the account. Put an ordinary address in `ADMIN_EMAIL` (`nano .env.prod`), then run
+`make seed-admin PROD=1` again. No restart is needed; nothing is ever e-mailed to it.
 
 ### Docker commands fail: "Cannot connect to the Docker daemon", "docker: command not found", or "The command 'docker' could not be found in this WSL 2 distro"
 
@@ -776,16 +819,25 @@ If the message names `pagespeed_insights` instead, it is the free PageSpeed cap.
 Places part of the search already ran; wait until midnight UTC and run it again, and the
 audit picks up the businesses it skipped.
 
-### "This run has reached its Places safety limit"
+### "Safety limit reached: this run made … 'google_places' call(s)"
 
-The per-search limit (`PLACES_RUN_CALL_CAP_MULTIPLIER`) stopped a search that was making
-far more Places requests than its size needs. That should never happen: please tell us
-which search it was. Do not raise the limit.
+The per-search limit (`PLACES_RUN_CALL_CAP_MULTIPLIER`, see 6.3) stopped a search that was
+making far more Places requests than its size needs; the next request was not sent. The
+message says so itself: a normal run stays well under the limit, so reaching it means the
+run was looping. That should never happen — please tell us which search it was. Do not
+raise the limit.
 
-### The page loads but signing in fails, or it says the API cannot be reached
+### "Couldn't reach the API. Check that the api container is running (`make prod-ps`)." on the sign-in page
 
-Check that the address bar says `http://127.0.0.1:3000`, not `localhost:3000`. If it does,
-run `make prod-ps` and check that `api` says *healthy*.
+**First check the address bar.** If it says `localhost:3000`, that is the cause, and the
+API is fine: the app only accepts `http://127.0.0.1:3000`. On `localhost` the *API health*
+box under the form shows the same message. Close the tab and open
+<http://127.0.0.1:3000>. (We saw exactly this message when signing in on `localhost`
+while everything was healthy.)
+
+If the address is `127.0.0.1:3000`, read the *API health* box: *Database: down* is the
+entry above. Otherwise run `make prod-ps` and check that `api` says *healthy*; if it does
+not, `make prod-logs` says why.
 
 ### Scripts fail with `$'\r': command not found`, `bad interpreter`, or `/usr/bin/env: 'bash\r'`
 
