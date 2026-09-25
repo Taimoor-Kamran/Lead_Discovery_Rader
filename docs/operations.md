@@ -187,6 +187,12 @@ clears; if it comes back later it is a new alert.
   (the api and the worker restart with the new value), then `make crm-check PROD=1` for
   Airtable or a run of a small search for Places.
 - **Dependency advisories:** `make audit` (needs the network); CI runs it on every push.
+- **When a site shows as unreachable:** since v0.12.0 the audit checks this machine's own
+  connection (a TCP connection to `AUDIT_CONNECTIVITY_CHECK_URL`, no request sent) and asks
+  the site a second time, `AUDIT_UNREACHABLE_RECHECK_SECONDS` later, before recording it as
+  down. If this machine's network was down — a laptop that slept mid-run — the audit is
+  stored as *failed* with the reason, produces no finding, and is due again after
+  `AUDIT_FAILED_RETRY_HOURS`.
 
 ## Upgrading to a new version
 
@@ -197,6 +203,10 @@ clears; if it comes back later it is a new alert.
    notes for any that need a value).
 4. `make migrate PROD=1`.
 5. Open **Health**: no red alerts, backup time shown; `make backup-verify PROD=1`.
+6. If the changelog says the release **bumps the audit logic version**, every stored audit
+   now counts as due: the next run of each search re-audits every business it finds,
+   however recently it was last audited, so the new findings appear on the next run rather
+   than after `AUDIT_MAX_AGE_DAYS`. Each run costs its usual Places, PageSpeed and AI calls.
 
 If something is wrong, `make restore FILE=… PROD=1` puts the database back; check out the
 previous tag and `make prod-up` again.

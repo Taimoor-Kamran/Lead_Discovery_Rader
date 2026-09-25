@@ -651,8 +651,11 @@ fails. We confirmed this against the Windows event log on our own machine: twelv
 OpenAI failed between the PC going to sleep at 01:05:47 and waking at 03:08:50. An audit
 of fifty businesses takes twenty-five to thirty minutes, and its time limit counts real
 time, asleep or not, so a PC that sleeps partway through a run produces failed audits.
-Worse, a homepage the app could not load because *your* connection was down can be
-recorded as the business's site being **unreachable**, which is not true.
+Before v0.12.0, a homepage the app could not load because *your* connection was down could
+also be recorded as the business's site being **unreachable**, which is not true. Since
+v0.12.0 the app checks its own connection first and asks the site a second time before it
+says a site is down; a page it could not load because your connection was down is recorded
+as *failed* (a fault on our side), never as *unreachable*.
 
 **Fix.** Keep the PC awake, plugged in and with the lid open, for as long as a search is
 running. Before a run, in **PowerShell** (no admin needed):
@@ -675,7 +678,8 @@ timeouts* — set the *plugged in* values to *Never*.) Closing the lid usually s
 to sleep whatever these say, so keep it open.
 
 **After it has happened**, treat any business audited while the PC slept as not audited:
-do not judge it by an *unreachable* or *failed* audit. Those businesses are audited again
+do not judge it by a *failed* audit (or, for audits made before v0.12.0, an *unreachable*
+one). Those businesses are audited again
 when you run the search again, but only once enough time has passed: 6 hours after a
 *failed* audit, a day after an *unreachable* one (a run before then leaves them as they
 are). Running the search again repeats its Places requests; the estimate on the form says

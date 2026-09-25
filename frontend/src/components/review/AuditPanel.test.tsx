@@ -13,6 +13,7 @@ const AUDIT = {
   http_status: 200,
   finding_codes: ["no_contact_on_homepage", "slow_mobile"],
   rules_version: "audit-1",
+  audit_logic_version: 1,
   started_at: null,
   finished_at: null,
   created_at: "2026-09-20T10:00:00Z",

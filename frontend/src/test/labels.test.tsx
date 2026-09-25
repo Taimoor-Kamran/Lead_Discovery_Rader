@@ -144,6 +144,7 @@ const AUDIT = {
   http_status: 200,
   finding_codes: ["no_https", "no_h1"],
   rules_version: "audit-2",
+  audit_logic_version: 2,
   started_at: "2026-09-20T10:00:00Z",
   finished_at: "2026-09-20T10:00:00Z",
   created_at: "2026-09-20T10:00:00Z",
