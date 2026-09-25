@@ -12,7 +12,7 @@ values you change are the ones the guide tells you to change.
   reach it: the app listens on `127.0.0.1`, which is this machine and nothing else.
 - It is **not backed up off this machine.** It makes a database backup every night, but
   that backup is a file on the same disk. If the disk fails or you delete the folder, the
-  data is gone. Section 8 shows how to copy a backup somewhere else.
+  data is gone. Section 9 shows how to copy a backup somewhere else.
 - **Do not give it a public address.** Do not forward a router port to it, put it behind a
   tunnel (ngrok, Cloudflare Tunnel and so on) or change the `127.0.0.1` addresses. It was
   not built or hardened to face the internet.
@@ -36,12 +36,13 @@ A command block labelled `powershell` goes in PowerShell; one labelled `bash` go
 Ubuntu. Copy the whole block, paste it with a right-click, and press **Enter**. Wait until
 the command has finished (you get the prompt back) before you run the next one.
 
-> **What has and has not been tested.** Every Ubuntu command in this guide was run, in
-> order, from a fresh copy of the code, on a clean Ubuntu 24.04 system — the same system
-> section 2 installs. It was **not** run on a freshly set-up Windows PC. The places where
-> Windows itself is involved (installing WSL2 and Docker Desktop, Windows settings,
-> PowerShell commands, the browser on Windows) are marked **Not yet tested on a fresh
-> Windows PC** — expect friction there first, and tell us what you hit.
+> **What has and has not been tested.** The Ubuntu commands in sections 2, 4, 6, 7 and 9
+> and the troubleshooting fixes were run, in order, from a fresh copy of the code, on a
+> clean Ubuntu 24.04 system — the same system section 2 installs — with a real browser
+> signing in at `127.0.0.1:3000`. This guide was **not** followed on a freshly set-up
+> Windows PC, and the first search in section 8 was not run from it (it needs real,
+> billed Google keys). Every place that was not tested is marked **Not yet tested** —
+> expect friction there first, and tell us what you hit.
 
 ## 1. Prerequisites
 
@@ -52,7 +53,8 @@ the command has finished (you get the prompt back) before you run the next one.
   section 1.4; the first build will be slow and the rest of the PC sluggish while it runs.
 - **30 GB of free disk space** on drive C:. The app itself takes about 5 GB once built;
   the rest is room for Docker's build cache, the database and backups.
-- An internet connection. The first build downloads roughly 2 GB.
+- An internet connection. The first build downloads 1 to 2 GB; on a slow connection it
+  took us about ten minutes.
 - **Virtualisation switched on** in the PC's firmware (BIOS/UEFI). Most PCs sold since
   2018 have it on. Section 1.3 says how to check.
 
@@ -67,9 +69,9 @@ the command has finished (you get the prompt back) before you run the next one.
 | **Make** | Every command in this project is a short `make ...` command. Installed inside Ubuntu in section 2. | GNU Make 4.3 |
 
 These are the versions on the machine this project is built and run on (Windows 11 Pro,
-build 26200). Newer versions should work. **Docker Desktop older than 4.27 will not
-work**: it ships Docker Compose older than 2.24, which cannot read the app's configuration
-file.
+build 26200). Newer versions should work. **Docker Compose must be 2.24 or newer**: older
+versions cannot read the app's configuration file. Section 2 shows how to check; any
+current Docker Desktop has it.
 
 ### 1.1 Why Ubuntu, and not plain Windows
 
@@ -157,7 +159,7 @@ wsl --install -d Ubuntu-24.04
 ```
 
 Restart the PC when it finishes. Ubuntu then opens by itself (if it does not, open
-**Ubuntu 24.04** from the Start menu) and asks you to choose a **username and password**.
+**Ubuntu 24.04 LTS** from the Start menu) and asks you to choose a **username and password**.
 They are only for Ubuntu; they do not need to match your Windows login. When you type the
 password nothing appears on screen; that is normal. Remember it: Ubuntu asks for it
 whenever a command starts with `sudo`.
@@ -180,7 +182,9 @@ Check that Ubuntu can see Docker. This prints a version number:
 docker compose version
 ```
 
-Success looks like `Docker Compose version v2.40.3-desktop.1` (your number may be higher).
+Success looks like `Docker Compose version v2.40.3-desktop.1`. The number must be
+**2.24 or higher**; if it is lower, update Docker Desktop (its *Settings* → *Software
+updates*).
 If it says `docker: command not found` or `The command 'docker' could not be found in this
 WSL 2 distro`, the WSL integration switch above is not on — see *Troubleshooting*.
 
@@ -215,7 +219,9 @@ cd lead-discovery-radar
 git checkout v0.11.2
 ```
 
-`git checkout v0.11.2` picks the exact version this guide was written for. It prints a
+`git checkout v0.11.2` picks the exact version this guide was written for. (Not yet
+tested: this version is published when this guide is approved, so the walkthrough used
+the same code under its working name.) It prints a
 note about a *"detached HEAD"*; that is expected and harmless. If it says
 `pathspec 'v0.11.2' did not match`, we have not published that version yet: tell us, and
 do not continue on a different version.
@@ -227,7 +233,7 @@ git ls-files --eol | grep -c 'w/crlf'
 ```
 
 Every command from here on is typed in the **Ubuntu** window, **inside this folder**. If
-you close the window, open **Ubuntu 24.04** again and run this first:
+you close the window, open **Ubuntu 24.04 LTS** again and run this first:
 
 ```bash
 cd ~/lead-discovery-radar
@@ -284,6 +290,7 @@ app shows the expected number on the search form before you run anything.
 
 **Without it.** Nothing can be found. The app starts and you can sign in, but a search
 fails at its first stage (*Discovery*) because Google refuses a request with no key.
+(*Not yet tested:* this is what the code does; the walkthrough did not try it.)
 
 ### 5.2 PageSpeed Insights API — required, free
 
@@ -304,7 +311,8 @@ one call per business website it audits. The key travels in a request header
 
 **Without it.** Searches still run and every other audit check still works, but the
 PageSpeed scores show as *unknown* for every business, with the reason recorded. They are
-never shown as zero.
+never shown as zero. (*Not yet tested:* this is what the code does; the walkthrough did
+not try it.)
 
 ### 5.3 OpenAI — optional, leave it out to start
 
@@ -379,6 +387,7 @@ about:
 | `PSI_DAILY_CALL_CAP=` | `200` | The same kind of daily guard for PageSpeed. PageSpeed is free, but 200 is enough for three 60-business searches a day. |
 | `AI_PROVIDER=` | `disabled` | No AI; see 5.3. Leave every `AI_...` and `OPENAI_...` line as it is. |
 | `CRM_DESTINATION=` | `csv` | Approved leads go to a spreadsheet you download from the *CRM* page. No account needed. |
+| `WEB_PORT=`, `API_PORT=` | `3000`, `8000` | The ports the app uses on `127.0.0.1`. Change them only if *Troubleshooting* tells you to. |
 | `TIMEZONE=` | `UTC` | The clock for the nightly backup (02:00) and clean-up (03:00). You may set your own zone, for example `America/Chicago`. |
 
 ### 6.4 `PLACES_DAILY_CALL_CAP` — the one setting that protects your bill
@@ -495,11 +504,12 @@ An empty review queue tells you nothing, so here is one small, complete run — 
 industry, one city, twenty businesses — from search to CRM. It costs one or two Places
 requests and up to twenty (free) PageSpeed calls.
 
-> **Not yet tested from this guide.** This section needs real Google keys, and the
-> walkthrough of this guide was done without spending on them. The screens and buttons
-> named here are the ones the app's automated tests click through, and the product has
-> been run this way with real keys on the builder's machine — but not step by step from
-> this text. It is the first thing to check when you follow it.
+> **Not yet tested from this guide.** This section needs real, billed Google keys, and the
+> walkthrough of this guide made no calls to Google. Steps 1 to 3 were checked on screen
+> (they spend nothing). From step 4 on, the screen and button names are taken from the
+> app itself and from its automated tests, which run the review, approve and CRM screens
+> on made-up demo businesses — but nobody has yet followed these steps, as written, with
+> a real search. It is the first thing to check when you follow it.
 
 **Before you start the search**, make sure the PC will not go to sleep for the next half
 hour: see *Troubleshooting* → *"Audits failed after the PC slept"*. A sleeping PC drops its
@@ -586,8 +596,8 @@ Backup written: /app/backups/radar-20260926-143000.dump (80714 bytes)
 The dump holds the database only. Copy .env.prod somewhere safe separately.
 ```
 
-`/app/backups` is the app's name for the `backups` folder inside `~/lead-discovery-radar`. The app also does this every night at 02:00 and keeps
-the newest fourteen.
+`/app/backups` is the app's name for the `backups` folder inside `~/lead-discovery-radar`.
+The app also does this every night at 02:00 and keeps the newest fourteen.
 
 **Copy the backup off this machine** — that is what makes it a backup. To see the folder
 in Windows Explorer:
@@ -637,10 +647,12 @@ Find the entry by what you see.
 
 **Why.** When a Windows laptop goes to sleep (Modern Standby), Windows drops its network
 connection, even though the app keeps running. Every call the app was in the middle of
-fails. We confirmed this against the Windows event log on our own machine: twelve calls
-failed between the PC going to sleep at 01:05:47 and waking at 03:08:50. An audit of
-fifty businesses takes twenty-five to thirty minutes, and its time limit counts real time,
-asleep or not, so a PC that sleeps partway through a run produces failed audits.
+fails. We confirmed this against the Windows event log on our own machine: twelve calls to
+OpenAI failed between the PC going to sleep at 01:05:47 and waking at 03:08:50. An audit
+of fifty businesses takes twenty-five to thirty minutes, and its time limit counts real
+time, asleep or not, so a PC that sleeps partway through a run produces failed audits.
+Worse, a homepage the app could not load because *your* connection was down can be
+recorded as the business's site being **unreachable**, which is not true.
 
 **Fix.** Keep the PC awake, plugged in and with the lid open, for as long as a search is
 running. Before a run, in **PowerShell** (no admin needed):
@@ -660,8 +672,14 @@ powercfg /change monitor-timeout-ac 10
 
 (You can do the same in *Settings → System → Power & battery → Screen, sleep & hibernate
 timeouts* — set the *plugged in* values to *Never*.) Closing the lid usually sends a laptop
-to sleep whatever these say, so keep it open. Then run the search again: a business whose
-audit failed is audited again on the next run.
+to sleep whatever these say, so keep it open.
+
+**After it has happened**, treat any business audited while the PC slept as not audited:
+do not judge it by an *unreachable* or *failed* audit. Those businesses are audited again
+when you run the search again, but only once enough time has passed: 6 hours after a
+*failed* audit, a day after an *unreachable* one (a run before then leaves them as they
+are). Running the search again repeats its Places requests; the estimate on the form says
+how many.
 
 > **Not yet tested on a fresh Windows PC.** The sleep failure itself was observed on
 > Windows 11; the `powercfg` commands above were not run as part of the walkthrough.
@@ -676,8 +694,8 @@ audit failed is audited again on the next run.
 Get-NetTCPConnection -LocalPort 3000,8000 -State Listen | Select-Object LocalAddress, LocalPort, OwningProcess, @{n='Program'; e={(Get-Process -Id $_.OwningProcess).ProcessName}}
 ```
 
-- If *Program* is **`com.docker.backend`** or **`wslrelay`**, the port is held by Docker
-  itself — usually a second copy of this app. See the next entry.
+- If *Program* is **`com.docker.backend`**, the port is held by something running in
+  Docker — usually a second copy of this app. See the next entry.
 - Anything else (for example `node`), close that program, then run `make prod-up` again.
 
 If you cannot close it, you can move the app to other ports. Open `.env.prod` with
@@ -815,9 +833,10 @@ If it still fails, send us the last 30 lines of the output.
 and nothing was charged. The message says you can raise the cap; please don't. Wait until
 midnight UTC and run the search again.
 
-If the message names `pagespeed_insights` instead, it is the free PageSpeed cap. The
-Places part of the search already ran; wait until midnight UTC and run it again, and the
-audit picks up the businesses it skipped.
+If the message names `pagespeed_insights` instead, it is the free PageSpeed cap, usually
+reached in the *Audit* stage. The businesses already found are kept. Wait until midnight
+UTC before running the search again; running it repeats its Places requests (the form's
+estimate says how many).
 
 ### "Safety limit reached: this run made … 'google_places' call(s)"
 
