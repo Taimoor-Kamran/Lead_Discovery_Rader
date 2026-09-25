@@ -160,6 +160,12 @@ class Settings(BaseSettings):
     ai_page_text_max_chars: int = 8_000
     ai_timeout_seconds: float = 60.0
     ai_max_retries: int = 2
+    # After the SDK's own quick retries, a connection that could not be made at all is
+    # tried again after each of these pauses (spec v0.11.1). Timeouts, auth and quota
+    # errors are not. Empty turns it off.
+    ai_connection_retry_delays_seconds: Annotated[list[float], NoDecode] = Field(
+        default_factory=lambda: [5.0, 10.0, 20.0]
+    )
     ai_raw_output_max_chars: int = 20_000
     # `buying_intent = explicit` survives the guardrails only when a valid evidence quote
     # contains one of these. Anything else is `none_detected`: intent is never guessed.
@@ -287,6 +293,7 @@ class Settings(BaseSettings):
         "audit_booking_industries",
         "ai_explicit_intent_patterns",
         "audit_unreachable_backoff_days",
+        "ai_connection_retry_delays_seconds",
         mode="before",
     )
     @classmethod
