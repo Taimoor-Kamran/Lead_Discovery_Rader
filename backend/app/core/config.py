@@ -84,6 +84,14 @@ class Settings(BaseSettings):
     # for the pipeline to re-run it.
     audit_content_ttl_days: int = 90
     audit_max_age_days: int = 30
+    # A `failed` audit is our own fault, not a fact about the site, so it is due again
+    # after this many hours rather than hiding the business for AUDIT_MAX_AGE_DAYS.
+    audit_failed_retry_hours: int = 6
+    # An `unreachable` site is re-tried after these many days, one step per consecutive
+    # unreachable audit; past the last step it waits AUDIT_MAX_AGE_DAYS like any other.
+    audit_unreachable_backoff_days: Annotated[list[int], NoDecode] = Field(
+        default_factory=lambda: [1, 3, 7]
+    )
     audit_slow_mobile_score: int = 50
     audit_stale_copyright_years: int = 3
     # Fewer words of visible homepage text than this is reported as `thin_content`.
@@ -278,6 +286,7 @@ class Settings(BaseSettings):
         "resolution_source_priority",
         "audit_booking_industries",
         "ai_explicit_intent_patterns",
+        "audit_unreachable_backoff_days",
         mode="before",
     )
     @classmethod
