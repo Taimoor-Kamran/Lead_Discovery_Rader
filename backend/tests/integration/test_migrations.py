@@ -285,3 +285,48 @@ def test_upgrade_head_then_downgrade_base_on_an_empty_database(database_url: str
         }
     assert EXPECTED_ENUMS & enums_after == set()
     engine.dispose()
+
+
+def test_the_logic_version_is_backfilled_from_the_rules_version(database_url: str) -> None:
+    """`0011_audit_logic_version` reads `audit-3` as 3, and anything else as 0 (always due)."""
+    url = _fresh_database(database_url)
+    config = alembic_config(url)
+    command.upgrade(config, "0010_job_run_heartbeat")
+    engine = create_engine(url)
+    with engine.begin() as connection:
+        business_id = uuid.uuid4()
+        connection.execute(
+            text(
+                "INSERT INTO businesses (id, display_name, website_kind, business_status) "
+                "VALUES (:id, 'Backfill Plumbing', 'own_site', 'operational')"
+            ),
+            {"id": business_id},
+        )
+        for rules_version in ("audit-3", "audit-2", "handwritten"):
+            connection.execute(
+                text(
+                    "INSERT INTO website_audits (id, business_id, url_audited, status, checks, "
+                    "tech_stack, findings, rules_version) VALUES (:id, :business, "
+                    "'https://x.invalid/', 'done', '{}', '{}', '[]', :rules)"
+                ),
+                {"id": uuid.uuid4(), "business": business_id, "rules": rules_version},
+            )
+    engine.dispose()
+
+    command.upgrade(config, "head")
+    engine = create_engine(url)
+    with engine.connect() as connection:
+        rows: dict[str, int] = {
+            row[0]: row[1]
+            for row in connection.execute(
+                text("SELECT rules_version, audit_logic_version FROM website_audits")
+            )
+        }
+    engine.dispose()
+    assert rows == {"audit-3": 3, "audit-2": 2, "handwritten": 0}
+
+    command.downgrade(config, "0010_job_run_heartbeat")
+    engine = create_engine(url)
+    assert "audit_logic_version" not in _columns(engine, "website_audits")
+    engine.dispose()
+    command.upgrade(config, "head")

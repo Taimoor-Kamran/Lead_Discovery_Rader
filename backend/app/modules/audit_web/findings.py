@@ -20,7 +20,8 @@ from datetime import datetime
 from typing import Any
 
 from app.modules.audit_web.checks import Checks, clip, value_of
-from app.modules.audit_web.listing import MISMATCH, name_words, text_names_business
+from app.modules.audit_web.listing import MISMATCH, text_names_business
+from app.modules.normalization import names
 from app.modules.normalization.schemas import WebsiteKind
 from app.modules.normalization.web import builder_host
 
@@ -711,9 +712,11 @@ def _placeholder_phrase(checks: Checks, context: FindingContext) -> str | None:
     phrases = value_of(checks, "placeholder_text")
     if not isinstance(phrases, list):
         return None
-    own = set(name_words(context.business_name))
+    # Every word of the name, generic ones included: "Your Company Store" really is
+    # called "Your Company", and its footer saying so is not a placeholder.
+    own = set((names.normalize_name(context.business_name) or "").split())
     for phrase in phrases:
-        words = [word for word in str(phrase).lower().split() if word not in ("your",)]
+        words = str(phrase).lower().split()
         if own and all(word in own for word in words):
             continue
         return str(phrase)

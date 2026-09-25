@@ -7,10 +7,11 @@ Before v0.11.1 any audit younger than AUDIT_MAX_AGE_DAYS counted as fresh, so a 
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.modules.audit_web.models import AuditStatus
+from app.modules.audit_web.models import AUDIT_LOGIC_VERSION, AuditStatus, WebsiteAudit
 from app.modules.audit_web.service import needs_audit
 from app.modules.businesses.models import Business
 from tests.factories import make_audit
@@ -158,4 +159,33 @@ def test_the_backoff_comes_from_settings(
     monkeypatch.setenv("AUDIT_UNREACHABLE_BACKOFF_DAYS", "2, 5")
     get_settings.cache_clear()
     add_audits(db, business, (AuditStatus.unreachable, timedelta(days=1, hours=12)))
+    assert not needs_audit(db, business, now=NOW)
+
+
+# --- the logic version (v0.12.0) ----------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "status",
+    [AuditStatus.done, AuditStatus.skipped, AuditStatus.unreachable, AuditStatus.failed],
+)
+def test_an_audit_written_by_older_logic_is_due_at_once(
+    db: Session, business: Business, status: AuditStatus
+) -> None:
+    """An hour old is as good as never audited when the checks have changed since."""
+    add_audits(db, business, (status, timedelta(hours=1)))
+    latest = db.scalars(select(WebsiteAudit).where(WebsiteAudit.business_id == business.id)).one()
+    latest.audit_logic_version = AUDIT_LOGIC_VERSION - 1
+    db.flush()
+
+    assert needs_audit(db, business, now=NOW)
+
+
+def test_an_audit_written_by_the_current_logic_keeps_its_schedule(
+    db: Session, business: Business
+) -> None:
+    add_audits(db, business, (AuditStatus.done, timedelta(hours=1)))
+    latest = db.scalars(select(WebsiteAudit).where(WebsiteAudit.business_id == business.id)).one()
+
+    assert latest.audit_logic_version == AUDIT_LOGIC_VERSION
     assert not needs_audit(db, business, now=NOW)
