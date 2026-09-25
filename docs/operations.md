@@ -204,9 +204,12 @@ clears; if it comes back later it is a new alert.
 4. `make migrate PROD=1`.
 5. Open **Health**: no red alerts, backup time shown; `make backup-verify PROD=1`.
 6. If the changelog says the release **bumps the audit logic version**, every stored audit
-   now counts as due: the next run of each search re-audits every business it finds,
-   however recently it was last audited, so the new findings appear on the next run rather
-   than after `AUDIT_MAX_AGE_DAYS`. Each run costs its usual Places, PageSpeed and AI calls.
+   now counts as due, however recent, so the new findings appear on the next audit run
+   rather than after `AUDIT_MAX_AGE_DAYS`. Two ways to get that run:
+   - re-run a saved search — this spends Places calls on discovery before it audits;
+   - `POST /api/v1/jobs/{job_run_id}/audit` with a search's latest *resolution* run id, as
+     `tech_admin` or `admin`, with an `Idempotency-Key` header. No Places calls; it still
+     spends PageSpeed and AI calls. One call per search. There is no UI for this yet.
 
 If something is wrong, `make restore FILE=… PROD=1` puts the database back; check out the
 previous tag and `make prod-up` again.

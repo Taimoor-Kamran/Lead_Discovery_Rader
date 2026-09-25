@@ -5,9 +5,10 @@ Format: `## [vX.Y.Z] - YYYY-MM-DD` followed by Added / Changed / Fixed.
 
 ## [v0.12.0] - 2026-09-26
 
-**Bumps the audit logic version to 4.** Every stored audit counts as due: the next run of
-each search re-audits every business it finds, so the new findings appear then, not in 30
-days.
+**Bumps the audit logic version to 4.** Every stored audit counts as due, so the next audit
+run re-audits every business it considers, not in 30 days. Re-running a saved search does
+that but spends Places calls; `POST /api/v1/jobs/{job_run_id}/audit` on a search's latest
+resolution run does it without (API only; see `docs/operations.md` → *Upgrading*).
 
 ### Fixed — findings that stated something false about a business
 
