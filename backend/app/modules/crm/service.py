@@ -877,6 +877,8 @@ def get_crm_lead(session: Session, crm_lead_id: uuid.UUID) -> CrmLead:
 
 
 def read_lead(session: Session, lead: CrmLead, business: Business | None = None) -> CrmLeadRead:
+    from app.modules.discovery import providers
+
     row = business or session.get(Business, lead.business_id)
     assert row is not None  # the FK cascades
     services = [
@@ -919,6 +921,9 @@ def read_lead(session: Session, lead: CrmLead, business: Business | None = None)
         services=services,
         created_at=lead.created_at,
         updated_at=lead.updated_at,
+        data_providers=providers.data_providers(session, [lead.business_id]).get(
+            lead.business_id, []
+        ),
     )
 
 

@@ -18,11 +18,13 @@ BOT_USER_AGENT_NAME = "LeadDiscoveryRadarBot/0.4"
 
 # The response fields we ask Places for. Anything not listed here is never returned, so
 # widening this string is the only way to widen what we store — and it changes the SKU.
+# `places.attributions` (v0.11.1) is billed in the Essentials IDs Only SKU, below the rest,
+# so it does not change what a call costs; its providers must be shown with the result.
 DEFAULT_PLACES_FIELD_MASK = (
     "places.id,places.displayName,places.formattedAddress,places.addressComponents,"
     "places.location,places.nationalPhoneNumber,places.internationalPhoneNumber,"
     "places.websiteUri,places.businessStatus,places.types,places.primaryType,"
-    "places.rating,places.userRatingCount,nextPageToken"
+    "places.rating,places.userRatingCount,places.attributions,nextPageToken"
 )
 
 

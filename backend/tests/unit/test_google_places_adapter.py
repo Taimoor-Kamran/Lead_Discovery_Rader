@@ -559,6 +559,13 @@ def test_the_default_field_mask_asks_for_rating_and_review_count_and_nothing_ric
     assert not {"places.reviews", "places.editorialSummary"} & set(fields)
 
 
+def test_the_default_field_mask_asks_for_the_providers_that_must_be_shown() -> None:
+    """v0.11.1: `attributions` are data providers Google requires shown with the result."""
+    from app.core.config import DEFAULT_PLACES_FIELD_MASK
+
+    assert "places.attributions" in DEFAULT_PLACES_FIELD_MASK.split(",")
+
+
 def test_rating_and_review_count_are_copied_verbatim(adapter: GooglePlacesAdapter) -> None:
     candidate = adapter.normalize(raw_doc({"id": "place-1", "rating": 4.6, "userRatingCount": 11}))
 

@@ -7,6 +7,7 @@ from typing import Any, Literal
 from pydantic import BaseModel
 
 from app.modules.crm.models import CrmLeadStatus, CrmSyncAction, CrmSyncStatus
+from app.modules.discovery.schemas import DataProviderRead
 
 
 class CrmCheckRead(BaseModel):
@@ -64,6 +65,8 @@ class CrmLeadRead(BaseModel):
     services: list[str]
     created_at: datetime
     updated_at: datetime
+    # Third-party data providers Places requires shown with the business (v0.11.1).
+    data_providers: list[DataProviderRead] = []
 
 
 class CrmLeadStatusRead(BaseModel):

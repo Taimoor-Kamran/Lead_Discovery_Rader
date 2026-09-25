@@ -22,6 +22,7 @@ import {
 import { addSuppression, ApiError, getSuppressions, liftSuppression, type SuppressionRead } from "@/lib/api";
 import { loadFailed } from "@/lib/errors";
 import { formatDateTime } from "@/lib/format";
+import { GoogleMapsAttribution, distinctProviders } from "@/components/GoogleMapsAttribution";
 
 export function Suppressions() {
   const { show } = useToast();
@@ -171,6 +172,10 @@ export function Suppressions() {
             ))}
           </TBody>
         </Table>
+        {/* A business name here is Places data: attributed in the table's container (v0.11.1). */}
+        {items.some((item) => item.business_name) ? (
+          <GoogleMapsAttribution providers={distinctProviders(items)} className="sticky left-0 border-t border-line" />
+        ) : null}
       </TableWrap>
     </div>
   );

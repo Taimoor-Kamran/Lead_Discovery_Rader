@@ -36,6 +36,7 @@ import { useAuth } from "@/lib/auth";
 import { loadFailed } from "@/lib/errors";
 import { CRM_STATUS_LABELS, formatDateTime, place } from "@/lib/format";
 import { canManageCrm } from "@/lib/roles";
+import { GoogleMapsAttribution, distinctProviders } from "@/components/GoogleMapsAttribution";
 
 /** Saves a blob through the browser. Replaceable so tests can watch it. */
 export let saveFile: (filename: string, blob: Blob) => void = (filename, blob) => {
@@ -355,6 +356,10 @@ function LeadTable({
             )}
           </TBody>
         </Table>
+        {/* The business names are Places data: attributed in the table's container (v0.11.1). */}
+        {items.length ? (
+          <GoogleMapsAttribution providers={distinctProviders(items)} className="sticky left-0 border-t border-line" />
+        ) : null}
       </TableWrap>
     </section>
   );

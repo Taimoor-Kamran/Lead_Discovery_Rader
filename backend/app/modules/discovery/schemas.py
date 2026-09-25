@@ -76,3 +76,15 @@ def candidate_fields(candidate: Candidate) -> dict[str, Any]:
         "lat": candidate.lat,
         "lng": candidate.lng,
     }
+
+
+class DataProviderRead(BaseModel):
+    """A third-party data provider the source says must be shown with its result.
+
+    Places returns these as `attributions[]` ("A set of data provider that must be shown
+    with this result"); they are shown beside the Google Maps attribution wherever the
+    business's Places data is (spec v0.11.1). Most places carry none.
+    """
+
+    provider: str
+    provider_uri: str | None

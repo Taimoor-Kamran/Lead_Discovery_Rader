@@ -1,6 +1,7 @@
 "use client";
 
 import { SafeLink } from "@/components/SafeLink";
+import { GoogleMapsAttribution } from "@/components/GoogleMapsAttribution";
 import { Card, Disclosure, Table, TBody, Td, Th, THead, Tr } from "@/components/ui";
 import type { ReviewDetail } from "@/lib/api";
 import { formatDateTime, formatPhone, listingRating, orUnknown, place } from "@/lib/format";
@@ -105,6 +106,8 @@ export function BusinessFacts({ detail }: { detail: ReviewDetail }) {
           ) : null}
         </Disclosure>
       </div>
+      {/* The facts above are Places data: attributed at the bottom of their card (v0.11.1). */}
+      <GoogleMapsAttribution providers={detail.data_providers} className="-mx-2.5 mt-2" />
     </Card>
   );
 }

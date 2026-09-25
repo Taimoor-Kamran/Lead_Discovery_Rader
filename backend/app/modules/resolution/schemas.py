@@ -8,7 +8,7 @@ from typing import Any, Literal
 from pydantic import BaseModel
 
 from app.modules.businesses.schemas import BusinessSummary
-from app.modules.discovery.schemas import DiscoveredRecordSummary
+from app.modules.discovery.schemas import DataProviderRead, DiscoveredRecordSummary
 from app.modules.resolution.models import MatchCandidateStatus
 
 
@@ -36,6 +36,8 @@ class MatchCandidateDetail(BaseModel):
     business_id: uuid.UUID
     record: DiscoveredRecordSummary | None
     business: BusinessSummary | None
+    # Third-party data providers Places requires shown with either side (v0.11.1).
+    data_providers: list[DataProviderRead] = []
 
 
 class MatchDecisionRequest(BaseModel):

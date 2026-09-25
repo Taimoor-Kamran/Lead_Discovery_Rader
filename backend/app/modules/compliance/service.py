@@ -19,6 +19,7 @@ from app.modules.audit import service as audit
 from app.modules.businesses.models import Business
 from app.modules.compliance.models import Suppression, SuppressionSource
 from app.modules.compliance.schemas import SuppressionCreate, SuppressionRead
+from app.modules.discovery.schemas import DataProviderRead
 from app.modules.normalization.phones import to_e164
 from app.modules.normalization.web import parse_website
 
@@ -244,14 +245,29 @@ def list_suppressions(
     if len(rows) > limit:
         rows = rows[:limit]
         next_cursor = encode_cursor(rows[-1].created_at, rows[-1].id)
-    names = _business_names(session, [row.business_id for row in rows if row.business_id])
+    from app.modules.discovery.providers import data_providers
+
+    business_ids = [row.business_id for row in rows if row.business_id]
+    names = _business_names(session, business_ids)
+    providers = data_providers(session, business_ids)
     return Page[SuppressionRead](
-        items=[read(row, names.get(row.business_id) if row.business_id else None) for row in rows],
+        items=[
+            read(
+                row,
+                names.get(row.business_id) if row.business_id else None,
+                providers.get(row.business_id, []) if row.business_id else [],
+            )
+            for row in rows
+        ],
         next_cursor=next_cursor,
     )
 
 
-def read(row: Suppression, business_name: str | None = None) -> SuppressionRead:
+def read(
+    row: Suppression,
+    business_name: str | None = None,
+    data_providers: list[DataProviderRead] | None = None,
+) -> SuppressionRead:
     return SuppressionRead(
         id=row.id,
         business_id=row.business_id,
@@ -265,6 +281,7 @@ def read(row: Suppression, business_name: str | None = None) -> SuppressionRead:
         lifted_at=row.lifted_at,
         lifted_by=row.lifted_by,
         active=row.lifted_at is None,
+        data_providers=data_providers or [],
     )
 
 

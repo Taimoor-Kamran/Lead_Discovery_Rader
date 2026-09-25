@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { GoogleMapsAttribution, distinctProviders } from "@/components/GoogleMapsAttribution";
 import { SafeLink } from "@/components/SafeLink";
 import {
   Badge,
@@ -203,6 +204,10 @@ export function QueueTable({
           })}
         </TBody>
       </Table>
+      {/* Every row is Places data; the attribution sits in the same container (v0.11.1). */}
+      {items.length ? (
+        <GoogleMapsAttribution providers={distinctProviders(items)} className="sticky left-0 border-t border-line" />
+      ) : null}
     </TableWrap>
   );
 }
