@@ -292,9 +292,10 @@ def build_places_adapter(
     from app.modules.adapters.google_places.client import build_client
 
     return GooglePlacesAdapter(
-        client_factory=lambda job_run_id: build_client(
+        client_factory=lambda job_run_id, max_calls: build_client(
             GooglePlacesAdapter.name,
             job_run_id=job_run_id,
+            max_calls=max_calls,
             sleeper=clock.sleep,
             clock=clock,
             redis_client=redis_client,

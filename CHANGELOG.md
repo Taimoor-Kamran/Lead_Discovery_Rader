@@ -3,6 +3,104 @@
 All notable changes, one section per merged spec. Newest first.
 Format: `## [vX.Y.Z] - YYYY-MM-DD` followed by Added / Changed / Fixed.
 
+## [v0.11.0] - 2026-09-23
+
+### Added
+
+- **Page-quality counts from the homepage already fetched** — no new request, no key:
+  images with no `alt` attribute (`images_without_alt`, quoting the first three tags),
+  form fields with no associated label (`unlabelled_form_fields`), visible word count
+  below `AUDIT_THIN_CONTENT_WORDS` (`thin_content`), and heading structure
+  (`no_section_headings`, `heading_level_skipped`). Each is a count with its evidence,
+  never a judgement, and all map to `website_design`.
+- **Live chat detection and a fifth service.** Intercom, Drift, Tawk.to, Crisp, HubSpot
+  chat, Zendesk, Tidio, LiveChat and Facebook Customer Chat are recognised by script host;
+  a homepage with none produces `no_live_chat`, which maps to the new **Chat assistant**
+  service `ai_chat_setup`.
+- **`builder_subdomain`**: a homepage *served from* a website-builder subdomain is a
+  `website_design` signal. The same builder on the business's own domain is not.
+- **PageSpeed accessibility and best-practices scores**, requested in the same call as
+  performance and stored on `website_audits` (`accessibility_score`,
+  `best_practices_score`, migration `0009_deeper_audit`). Below
+  `AUDIT_QUALITY_SCORE_THRESHOLD` (90) they produce `low_accessibility_score` /
+  `low_best_practices_score`, graded `medium` below `AUDIT_QUALITY_SCORE_MEDIUM_BELOW` (70)
+  and `low` from there up to 90. The lead page's Speed block is now **Speed and quality**.
+  Verified live with a key; the test fixture is a recorded response
+  (`scripts/psi_smoke.py --record`, new).
+- **Listing rating and review count** (`places.rating`, `places.userRatingCount` in the
+  field mask), stored on `businesses` through survivorship with per-field provenance, shown
+  in the facts panels and as a review-count chip in the review queue. Fewer than
+  `PLACES_FEW_REVIEWS` (20) produces `few_reviews`, mapped to `seo_gbp`, citing the
+  listing's own page. `reviews` and `editorialSummary` are never requested.
+- The label guard test now covers finding codes, so a finding without a label fails.
+- **A per-run safety limit on Places calls**: `PLACES_RUN_CALL_CAP_MULTIPLIER` (default
+  4) × ceil(results / 20), counted per job run across worker retries, checked before the
+  daily cap. Reaching it fails the run at once with the count, saying it is a safety limit
+  and not a quota.
+- `scripts/places_smoke.py`: a human-run live walk of Places pages (one call by default),
+  printing each page's place count and token, with `--limit` to page the way discovery
+  does and `--record` for an empty page.
+
+### Changed
+
+- **Booking detection is wider**: button labels, submit inputs, `role="button"`,
+  `aria-label`/`title` on icon buttons, and links whose path is a booking page
+  (`/book-online`, `/schedule-service`, `/appointments`, …) all count, as well as the
+  widget scripts and link text that already did.
+- **`wixstudio.com` and eight other per-customer builder domains** are now builder
+  subdomains, so their businesses no longer share one domain identity.
+- **Without `PAGESPEED_API_KEY`, PageSpeed is not called.** Every score is null and the
+  audit records why, instead of spending a quota shared by every keyless caller.
+- Audit rules version `audit-3`.
+
+### Fixed
+
+- **Discovery no longer pages until a cap stops it.** Asked for fewer than 20 near its
+  limit, Places answered with short pages and then an empty one that still carried a
+  token; discovery followed it until the daily cap refused a call — 500 billable calls for
+  four runs of a 52-result search. Every page now asks for 20 and the last is trimmed
+  locally, and the walk stops on any page that brings no new place (empty, or all
+  repeats). The regression test replays the recorded empty page.
+- **A rate-limit wait that gives up no longer spends a daily-cap slot.** The slot was
+  reserved before the wait and never returned; every guard now hands back what it claimed
+  for a request that was not sent.
+- **The cost estimate's Places figure** was ceil(results / 20), which assumed full pages
+  (60 results really took 5 calls, not 3). It now shows the enforced per-run safety limit
+  as "at most N" (`places_max_calls`, replacing `places_calls`), and the "not enough calls
+  left" blocker compares that maximum with what is left today.
+- **The PageSpeed key no longer reaches the logs.** PSI took the key as `&key=` in the
+  URL, and httpx logged every request URL at INFO: the key sat in plain text in the worker
+  log (5 lines; the Google Places key, sent in a header, never appeared). The key now
+  travels in the `X-Goog-Api-Key` header (confirmed with one live call), `httpx` and
+  `httpcore` log at WARNING only, the scrubber redacts credentials in any URL query, and
+  it now scrubs every `SecretStr` setting rather than a hand-kept list that had missed
+  the PageSpeed key. `test_no_key_in_logged_urls.py` fails if a key can reach a URL or a
+  log line again. **Rotate the PageSpeed key** that was logged.
+- **A run's time limit is no longer RQ's default of 180 s.** Every run was held to it,
+  and an audit of more than about five businesses could not finish. Runs now get
+  `JOB_TIMEOUT_SECONDS` (1800), and an audit run `AUDIT_SECONDS_PER_BUSINESS` (150) for
+  each business if that is more.
+- **Reaching the time limit fails the run as a timeout — it is no longer recorded as one
+  business's failed audit.** RQ raised its timeout as an `Exception`; the audit loop's
+  per-business handler caught it, stored the business it was on as `failed`, and the run
+  carried on and could report done. The limit is now raised as `RunTimedOut`, a
+  `BaseException` no `except Exception` can swallow; the run is failed with the reason
+  at once, not retried. Two past audits carry the false failure (Hoffman Electric
+  Company, run `be6a2868`, which reported done; Harlow Beauty and Hair Salon, run
+  `270495a2`) — re-audit both from their lead pages.
+- **The watchdog judges a running run by its last progress, not its start.** A healthy
+  audit of 54 businesses takes about 30 minutes one at a time, and was failed as "worker
+  lost" at 30 minutes however well it was going. `job_runs.updated_at` (migration
+  `0010_job_run_heartbeat`) is moved by every checkpoint, and the watchdog reads that.
+- **PageSpeed waits 60 s for an answer instead of 20 s.** Lighthouse takes 15-50 s; the
+  shared 20 s read timeout cut 4 of 9 live calls short, each retried at the cost of 20 s
+  and a unit of quota. PSI now has its own 60 s read timeout and at most two attempts.
+
+### Deferred
+
+- The richer `classify-2` prompt (spec scope item 3): a prompt version bump invalidates the
+  whole reuse cache, so switching the prompt costs a full reclassification whenever it happens.
+
 ## [v0.10.0] - 2026-09-22
 
 ### Added

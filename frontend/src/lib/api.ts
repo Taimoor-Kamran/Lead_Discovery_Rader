@@ -486,6 +486,7 @@ export const SERVICES: readonly { key: string; name: string }[] = [
   { key: "website_design", name: "Website redesign" },
   { key: "seo_gbp", name: "SEO / Google profile" },
   { key: "booking_setup", name: "Online booking" },
+  { key: "ai_chat_setup", name: "Chat assistant" },
   { key: "ads_social", name: "Ads & social" },
 ];
 

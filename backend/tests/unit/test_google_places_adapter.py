@@ -18,6 +18,7 @@ from app.modules.adapters.google_places.adapter import (
     MAX_RESULTS_PER_QUERY,
     GooglePlacesAdapter,
     build_query,
+    run_call_ceiling,
 )
 from app.modules.adapters.google_places.client import PLACES_BASE_URL, TEXT_SEARCH_PATH
 from app.modules.jobs.schemas import GeoSpec
@@ -132,14 +133,16 @@ def test_a_lower_max_results_stops_part_way_through_the_second_page(
     assert route.call_count == 2, "the third page is never paid for"
 
 
-def test_the_last_page_asks_only_for_what_is_still_needed(
+def test_every_page_asks_for_a_full_twenty_and_the_last_is_trimmed_here(
     mock_http: respx.MockRouter, adapter: GooglePlacesAdapter
 ) -> None:
+    """Asking for fewer near the limit made Places answer short and then empty pages."""
     route = three_pages(mock_http)
 
-    list(adapter.discover(config(max_results=25)))
+    refs = list(adapter.discover(config(max_results=25)))
 
-    assert [sent_body(route, i)["pageSize"] for i in range(2)] == [20, 5]
+    assert [sent_body(route, i)["pageSize"] for i in range(2)] == [20, 20]
+    assert len(refs) == 25
 
 
 def test_a_request_for_more_than_the_api_can_give_is_clamped(
@@ -212,6 +215,159 @@ def test_a_cancellation_stops_the_walk_where_it_is(
         list(adapter.discover(config(cancel_check=stop_after_first_page)))
 
     assert route.call_count == 1
+
+
+# --- v0.11.0: a walk that never ends ----------------------------------------------------
+#
+# Before v0.11.0, a 52-result search paged until the daily cap stopped it: 500 calls over
+# four runs. The live walk that explained it (2026-09-24, "electrician in Austin, TX",
+# asking for only what was still wanted) got pages of 19, 16, 12, 4 and 1 places, then a
+# page with no places and a fresh token — recorded verbatim in
+# `text_search_empty_page_with_token_recorded.json`. Following that token never ends.
+
+
+def pool_of_places() -> list[dict[str, Any]]:
+    """Sixty distinct places from the three constructed pages."""
+    return [
+        place
+        for name in (
+            "text_search_page_1.json",
+            "text_search_page_2.json",
+            "text_search_page_3.json",
+        )
+        for place in places_fixture(name)["places"]
+    ]
+
+
+def short_pages(*sizes: int, last_has_token: bool = True) -> list[httpx.Response]:
+    """Pages of distinct places in the given sizes, each carrying a token to the next."""
+    pool = pool_of_places()
+    pages: list[httpx.Response] = []
+    start = 0
+    for number, size in enumerate(sizes, start=1):
+        body: dict[str, Any] = {"places": pool[start : start + size]}
+        if number < len(sizes) or last_has_token:
+            body["nextPageToken"] = f"radar-short-page-token-{number + 1}"
+        pages.append(httpx.Response(200, json=body))
+        start += size
+    return pages
+
+
+def then_forever(pages: list[httpx.Response], repeat: dict[str, Any]) -> Any:
+    """A side effect that serves `pages` in order and then `repeat` for every later call."""
+    served = iter(pages)
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        return next(served, None) or httpx.Response(200, json=repeat)
+
+    return respond
+
+
+def test_the_recorded_empty_page_ends_the_walk_that_once_cost_five_hundred_calls(
+    mock_http: respx.MockRouter, adapter: GooglePlacesAdapter
+) -> None:
+    empty = places_fixture("text_search_empty_page_with_token_recorded.json")
+    assert empty.keys() == {"nextPageToken"}, "the recording is a token and nothing else"
+    route = mock_http.post(SEARCH_URL).mock(
+        side_effect=then_forever(short_pages(19, 16, 12, 4, 1), empty)
+    )
+
+    refs = list(adapter.discover(config(max_results=60)))
+
+    assert len(refs) == 52
+    assert route.call_count == 6, "five pages with places, one empty page, then stop"
+
+
+def test_an_empty_first_page_with_a_token_costs_one_call(
+    mock_http: respx.MockRouter, adapter: GooglePlacesAdapter
+) -> None:
+    route = mock_http.post(SEARCH_URL).mock(
+        return_value=httpx.Response(
+            200, json=places_fixture("text_search_empty_page_with_token_recorded.json")
+        )
+    )
+
+    assert list(adapter.discover(config())) == []
+    assert route.call_count == 1
+
+
+def test_a_page_of_places_already_seen_ends_the_walk(
+    mock_http: respx.MockRouter, adapter: GooglePlacesAdapter
+) -> None:
+    """Repeats stall the walk exactly as an empty page does, and cost the same."""
+    first = places_fixture("text_search_page_1.json")
+    route = mock_http.post(SEARCH_URL).mock(side_effect=then_forever([], first))
+
+    refs = list(adapter.discover(config()))
+
+    assert len(refs) == 20
+    assert route.call_count == 2, "the second page brought nothing new"
+
+
+def test_a_place_repeated_within_the_walk_is_yielded_once(
+    mock_http: respx.MockRouter, adapter: GooglePlacesAdapter
+) -> None:
+    pool = pool_of_places()
+    mock_http.post(SEARCH_URL).mock(
+        side_effect=[
+            httpx.Response(200, json={"places": pool[:10], "nextPageToken": "t2"}),
+            httpx.Response(200, json={"places": pool[5:15]}),
+        ]
+    )
+
+    refs = list(adapter.discover(config()))
+
+    ids = [ref.source_record_id for ref in refs]
+    assert len(ids) == len(set(ids)) == 15
+
+
+def test_short_pages_do_not_end_the_walk_early(
+    mock_http: respx.MockRouter, adapter: GooglePlacesAdapter
+) -> None:
+    """The first live walk: 60 places took five calls, not three."""
+    route = mock_http.post(SEARCH_URL).mock(
+        side_effect=short_pages(20, 16, 12, 10, 2, last_has_token=False)
+    )
+
+    refs = list(adapter.discover(config(max_results=60)))
+
+    assert len(refs) == 60
+    assert route.call_count == 5
+
+
+def test_the_client_is_built_with_the_runs_safety_ceiling(
+    fake_redis: fakeredis.FakeStrictRedis, clock: FakeClock, mock_http: respx.MockRouter
+) -> None:
+    from app.modules.adapters.google_places.client import build_client
+
+    ceilings: list[int] = []
+
+    def factory(job_run_id: Any, max_calls: int) -> Any:
+        ceilings.append(max_calls)
+        return build_client(
+            GooglePlacesAdapter.name,
+            job_run_id=job_run_id,
+            max_calls=max_calls,
+            sleeper=clock.sleep,
+            clock=clock,
+            redis_client=fake_redis,
+            meter=lambda record: None,
+        )
+
+    three_pages(mock_http)
+    list(GooglePlacesAdapter(client_factory=factory).discover(config(max_results=60)))
+
+    assert ceilings == [run_call_ceiling(60)] == [12]
+
+
+@pytest.mark.parametrize(
+    ("limit", "ceiling"), [(0, 0), (1, 4), (20, 4), (21, 8), (45, 12), (60, 12), (200, 40)]
+)
+def test_the_ceiling_is_the_multiplier_times_the_fewest_possible_pages(
+    limit: int, ceiling: int
+) -> None:
+    """It keeps scaling with the search, so it holds for sizes nobody has tried yet."""
+    assert run_call_ceiling(limit) == ceiling
 
 
 # --- headers and the key -----------------------------------------------------------
@@ -387,3 +543,29 @@ def test_the_rate_limit_and_metadata_come_from_settings(adapter: GooglePlacesAda
     assert limits.daily_call_cap == 200
     assert meta.content_ttl_days == 30
     assert meta.terms_url.startswith("https://")
+
+
+# --- v0.11.0: rating and review count ------------------------------------------------------
+
+
+def test_the_default_field_mask_asks_for_rating_and_review_count_and_nothing_richer() -> None:
+    from app.core.config import DEFAULT_PLACES_FIELD_MASK
+
+    fields = DEFAULT_PLACES_FIELD_MASK.split(",")
+
+    assert "places.rating" in fields
+    assert "places.userRatingCount" in fields
+    # Enterprise + Atmosphere, and review text carries attribution duties: never requested.
+    assert not {"places.reviews", "places.editorialSummary"} & set(fields)
+
+
+def test_rating_and_review_count_are_copied_verbatim(adapter: GooglePlacesAdapter) -> None:
+    candidate = adapter.normalize(raw_doc({"id": "place-1", "rating": 4.6, "userRatingCount": 11}))
+
+    assert (candidate.rating, candidate.user_rating_count) == (4.6, 11)
+
+
+def test_a_place_without_a_rating_leaves_both_null(adapter: GooglePlacesAdapter) -> None:
+    candidate = adapter.normalize(raw_doc({"id": "place-2"}))
+
+    assert (candidate.rating, candidate.user_rating_count) == (None, None)

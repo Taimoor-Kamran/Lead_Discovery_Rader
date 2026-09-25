@@ -75,7 +75,9 @@
       ],
       "nationalPhoneNumber": "(512) 555-0101",
       "websiteUri": "https://lonestarplumbing.invalid/",
-      "businessStatus": "OPERATIONAL"
+      "businessStatus": "OPERATIONAL",
+      "rating": 4.8,
+      "userRatingCount": 212
     },
     {
       "id": "demo-a1-2",
@@ -2751,6 +2753,146 @@
       "nationalPhoneNumber": "(512) 555-0514",
       "websiteUri": "https://riversideplumbing.invalid/",
       "businessStatus": "OPERATIONAL"
+    },
+    {
+      "id": "demo-e15",
+      "displayName": {
+        "text": "Copperline Electric",
+        "languageCode": "en"
+      },
+      "formattedAddress": "4800 Burnet Road, Austin, TX 78756, USA",
+      "location": {
+        "latitude": 30.321,
+        "longitude": -97.739
+      },
+      "types": [
+        "electrician",
+        "point_of_interest",
+        "establishment"
+      ],
+      "primaryType": "electrician",
+      "addressComponents": [
+        {
+          "longText": "4800",
+          "shortText": "4800",
+          "types": [
+            "street_number"
+          ]
+        },
+        {
+          "longText": "Burnet Road",
+          "shortText": "Burnet Rd",
+          "types": [
+            "route"
+          ]
+        },
+        {
+          "longText": "Austin",
+          "shortText": "Austin",
+          "types": [
+            "locality",
+            "political"
+          ]
+        },
+        {
+          "longText": "Texas",
+          "shortText": "TX",
+          "types": [
+            "administrative_area_level_1",
+            "political"
+          ]
+        },
+        {
+          "longText": "78756",
+          "shortText": "78756",
+          "types": [
+            "postal_code"
+          ]
+        },
+        {
+          "longText": "United States",
+          "shortText": "US",
+          "types": [
+            "country",
+            "political"
+          ]
+        }
+      ],
+      "nationalPhoneNumber": "(512) 555-0615",
+      "websiteUri": "https://copperlineelectric.invalid/",
+      "businessStatus": "OPERATIONAL",
+      "rating": 4.7,
+      "userRatingCount": 64
+    },
+    {
+      "id": "demo-e16",
+      "displayName": {
+        "text": "Pecan Street Plumbing",
+        "languageCode": "en"
+      },
+      "formattedAddress": "700 East 6th Street, Austin, TX 78701, USA",
+      "location": {
+        "latitude": 30.267,
+        "longitude": -97.736
+      },
+      "types": [
+        "plumber",
+        "point_of_interest",
+        "establishment"
+      ],
+      "primaryType": "plumber",
+      "addressComponents": [
+        {
+          "longText": "700",
+          "shortText": "700",
+          "types": [
+            "street_number"
+          ]
+        },
+        {
+          "longText": "East 6th Street",
+          "shortText": "E 6th St",
+          "types": [
+            "route"
+          ]
+        },
+        {
+          "longText": "Austin",
+          "shortText": "Austin",
+          "types": [
+            "locality",
+            "political"
+          ]
+        },
+        {
+          "longText": "Texas",
+          "shortText": "TX",
+          "types": [
+            "administrative_area_level_1",
+            "political"
+          ]
+        },
+        {
+          "longText": "78701",
+          "shortText": "78701",
+          "types": [
+            "postal_code"
+          ]
+        },
+        {
+          "longText": "United States",
+          "shortText": "US",
+          "types": [
+            "country",
+            "political"
+          ]
+        }
+      ],
+      "nationalPhoneNumber": "(512) 555-0616",
+      "websiteUri": "https://pecanstreetplumbing.invalid/",
+      "businessStatus": "OPERATIONAL",
+      "rating": 4.1,
+      "userRatingCount": 11
     }
   ]
 }

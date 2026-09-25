@@ -3,7 +3,7 @@
 import { SafeLink } from "@/components/SafeLink";
 import { Card, Disclosure, Table, TBody, Td, Th, THead, Tr } from "@/components/ui";
 import type { ReviewDetail } from "@/lib/api";
-import { formatDateTime, formatPhone, orUnknown, place } from "@/lib/format";
+import { formatDateTime, formatPhone, listingRating, orUnknown, place } from "@/lib/format";
 import { businessStatusLabel, industryLabel, websiteKindLabel } from "@/lib/labels";
 
 /**
@@ -36,6 +36,12 @@ export function BusinessFacts({ detail }: { detail: ReviewDetail }) {
       </span>,
     ],
     ["Website", business.website ? <SafeLink href={business.website}>{business.website}</SafeLink> : "none"],
+    [
+      "Listing rating",
+      <span key="rating" data-testid="listing-rating">
+        {listingRating(business.rating, business.user_rating_count)}
+      </span>,
+    ],
     ["Industry", <Coded key="industry" code={business.industry} label={industryLabel} />],
     ["Location", place(business.city, business.state)],
     ["Address", orUnknown(business.address_line1)],

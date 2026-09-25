@@ -5,15 +5,15 @@
     "so a change to the thresholds, the weights or the hard rules shows up as a failure",
     "rather than as a quietly different answer."
   ],
-  "records": 41,
+  "records": 43,
   "run_summary": {
-    "processed": 41,
+    "processed": 43,
     "linked_existing": 5,
-    "created": 30,
+    "created": 32,
     "needs_review": 6,
     "invalid": 0
   },
-  "businesses": 30,
+  "businesses": 32,
   "pending_match_candidates": 6,
 
   "auto_merged": {

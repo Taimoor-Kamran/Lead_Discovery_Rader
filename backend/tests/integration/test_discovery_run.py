@@ -18,6 +18,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
+from app.core.ratelimit import DailyCallCap
 from app.modules.adapters import registry
 from app.modules.adapters.base import Candidate, RawDoc
 from app.modules.adapters.google_places.adapter import GooglePlacesAdapter
@@ -584,3 +585,124 @@ def test_a_run_broken_partway_through_a_page_retries_and_stores_every_result(
     assert count(db, DiscoveredRecord) == TOTAL_RESULTS, "every result, not the first four"
     assert run.result_summary is not None
     assert run.result_summary["fetched"] == TOTAL_RESULTS
+
+
+# --- the run that paged until the daily cap stopped it (v0.11.0) -------------------------
+
+
+def short_pages_then_empty_forever() -> Any:
+    """The 2026-09-24 live walk: 19, 16, 12, 4 and 1 places, then the recorded empty page
+    — a token and no places — on every call after."""
+    pool = [
+        place
+        for name in (
+            "text_search_page_1.json",
+            "text_search_page_2.json",
+            "text_search_page_3.json",
+        )
+        for place in places_fixture(name)["places"]
+    ]
+    pages: list[dict[str, Any]] = []
+    start = 0
+    for number, size in enumerate((19, 16, 12, 4, 1), start=1):
+        pages.append({"places": pool[start : start + size], "nextPageToken": f"walk-{number}"})
+        start += size
+    served = iter(pages)
+    empty = places_fixture("text_search_empty_page_with_token_recorded.json")
+    return lambda request: httpx.Response(200, json=next(served, None) or empty)
+
+
+def places_used_today(redis: fakeredis.FakeStrictRedis, clock: FakeClock) -> int:
+    cap = DailyCallCap(
+        redis,
+        source=GooglePlacesAdapter.name,
+        cap=0,
+        clock=lambda: datetime.fromtimestamp(clock(), tz=UTC),
+    )
+    return cap.used()
+
+
+def test_a_walk_that_ends_in_empty_pages_finishes_instead_of_spending_the_day(
+    db: Session,
+    mock_http: respx.MockRouter,
+    search_job: SearchJob,
+    sales_user: User,
+    fake_redis: fakeredis.FakeStrictRedis,
+    clock: FakeClock,
+) -> None:
+    """The production bug end to end. Before the fix this run reached "52/52 finished"
+    and then failed on the daily cap — 27, 70, 100 and 300 calls on four attempts."""
+    route = mock_http.post(SEARCH_URL).mock(side_effect=short_pages_then_empty_forever())
+    run_id = start_run(db, search_job, sales_user)
+
+    assert tasks.execute_job_run(run_id) is JobRunStatus.done
+
+    run = reread(db, run_id)
+    assert route.call_count == 6
+    assert count(db, ApiCall) == 6
+    assert count(db, DiscoveredRecord) == 52
+    assert run.result_summary is not None
+    assert run.result_summary["fetched"] == 52
+    assert run.result_summary["api_calls"] == 6
+    assert places_used_today(fake_redis, clock) == 6
+
+
+def test_the_safety_limit_fails_a_run_loudly_with_the_count(
+    db: Session,
+    mock_http: respx.MockRouter,
+    search_job: SearchJob,
+    sales_user: User,
+    fake_redis: fakeredis.FakeStrictRedis,
+    clock: FakeClock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A run is stopped at its own limit — here 1 x 3 pages — long before the day's cap."""
+    from app.core.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "places_run_call_cap_multiplier", 1)
+    route = mock_http.post(SEARCH_URL).mock(
+        side_effect=[
+            httpx.Response(200, json=places_fixture("text_search_page_1.json")),
+            httpx.Response(500, json=places_fixture("error_500.json")),
+            httpx.Response(500, json=places_fixture("error_500.json")),
+            httpx.Response(200, json=places_fixture("text_search_page_2.json")),
+        ]
+    )
+    run_id = start_run(db, search_job, sales_user)
+
+    assert tasks.execute_job_run(run_id, sleeper=lambda seconds: None) is JobRunStatus.failed
+
+    run = reread(db, run_id)
+    assert route.call_count == 3, "the fourth call was never sent"
+    assert run.attempts == 1, "retrying a looping run only loops again"
+    assert run.error is not None
+    assert "RunCallCapExceededError" in run.error
+    assert "Safety limit reached: this run made 3 'google_places' call(s)" in run.error
+    assert "PLACES_RUN_CALL_CAP_MULTIPLIER" in run.error
+    assert count(db, ApiCall) == 3
+    assert count(db, DiscoveredRecord) == 20, "what the run found before the limit is kept"
+    assert places_used_today(fake_redis, clock) == 3
+
+
+def test_a_worker_retry_spends_from_the_same_safety_limit(
+    db: Session,
+    mock_http: respx.MockRouter,
+    search_job: SearchJob,
+    sales_user: User,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Three 500s are transient, so the worker retries the run — on the calls it has left."""
+    from app.core.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "places_run_call_cap_multiplier", 1)
+    route = mock_http.post(SEARCH_URL).mock(
+        return_value=httpx.Response(500, json=places_fixture("error_500.json"))
+    )
+    run_id = start_run(db, search_job, sales_user)
+
+    assert tasks.execute_job_run(run_id, sleeper=lambda seconds: None) is JobRunStatus.failed
+
+    run = reread(db, run_id)
+    assert route.call_count == 3, "the second attempt found the limit already spent"
+    assert run.attempts == 2
+    assert run.error is not None and "RunCallCapExceededError" in run.error

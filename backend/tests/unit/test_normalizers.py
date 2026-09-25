@@ -10,7 +10,13 @@ from app.modules.adapters.base import AddressPart
 from app.modules.normalization import addresses, names, phones, taxonomy
 from app.modules.normalization.geo import distance_m, geohash7, neighbours
 from app.modules.normalization.schemas import Address, BusinessStatus, WebsiteKind
-from app.modules.normalization.web import BUILDER_DOMAINS, SOCIAL_DOMAINS, host_of, parse_website
+from app.modules.normalization.web import (
+    BUILDER_DOMAINS,
+    SOCIAL_DOMAINS,
+    builder_host,
+    host_of,
+    parse_website,
+)
 
 # --- names ------------------------------------------------------------------------
 
@@ -306,3 +312,20 @@ def test_distance_between_two_known_points_is_metres() -> None:
     metres = distance_m(30.2672, -97.7431, 30.2672, -97.7421)
 
     assert 90 < (metres or 0) < 100
+
+
+@pytest.mark.parametrize(
+    ("url", "expected"),
+    [
+        ("https://topelectricianaustin.wixstudio.com/", "topelectricianaustin.wixstudio.com"),
+        ("https://www.joes.wixsite.com/home", "joes.wixsite.com"),
+        ("https://wixsite.com/", None),
+        ("https://joesplumbing.com/", None),
+        ("https://notwixsite.com/", None),
+        (None, None),
+    ],
+)
+def test_builder_host_is_the_host_only_when_it_is_a_builder_subdomain(
+    url: str | None, expected: str | None
+) -> None:
+    assert builder_host(url) == expected

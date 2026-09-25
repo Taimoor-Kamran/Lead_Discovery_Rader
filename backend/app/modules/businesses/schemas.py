@@ -27,6 +27,9 @@ class BusinessSummary(BaseModel):
     domain: str | None
     website_kind: WebsiteKind
     business_status: BusinessStatus
+    # The listing's star rating and review count; null where the source gave none.
+    rating: float | None = None
+    user_rating_count: int | None = None
     created_at: datetime
     updated_at: datetime
     # The newest website audit, when there is one. Null means "never audited", which is

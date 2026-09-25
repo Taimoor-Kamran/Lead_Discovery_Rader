@@ -5,6 +5,7 @@ import uuid
 from collections.abc import Callable
 from typing import Protocol
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 # Import the registry, not single models: the worker process only ever imports this
@@ -27,6 +28,7 @@ from app.modules.jobs.service import (
 from app.modules.jobs.state import backoff_seconds, transition
 from app.modules.opportunities.worker import run_classification
 from app.modules.resolution.worker import run_resolution
+from app.workers.timeouts import RunTimedOut
 
 logger = get_logger("app.worker")
 
@@ -68,6 +70,8 @@ def checkpoint(session: Session, run: JobRun, *, done: int | None = None) -> Non
     """
     if done is not None:
         run.progress_done = done
+    # A heartbeat even when nothing else changed: the watchdog reads it as "still alive".
+    run.updated_at = func.now()
     session.flush()
     session.commit()
     session.refresh(run)
@@ -304,6 +308,12 @@ def execute_job_run(
     while True:
         try:
             status, delay = _one_attempt(run_id, dispatch_follow_up=dispatch_follow_up)
+        except RunTimedOut as exc:
+            # Not retried: the same work would meet the same limit. Recorded here, while
+            # RQ still gives the work horse a minute, so the run does not sit `running`
+            # until the watchdog finds it; re-raised so RQ records the job as failed too.
+            _fail_run(run_id, exc)
+            raise
         except _HandlerFailedError as failure:
             try:
                 status, delay = _record_failure(run_id, failure)

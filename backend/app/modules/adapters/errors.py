@@ -64,3 +64,14 @@ class QuotaExceededError(AdapterError):
 
     status_code = 429
     code = "daily_call_cap_reached"
+
+
+class RunCallCapExceededError(AdapterError):
+    """One run reached its per-run safety limit on calls. Raised *before* the request.
+
+    The limit is a generous multiple of the fewest calls the run could need, so reaching it
+    means the run is looping, not busy. Retrying would only run the same loop again.
+    """
+
+    status_code = 502
+    code = "run_call_cap_reached"

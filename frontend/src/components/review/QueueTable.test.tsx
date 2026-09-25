@@ -81,4 +81,23 @@ describe("QueueTable", () => {
     fireEvent.click(screen.getByLabelText("Select every opportunity of Barton Creek Plumbing"));
     expect(onToggleBusiness).toHaveBeenCalled();
   });
+
+  it("shows the listing's review count as a chip, and no chip when the listing gave none", () => {
+    render(
+      <QueueTable
+        items={[
+          queueItem({ rating: 4.1, user_rating_count: 11 }),
+          queueItem({ business_id: "biz-2", display_name: "Oak Hill", rating: null, user_rating_count: null }),
+        ]}
+        selected={new Set()}
+        onToggle={() => {}}
+        onToggleBusiness={() => {}}
+        canSelect={false}
+      />,
+    );
+    const chips = screen.getAllByTestId("review-chip");
+    expect(chips).toHaveLength(1);
+    expect(chips[0].textContent).toBe("11 reviews");
+    expect(chips[0].getAttribute("title")).toBe("Rated 4.1 on the business listing");
+  });
 });

@@ -11,8 +11,18 @@ from typing import cast
 import fakeredis
 import pytest
 
-from app.core.ratelimit import DailyCallCap, SourceLimiter, TokenBucket, build_limiter
-from app.modules.adapters.errors import QuotaExceededError, RateLimitedError
+from app.core.ratelimit import (
+    DailyCallCap,
+    RunCallCap,
+    SourceLimiter,
+    TokenBucket,
+    build_limiter,
+)
+from app.modules.adapters.errors import (
+    QuotaExceededError,
+    RateLimitedError,
+    RunCallCapExceededError,
+)
 from tests.conftest import FakeClock
 
 
@@ -239,3 +249,141 @@ def test_build_limiter_counts_the_day_from_its_own_clock(
     clock.now += 120  # over midnight
 
     limiter.acquire()
+
+
+# --- v0.11.0: a slot is only spent on a request that is sent -------------------------------
+
+
+def test_a_bucket_that_gives_up_hands_back_the_daily_slot(
+    fake_redis: fakeredis.FakeStrictRedis, clock: FakeClock
+) -> None:
+    """The limiter reserves the daily slot first; a bucket timeout means nothing was sent."""
+    cap = make_cap(fake_redis, 10)
+    limiter = SourceLimiter(
+        make_bucket(fake_redis, clock, rate=0.1, burst=1, max_wait_seconds=5.0), cap
+    )
+    limiter.acquire()
+    assert cap.used() == 1
+
+    with pytest.raises(RateLimitedError):
+        limiter.acquire()
+
+    assert cap.used() == 1, "the call that timed out waiting was never made, so never counted"
+
+
+def test_a_bucket_that_gives_up_hands_back_the_run_slot_too(
+    fake_redis: fakeredis.FakeStrictRedis, clock: FakeClock
+) -> None:
+    run = make_run_cap(fake_redis, 10)
+    limiter = SourceLimiter(
+        make_bucket(fake_redis, clock, rate=0.1, burst=1, max_wait_seconds=5.0),
+        make_cap(fake_redis, 10),
+        run,
+    )
+    limiter.acquire()
+
+    with pytest.raises(RateLimitedError):
+        limiter.acquire()
+
+    assert run.used() == 1
+
+
+def test_a_daily_refusal_hands_back_the_run_slot(
+    fake_redis: fakeredis.FakeStrictRedis, clock: FakeClock
+) -> None:
+    run = make_run_cap(fake_redis, 10)
+    limiter = SourceLimiter(make_bucket(fake_redis, clock), make_cap(fake_redis, 0), run)
+
+    with pytest.raises(QuotaExceededError):
+        limiter.acquire()
+
+    assert run.used() == 0
+
+
+# --- v0.11.0: the per-run safety limit ----------------------------------------------------
+
+
+def make_run_cap(
+    redis: fakeredis.FakeStrictRedis, cap: int, *, job_run_id: str = "run-1"
+) -> RunCallCap:
+    return RunCallCap(
+        redis, source="example", cap=cap, job_run_id=job_run_id, setting="EXAMPLE_MULTIPLIER"
+    )
+
+
+def test_the_run_limit_refuses_the_call_after_it_and_says_plainly_what_it_is(
+    fake_redis: fakeredis.FakeStrictRedis,
+) -> None:
+    run = make_run_cap(fake_redis, 3)
+    assert [run.reserve() for _ in range(3)] == [1, 2, 3]
+
+    with pytest.raises(RunCallCapExceededError) as caught:
+        run.reserve()
+
+    message = str(caught.value)
+    assert message.startswith("Safety limit reached")
+    assert "made 3 'example' call(s)" in message
+    assert "(3)" in message and "call 4 was not sent" in message
+    assert "not a quota" in message and "looping" in message
+    assert "EXAMPLE_MULTIPLIER" in message
+    assert caught.value.details == {"source": "example", "cap": 3, "calls_made": 3}
+    assert caught.value.retryable is False, "a retry would run the same loop again"
+    assert run.used() == 3, "the refused call is not counted"
+
+
+def test_the_run_limit_holds_across_a_worker_retry_of_the_same_run(
+    fake_redis: fakeredis.FakeStrictRedis,
+) -> None:
+    """A retried run builds a fresh client; it must not get a fresh limit with it."""
+    make_run_cap(fake_redis, 2).reserve()
+    make_run_cap(fake_redis, 2).reserve()
+
+    with pytest.raises(RunCallCapExceededError):
+        make_run_cap(fake_redis, 2).reserve()
+
+
+def test_each_run_has_its_own_limit(fake_redis: fakeredis.FakeStrictRedis) -> None:
+    make_run_cap(fake_redis, 1, job_run_id="run-1").reserve()
+
+    assert make_run_cap(fake_redis, 1, job_run_id="run-2").reserve() == 1
+
+
+def test_the_run_limit_is_checked_before_the_daily_cap(
+    fake_redis: fakeredis.FakeStrictRedis, clock: FakeClock
+) -> None:
+    """A looping run is stopped without spending another slot of the day's budget."""
+    cap = make_cap(fake_redis, 100)
+    limiter = SourceLimiter(make_bucket(fake_redis, clock), cap, make_run_cap(fake_redis, 2))
+    limiter.acquire()
+    limiter.acquire()
+
+    with pytest.raises(RunCallCapExceededError):
+        limiter.acquire()
+
+    assert cap.used() == 2
+
+
+def test_build_limiter_applies_a_run_limit_only_for_a_known_run(
+    fake_redis: fakeredis.FakeStrictRedis, clock: FakeClock
+) -> None:
+    def limiter(job_run_id: str | None) -> SourceLimiter:
+        return build_limiter(
+            fake_redis,
+            source="example",
+            requests_per_second=100.0,
+            burst=100,
+            daily_call_cap=100,
+            run_call_cap=1,
+            job_run_id=job_run_id,
+            clock=clock,
+            sleeper=clock.sleep,
+        )
+
+    bounded = limiter("run-1")
+    bounded.acquire()
+    with pytest.raises(RunCallCapExceededError):
+        bounded.acquire()
+
+    unbounded = limiter(None)
+    unbounded.acquire()
+    unbounded.acquire()

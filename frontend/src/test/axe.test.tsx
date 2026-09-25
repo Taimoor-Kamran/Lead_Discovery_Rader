@@ -128,7 +128,7 @@ const SEARCH_JOB = {
 const ESTIMATE = {
   max_results: 20,
   uses_places: true,
-  places_calls: 1,
+  places_max_calls: 4,
   places_daily_cap: 200,
   places_remaining_today: 199,
   pagespeed_calls: 20,

@@ -17,7 +17,7 @@ import {
 } from "@/components/ui";
 import { SourceCell } from "@/components/review/SourceProvenance";
 import type { QueueItem } from "@/lib/api";
-import { formatDateTime, percent, place, score } from "@/lib/format";
+import { formatDateTime, percent, place, reviewCount, score } from "@/lib/format";
 import { auditStatusLabel, findingLabel, industryLabel, serviceLabel } from "@/lib/labels";
 
 type Props = {
@@ -111,6 +111,19 @@ export function QueueTable({
                   <div className="text-sm text-ink-soft" data-testid="queue-place">
                     {place(item.city, item.state)}
                   </div>
+                  {reviewCount(item.user_rating_count) ? (
+                    <Chip
+                      className="mt-1 text-xs"
+                      title={
+                        item.rating === null || item.rating === undefined
+                          ? "Reviews on the business listing"
+                          : `Rated ${item.rating.toFixed(1)} on the business listing`
+                      }
+                      data-testid="review-chip"
+                    >
+                      {reviewCount(item.user_rating_count)}
+                    </Chip>
+                  ) : null}
                   {item.website ? (
                     <div className="text-sm">
                       <SafeLink href={item.website} />

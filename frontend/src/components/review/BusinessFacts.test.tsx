@@ -58,4 +58,12 @@ describe("BusinessFacts", () => {
     expect(screen.getByTestId("business-facts").textContent).toContain("unknown");
     expect(screen.queryByTitle("plumbing")).toBeNull();
   });
+
+  it("shows the listing's rating and review count, and 'unknown' rather than a zero", () => {
+    const { unmount } = render(<BusinessFacts detail={facts({ rating: 4.2, user_rating_count: 11 })} />);
+    expect(screen.getByTestId("listing-rating").textContent).toBe("4.2 stars · 11 reviews");
+    unmount();
+    render(<BusinessFacts detail={facts({ rating: null, user_rating_count: null })} />);
+    expect(screen.getByTestId("listing-rating").textContent).toBe("unknown");
+  });
 });

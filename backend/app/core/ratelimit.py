@@ -1,8 +1,10 @@
-"""Per-source outbound rate limiting: a Redis token bucket plus a daily call cap.
+"""Per-source outbound rate limiting: a Redis token bucket, a daily cap and a per-run cap.
 
-Both live in Redis so every api and worker process shares one budget. The token bucket
-smooths bursts against a provider's per-second limit; the daily cap is a cost guard that
-stops a runaway job from spending real money.
+The bucket and the daily cap live in Redis so every api and worker process shares one
+budget. The token bucket smooths bursts against a provider's per-second limit; the daily
+cap is a cost guard for the day as a whole. The per-run cap is the guard against a single
+runaway run: without it one run can spend the whole day's cap, which is what a Places
+pagination loop did three times before v0.11.0 added it.
 """
 
 import time
@@ -14,12 +16,17 @@ from redis import Redis
 from redis.exceptions import WatchError
 
 from app.core.logging import get_logger
-from app.modules.adapters.errors import QuotaExceededError, RateLimitedError
+from app.modules.adapters.errors import (
+    QuotaExceededError,
+    RateLimitedError,
+    RunCallCapExceededError,
+)
 
 logger = get_logger("app.ratelimit")
 
 BUCKET_KEY_PREFIX = "ratelimit:bucket"
 DAILY_KEY_PREFIX = "ratelimit:daily"
+RUN_KEY_PREFIX = "ratelimit:run"
 DAILY_KEY_TTL_SECONDS = 60 * 60 * 48
 MAX_WAIT_SECONDS = 30.0
 
@@ -139,17 +146,109 @@ class DailyCallCap:
             )
         return used
 
+    def release(self) -> None:
+        """Hand back a slot `reserve()` claimed for a request that was never sent."""
+        self._redis.decr(self.key)
+
+
+class RunCallCap:
+    """A ceiling on the calls one job run may make to one source.
+
+    Counted in Redis under the run's id, so a worker retry of the same run — which builds a
+    fresh client — keeps spending from the same ceiling rather than starting a new one.
+    """
+
+    def __init__(
+        self,
+        redis: Redis,
+        *,
+        source: str,
+        cap: int,
+        job_run_id: object,
+        setting: str = "the per-run ceiling",
+    ) -> None:
+        self._redis = redis
+        self._source = source
+        self._cap = cap
+        self._job_run_id = job_run_id
+        self._setting = setting
+
+    @property
+    def key(self) -> str:
+        return f"{RUN_KEY_PREFIX}:{self._source}:{self._job_run_id}"
+
+    def used(self) -> int:
+        raw = self._redis.get(self.key)
+        return int(raw) if isinstance(raw, bytes | str) else 0
+
+    def reserve(self) -> int:
+        """Claim one call for this run, or raise before anything is sent."""
+        key = self.key
+        used = int(cast(int, self._redis.incr(key)))
+        if used == 1:
+            self._redis.expire(key, DAILY_KEY_TTL_SECONDS)
+        if used > self._cap:
+            self._redis.decr(key)
+            made = used - 1
+            logger.error(
+                "per-run call cap reached",
+                extra={
+                    "source": self._source,
+                    "cap": self._cap,
+                    "calls_made": made,
+                    "job_run_id": str(self._job_run_id),
+                },
+            )
+            raise RunCallCapExceededError(
+                f"Safety limit reached: this run made {made} '{self._source}' call(s), the "
+                f"most one run of this size may make ({self._cap}), and call {made + 1} was "
+                "not sent. This is not a quota and not a busy day: a normal run stays well "
+                "under the limit, so reaching it means this run was looping. Find out why "
+                f"before raising {self._setting}.",
+                details={"source": self._source, "cap": self._cap, "calls_made": made},
+                source=self._source,
+            )
+        return used
+
+    def release(self) -> None:
+        """Hand back a slot `reserve()` claimed for a request that was never sent."""
+        self._redis.decr(self.key)
+
 
 class SourceLimiter:
-    """The two guards a request must pass, in order: daily cap, then token bucket."""
+    """The guards a request must pass, in order: per-run cap, daily cap, token bucket.
 
-    def __init__(self, bucket: TokenBucket, daily_cap: DailyCallCap) -> None:
+    Each claims its slot before the next is asked, so a later guard that refuses — the
+    bucket giving up after its wait — hands back what the earlier ones claimed. A request
+    that was never sent must not count against a cap.
+    """
+
+    def __init__(
+        self,
+        bucket: TokenBucket,
+        daily_cap: DailyCallCap,
+        run_cap: RunCallCap | None = None,
+    ) -> None:
         self._bucket = bucket
         self._daily_cap = daily_cap
+        self._run_cap = run_cap
 
     def acquire(self) -> None:
-        self._daily_cap.reserve()
-        self._bucket.acquire()
+        if self._run_cap is not None:
+            self._run_cap.reserve()
+        try:
+            self._daily_cap.reserve()
+        except BaseException:
+            if self._run_cap is not None:
+                self._run_cap.release()
+            raise
+        try:
+            self._bucket.acquire()
+        except BaseException:
+            self._daily_cap.release()
+            if self._run_cap is not None:
+                self._run_cap.release()
+            raise
 
 
 def build_limiter(
@@ -159,6 +258,9 @@ def build_limiter(
     requests_per_second: float,
     burst: int,
     daily_call_cap: int,
+    run_call_cap: int | None = None,
+    run_call_cap_setting: str = "the per-run ceiling",
+    job_run_id: object = None,
     clock: Callable[[], float] = time.time,
     sleeper: Callable[[float], None] = time.sleep,
 ) -> SourceLimiter:
@@ -176,4 +278,15 @@ def build_limiter(
         cap=daily_call_cap,
         clock=lambda: datetime.fromtimestamp(clock(), tz=UTC),
     )
-    return SourceLimiter(bucket, daily)
+    run = (
+        RunCallCap(
+            redis,
+            source=source,
+            cap=run_call_cap,
+            job_run_id=job_run_id,
+            setting=run_call_cap_setting,
+        )
+        if run_call_cap is not None and job_run_id is not None
+        else None
+    )
+    return SourceLimiter(bucket, daily, run)

@@ -1533,6 +1533,8 @@ export interface components {
             places_content_expires_at: string | null;
             /** Postal Code */
             postal_code: string | null;
+            /** Rating */
+            rating?: number | null;
             /** Records */
             records: components["schemas"]["LinkedRecordRead"][];
             /** State */
@@ -1544,6 +1546,8 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+            /** User Rating Count */
+            user_rating_count?: number | null;
             /** Website */
             website: string | null;
             website_kind: components["schemas"]["WebsiteKind"];
@@ -1586,6 +1590,8 @@ export interface components {
             phone_e164: string | null;
             /** Postal Code */
             postal_code: string | null;
+            /** Rating */
+            rating?: number | null;
             /** State */
             state: string | null;
             /**
@@ -1593,6 +1599,8 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+            /** User Rating Count */
+            user_rating_count?: number | null;
             /** Website */
             website: string | null;
             website_kind: components["schemas"]["WebsiteKind"];
@@ -1647,10 +1655,10 @@ export interface components {
             pagespeed_remaining_today: number;
             /** Pagespeed Used Today */
             pagespeed_used_today: number;
-            /** Places Calls */
-            places_calls: number;
             /** Places Daily Cap */
             places_daily_cap: number;
+            /** Places Max Calls */
+            places_max_calls: number;
             /** Places Remaining Today */
             places_remaining_today: number;
             /** Places Used Today */
@@ -2752,12 +2760,16 @@ export interface components {
             latest_audit: components["schemas"]["QueueAudit"] | null;
             /** Opportunities */
             opportunities: components["schemas"]["QueueOpportunity"][];
+            /** Rating */
+            rating?: number | null;
             /** Sources */
             sources: string[];
             /** State */
             state: string | null;
             /** Top Score */
             top_score: number;
+            /** User Rating Count */
+            user_rating_count?: number | null;
             /** Weak Hidden */
             weak_hidden: number;
             /** Website */
@@ -3400,6 +3412,10 @@ export interface components {
          * @description The whole audit, including the evidence behind every check and finding.
          */
         WebsiteAuditDetail: {
+            /** Accessibility Score */
+            accessibility_score?: number | null;
+            /** Best Practices Score */
+            best_practices_score?: number | null;
             /**
              * Business Id
              * Format: uuid
@@ -3464,6 +3480,10 @@ export interface components {
          * @description The list view: what was audited, how it went, and which codes came out.
          */
         WebsiteAuditSummary: {
+            /** Accessibility Score */
+            accessibility_score?: number | null;
+            /** Best Practices Score */
+            best_practices_score?: number | null;
             /**
              * Business Id
              * Format: uuid

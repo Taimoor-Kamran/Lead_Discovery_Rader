@@ -15,22 +15,38 @@ EXPECTED_SERVICE = {
     "unreachable": "website_design",
     "no_https": "website_design",
     "tls_invalid": "website_design",
+    "builder_subdomain": "website_design",
     "no_mobile_viewport": "website_design",
     "stale_copyright": "website_design",
     "no_contact_on_homepage": "website_design",
     "slow_mobile": "website_design",
     "js_shell_suspected": "website_design",
+    "images_without_alt": "website_design",
+    "unlabelled_form_fields": "website_design",
+    "thin_content": "website_design",
+    "no_section_headings": "website_design",
+    "heading_level_skipped": "website_design",
+    "low_accessibility_score": "website_design",
+    "low_best_practices_score": "website_design",
     "missing_title": "seo_gbp",
     "missing_meta_description": "seo_gbp",
     "no_h1": "seo_gbp",
     "no_structured_data": "seo_gbp",
+    "few_reviews": "seo_gbp",
     "no_online_booking": "booking_setup",
+    "no_live_chat": "ai_chat_setup",
     "robots_blocked": None,
 }
 
 
-def test_the_catalogue_has_exactly_the_four_services() -> None:
-    assert catalogue.service_keys() == ["website_design", "seo_gbp", "booking_setup", "ads_social"]
+def test_the_catalogue_has_exactly_the_five_services() -> None:
+    assert catalogue.service_keys() == [
+        "website_design",
+        "seo_gbp",
+        "booking_setup",
+        "ai_chat_setup",
+        "ads_social",
+    ]
 
 
 @pytest.mark.parametrize(("code", "service"), sorted(EXPECTED_SERVICE.items()))
@@ -83,7 +99,16 @@ def test_one_finding_yields_one_opportunity_with_verbatim_evidence(code: str) ->
         opportunity.confidence == catalogue.SEVERITY_CONFIDENCE[Severity(CATALOGUE[code].severity)]
     )
     assert opportunity.reason == CATALOGUE[code].wording.format(
-        url="https://example-plumbing.invalid/", year=2016, score=41
+        url="https://example-plumbing.invalid/",
+        year=2016,
+        score=41,
+        missing=37,
+        total=41,
+        count=4,
+        words=84,
+        noun={"unlabelled_form_fields": "form fields", "few_reviews": "reviews"}.get(code, "words"),
+        higher="h1",
+        lower="h3",
     )
     [evidence] = opportunity.evidence
     assert evidence.finding_code == code
@@ -191,3 +216,15 @@ def test_rule_reasons_obey_the_wording_rule() -> None:
     for opportunity in rule_opportunities(business, audit):
         lowered = opportunity.reason.lower()
         assert not any(word in lowered for word in BANNED_WORDS), opportunity.reason
+
+
+def test_a_medium_graded_score_finding_carries_medium_confidence() -> None:
+    """The rules read the severity the finding was stored with, not the catalogue's."""
+    business = make_business()
+    graded = {**finding("low_accessibility_score"), "severity": "medium"}
+    audit = make_audit(business, findings=[graded], social_links=["facebook"])
+
+    [opportunity] = rule_opportunities(business, audit)
+
+    assert opportunity.service == "website_design"
+    assert opportunity.confidence == 0.6

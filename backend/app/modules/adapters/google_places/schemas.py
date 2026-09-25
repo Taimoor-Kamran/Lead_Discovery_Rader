@@ -48,6 +48,8 @@ class Place(PlacesModel):
     business_status: str | None = Field(default=None, alias="businessStatus")
     types: list[str] | None = None
     primary_type: str | None = Field(default=None, alias="primaryType")
+    rating: float | None = None
+    user_rating_count: int | None = Field(default=None, alias="userRatingCount")
 
     @property
     def source_url(self) -> str:

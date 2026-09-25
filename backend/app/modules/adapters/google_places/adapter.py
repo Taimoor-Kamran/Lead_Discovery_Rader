@@ -5,6 +5,7 @@ Only Text Search (New) is used. Each result already carries every field in the m
 extra cost per record.
 """
 
+import math
 import time
 import uuid
 from collections.abc import Callable, Iterator
@@ -45,10 +46,16 @@ COMMERCIAL_USE_NOTE = (
     "other Places content may be stored. PLACES_CONTENT_TTL_DAYS drives `purge-expired`, "
     "which nulls the stored payload and keeps only the place ID."
 )
-# Text Search (New) returns at most 20 results a page and 3 pages in total.
+# Text Search (New) returns up to 20 places a page and at most 60 per query — but pages
+# often come back short, so 60 results is not 3 calls. Two live walks of "electrician in
+# Austin, TX" on 2026-09-24: asking for 20 every time took 5 calls for 60 places (20, 16, 12,
+# 10, 2, then no token); asking for only what was still wanted took 6 calls for 52 (19, 16,
+# 12, 4, 1, 0) and the empty last page still carried a token. The count per page also varies
+# between identical requests (page 1 was 20 on one walk, 19 on the next).
 MAX_RESULTS_PER_QUERY = 60
 
-ClientFactory = Callable[[uuid.UUID | None], PlacesTextSearchClient]
+# (job_run_id, the run's call ceiling) -> a client that refuses any call past the ceiling.
+ClientFactory = Callable[[uuid.UUID | None, int], PlacesTextSearchClient]
 
 
 class GooglePlacesAdapter:
@@ -65,39 +72,69 @@ class GooglePlacesAdapter:
         clock: Callable[[], float] = time.time,
     ) -> None:
         self._client_factory = client_factory or (
-            lambda job_run_id: build_client(
-                SOURCE_NAME, job_run_id=job_run_id, sleeper=sleeper, clock=clock
+            lambda job_run_id, max_calls: build_client(
+                SOURCE_NAME,
+                job_run_id=job_run_id,
+                max_calls=max_calls,
+                sleeper=sleeper,
+                clock=clock,
             )
         )
 
     # --- contract ---------------------------------------------------------------
 
     def discover(self, cfg: DiscoveryConfig) -> Iterator[Ref]:
-        """Page through Text Search, yielding one Ref per place until the cap is hit."""
-        limit = self._effective_limit(cfg.max_results)
+        """Page through Text Search until the limit, the last page, or a page with nothing new.
+
+        Every page asks for a full 20 and the last is trimmed here. Asking for fewer near the
+        limit is what made Places answer with short pages and then empty ones (see
+        `MAX_RESULTS_PER_QUERY`), and it saves nothing: Places bills per request.
+        """
+        limit = effective_limit(cfg.max_results)
         if limit <= 0:
             return
 
         text_query, location_bias = build_query(cfg.industry, cfg.geo)
-        client = self._client_factory(cfg.job_run_id)
+        client = self._client_factory(cfg.job_run_id, run_call_ceiling(limit))
+        seen: set[str] = set()
         yielded = 0
+        pages = 0
         page_token: str | None = None
         try:
             while yielded < limit:
                 cfg.cancel_check()
                 page = client.search_text(
-                    text_query,
-                    page_token=page_token,
-                    location_bias=location_bias,
-                    page_size=min(PAGE_SIZE, limit - yielded),
+                    text_query, page_token=page_token, location_bias=location_bias
                 )
+                pages += 1
+                fresh = 0
                 for payload in page.places:
                     if yielded >= limit:
                         break
+                    place_id = payload.get("id")
+                    if isinstance(place_id, str) and place_id:
+                        if place_id in seen:
+                            continue  # the same place again: nothing to store, no progress
+                        seen.add(place_id)
+                        fresh += 1
                     yield _ref_from_payload(payload)
                     yielded += 1
                 page_token = page.next_page_token
                 if not page_token:
+                    break
+                if fresh == 0:
+                    # Places will go on answering 200 with no places, or none it has not
+                    # already sent, and a fresh token. Following it never ends: every call is
+                    # billed and nothing new arrives. This cost 500 calls before v0.11.0.
+                    logger.warning(
+                        "a Places page brought no new place but still carried a token; stopping",
+                        extra={
+                            "job_run_id": str(cfg.job_run_id),
+                            "page": pages,
+                            "places_on_page": len(page.places),
+                            "yielded": yielded,
+                        },
+                    )
                     break
         finally:
             client.close()
@@ -152,6 +189,8 @@ class GooglePlacesAdapter:
             ),
             lat=place.location.latitude if place.location else None,
             lng=place.location.longitude if place.location else None,
+            rating=place.rating,
+            user_rating_count=place.user_rating_count,
         )
 
     def emit_events(self, raw: RawDoc) -> list[Event]:
@@ -174,12 +213,25 @@ class GooglePlacesAdapter:
             content_ttl_days=get_settings().places_content_ttl_days,
         )
 
-    # --- helpers ----------------------------------------------------------------
 
-    def _effective_limit(self, requested: int) -> int:
-        """Never exceed the operator's per-job cap or the API's own 60-result ceiling."""
-        hard_cap = min(get_settings().places_max_results_per_job, MAX_RESULTS_PER_QUERY)
-        return max(min(requested, hard_cap), 0)
+def effective_limit(requested: int) -> int:
+    """Never exceed the operator's per-job cap or the API's own 60-result ceiling."""
+    hard_cap = min(get_settings().places_max_results_per_job, MAX_RESULTS_PER_QUERY)
+    return max(min(requested, hard_cap), 0)
+
+
+def run_call_ceiling(limit: int) -> int:
+    """The most Places calls one run for `limit` results may make: a safety limit, enforced.
+
+    Its base is the fewest pages `limit` results could possibly take, ceil(limit / 20). That
+    is a floor, not an estimate — pages come back short, so real runs take more (see
+    `MAX_RESULTS_PER_QUERY`). `PLACES_RUN_CALL_CAP_MULTIPLIER` times that floor leaves room
+    for short pages and retries; a run that still reaches it is looping. The cost estimate
+    shows this same number, so what a client is told is what the system enforces.
+    """
+    if limit <= 0:
+        return 0
+    return get_settings().places_run_call_cap_multiplier * math.ceil(limit / PAGE_SIZE)
 
 
 def build_query(industry: str, geo: Geo) -> tuple[str, dict[str, Any] | None]:

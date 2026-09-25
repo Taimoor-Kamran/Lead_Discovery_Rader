@@ -71,7 +71,12 @@ function num(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-/** The PageSpeed numbers as labelled lines. A metric PSI did not report reads "unknown". */
+/**
+ * The PageSpeed numbers as labelled lines. A metric PSI did not report reads "unknown".
+ * The accessibility and best-practices scores (v0.11.0) appear only when PSI scored them:
+ * an audit from before they were requested, or one PSI could not score, shows no line
+ * rather than a zero or a blank.
+ */
 export function psiLines(psi: Record<string, unknown> | null | undefined): PsiLine[] {
   if (!psi || !Object.keys(psi).length) return [];
   const scoreValue = num(psi.performance_score);
@@ -104,6 +109,15 @@ export function psiLines(psi: Record<string, unknown> | null | undefined): PsiLi
       rating: tbt === null ? null : band(tbt, 200, 600),
     },
   ];
+  for (const [key, label] of [
+    ["accessibility_score", "Accessibility"],
+    ["best_practices_score", "Best practices"],
+  ] as const) {
+    const value = num(psi[key]);
+    if (value !== null) {
+      lines.push({ key, label, value: `${Math.round(value)}/100`, rating: band(value, 90, 50, true) });
+    }
+  }
   const crux = psi.crux_category;
   if (typeof crux === "string" && crux) {
     lines.push({ key: "crux_category", label: "Field data", value: crux, rating: null });
@@ -160,3 +174,24 @@ export const CRM_ACTION_LABELS: Record<string, string> = {
   withdraw: "Withdrawn",
   export: "Exported",
 };
+
+/** "11 reviews", "1 review". A count the listing did not give is `null`, never zero. */
+export function reviewCount(count: number | null | undefined): string | null {
+  if (count === null || count === undefined) return null;
+  return `${count} review${count === 1 ? "" : "s"}`;
+}
+
+/**
+ * The listing's star rating and review count as one line: "4.2 stars · 11 reviews".
+ * Either half is left out when the source did not give it; neither reads "unknown".
+ */
+export function listingRating(
+  rating: number | null | undefined,
+  count: number | null | undefined,
+): string {
+  const parts = [
+    rating === null || rating === undefined ? null : `${rating.toFixed(1)} stars`,
+    reviewCount(count),
+  ].filter((part): part is string => part !== null);
+  return parts.length ? parts.join(" · ") : "unknown";
+}

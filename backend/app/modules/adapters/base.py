@@ -82,6 +82,8 @@ class Candidate:
     address_components: list[AddressPart] | None = None
     lat: float | None = None
     lng: float | None = None
+    rating: float | None = None
+    user_rating_count: int | None = None
 
 
 @dataclass(frozen=True)

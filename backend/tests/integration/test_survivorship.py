@@ -610,3 +610,49 @@ def test_a_record_with_no_address_at_all_never_wins_the_group(db: Session) -> No
 
     assert business.city == "Austin"
     assert business.street_key == "123 main street"
+
+
+# --- v0.11.0: the listing's rating and review count -----------------------------------------
+
+
+def test_rating_and_review_count_reach_the_business_with_their_provenance(db: Session) -> None:
+    places = source(db, "google_places")
+    row = record(db, places, "ChIJrated")
+    business = new_business(db)
+
+    write_field_values(
+        db,
+        business=business,
+        record=row,
+        normalized=normalized("google_places", rating=4.2, user_rating_count=11),
+        observed_at=NOW,
+    )
+    recompute(db, business, now=NOW)
+    db.commit()
+
+    assert (business.rating, business.user_rating_count) == (4.2, 11)
+    stored = {
+        value.field: value
+        for value in db.scalars(
+            select(BusinessFieldValue).where(
+                BusinessFieldValue.field.in_(["rating", "user_rating_count"])
+            )
+        )
+    }
+    assert stored["rating"].value == "4.2"
+    assert stored["user_rating_count"].value == "11"
+    assert stored["user_rating_count"].discovered_record_id == row.id
+    assert stored["user_rating_count"].expires_at == row.content_expires_at
+
+
+def test_a_listing_without_a_rating_shows_null_not_zero(db: Session) -> None:
+    places = source(db, "google_places")
+    row = record(db, places, "ChIJunrated")
+    business = new_business(db)
+
+    write_field_values(
+        db, business=business, record=row, normalized=normalized("google_places"), observed_at=NOW
+    )
+    recompute(db, business, now=NOW)
+
+    assert (business.rating, business.user_rating_count) == (None, None)

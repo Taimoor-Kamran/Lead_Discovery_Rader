@@ -21,6 +21,19 @@ BUILDER_DOMAINS = frozenset(
         "weebly.com",
         "webflow.io",
         "carrd.co",
+        # Added in v0.11.0. `wixstudio.com` is the one seen on a real run: without it
+        # `topelectricianaustin.wixstudio.com` read as an own site whose identity was the
+        # whole of `wixstudio.com`. The rest are the same shape — one subdomain per
+        # customer on a builder's own domain.
+        "wixstudio.com",
+        "editorx.io",
+        "weeblysite.com",
+        "squarespace.com",
+        "wordpress.com",
+        "mystrikingly.com",
+        "jimdosite.com",
+        "site123.me",
+        "myshopify.com",
     }
 )
 # A profile on someone else's platform. It is recorded, but it is never an identity:
@@ -87,6 +100,23 @@ def parse_website(raw: str | None) -> tuple[str | None, str | None, WebsiteKind]
     if registered in BUILDER_DOMAINS:
         return website, host, WebsiteKind.builder_subdomain
     return website, registered, WebsiteKind.own_site
+
+
+def builder_host(url: str | None) -> str | None:
+    """The host of `url` when it is a subdomain of a website builder, else `None`.
+
+    Read from the host itself rather than from a stored `website_kind`, so it answers for
+    the URL a page was actually *served* from: a builder subdomain that redirects to the
+    business's own domain is not one, and a record classified before a builder was added
+    to the list is still recognised.
+    """
+    host = host_of(url)
+    if host is None:
+        return None
+    for builder in BUILDER_DOMAINS:
+        if host.endswith(f".{builder}"):
+            return host
+    return None
 
 
 def _clean_url(raw: str | None) -> str | None:

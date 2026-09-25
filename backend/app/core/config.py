@@ -21,7 +21,8 @@ BOT_USER_AGENT_NAME = "LeadDiscoveryRadarBot/0.4"
 DEFAULT_PLACES_FIELD_MASK = (
     "places.id,places.displayName,places.formattedAddress,places.addressComponents,"
     "places.location,places.nationalPhoneNumber,places.internationalPhoneNumber,"
-    "places.websiteUri,places.businessStatus,places.types,places.primaryType,nextPageToken"
+    "places.websiteUri,places.businessStatus,places.types,places.primaryType,"
+    "places.rating,places.userRatingCount,nextPageToken"
 )
 
 
@@ -59,6 +60,9 @@ class Settings(BaseSettings):
     places_field_mask: str = DEFAULT_PLACES_FIELD_MASK
     places_max_results_per_job: int = 60
     places_daily_call_cap: int = 200
+    # A run may make this many times the Places calls its estimate says it needs; one call
+    # more fails it. The daily cap is too coarse to catch a runaway run.
+    places_run_call_cap_multiplier: int = Field(default=4, ge=1)
     places_rps: float = 5.0
     places_content_ttl_days: int = 30
 
@@ -82,6 +86,14 @@ class Settings(BaseSettings):
     audit_max_age_days: int = 30
     audit_slow_mobile_score: int = 50
     audit_stale_copyright_years: int = 3
+    # Fewer words of visible homepage text than this is reported as `thin_content`.
+    audit_thin_content_words: int = 200
+    # A PageSpeed accessibility or best-practices score below this is reported as a finding.
+    audit_quality_score_threshold: int = 90
+    # Below this the same finding is `medium` rather than `low` (graded, v0.11.0).
+    audit_quality_score_medium_below: int = 70
+    # A Places listing with fewer reviews than this is reported as `few_reviews`.
+    places_few_reviews: int = 20
     audit_page_text_max_chars: int = 20_000
     psi_rps: float = 1.0
     psi_daily_call_cap: int = 200
@@ -238,6 +250,12 @@ class Settings(BaseSettings):
     scheduler_enabled: bool = True
     scheduler_tick_seconds: float = 15.0
     watchdog_stale_minutes: int = 30
+    # The time limit RQ enforces on one run (v0.11.0). Before it was set, every run got
+    # RQ's default of 180 s, which an audit of more than ~5 businesses cannot meet.
+    job_timeout_seconds: int = Field(default=1800, ge=60)
+    # An audit run's limit is this per business, or `job_timeout_seconds` if that is more:
+    # fetches with the per-host throttle (~15 s) plus PageSpeed at worst (2 x 65 s).
+    audit_seconds_per_business: int = Field(default=150, ge=10)
     # JSON logs also go to `LOG_DIR/LOG_FILE` with daily rotation when LOG_DIR is set.
     log_dir: str = ""
     log_file: str = "app.log"

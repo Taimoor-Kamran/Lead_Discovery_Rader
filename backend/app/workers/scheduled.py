@@ -27,7 +27,9 @@ from app.workers.scheduler import (
 
 logger = get_logger("app.scheduled")
 
-WORKER_LOST = "worker lost: the run was still `running` after the stale-run limit"
+WORKER_LOST = (
+    "worker lost: the run was still `running` with no progress for longer than the stale-run limit"
+)
 QUEUE_LOST = (
     "queue lost: the run was still `queued` after the stale-run limit, with no job on the queue"
 )
@@ -83,12 +85,18 @@ def run_backup_verify(session: Session, run: JobRun) -> None:
 
 
 def stale_runs(session: Session, *, now: datetime, exclude: JobRun | None = None) -> list[JobRun]:
-    """Runs still `running` after the configured limit — a worker died under them."""
+    """Runs `running` with no progress for the configured limit — a worker died under them.
+
+    Measured from `updated_at`, which every checkpoint moves, not from `started_at`: a
+    long run that is still making progress is alive. Until v0.11.0 it was `started_at`,
+    and an audit of 54 businesses — about 30 minutes, one at a time — could not finish
+    inside the 30-minute limit however healthy it was.
+    """
     limit = now - timedelta(minutes=get_settings().watchdog_stale_minutes)
     stmt = select(JobRun).where(
         JobRun.status == JobRunStatus.running,
         JobRun.started_at.is_not(None),
-        JobRun.started_at < limit,
+        JobRun.updated_at < limit,
     )
     if exclude is not None:
         stmt = stmt.where(JobRun.id != exclude.id)
@@ -157,7 +165,7 @@ def run_watchdog(session: Session, run: JobRun, *, now: datetime | None = None) 
         alerts.raise_alert(
             session,
             alerts.RULE_STALE_JOB,
-            f"A {item.kind} run was stuck in `{_was(reason)}` for more than "
+            f"A {item.kind} run was stuck in `{_was(reason)}` with no progress for more than "
             f"{get_settings().watchdog_stale_minutes} minutes and was failed "
             f"({reason.split(':')[0]})",
             details={"job_run_id": str(item.id), "kind": item.kind, "reason": reason},

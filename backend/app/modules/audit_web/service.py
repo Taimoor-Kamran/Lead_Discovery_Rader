@@ -36,7 +36,8 @@ from app.modules.audit_web.psi import (
     build_psi_client,
 )
 from app.modules.audit_web.schemas import WebsiteAuditDetail, WebsiteAuditSummary
-from app.modules.businesses.models import Business
+from app.modules.businesses.models import Business, BusinessFieldValue
+from app.modules.discovery.models import DiscoveredRecord
 from app.modules.jobs.models import JobRun as JobRunType
 from app.modules.normalization.schemas import BusinessStatus, WebsiteKind
 
@@ -86,6 +87,9 @@ def audit_business(
         booking_industries=frozenset(item.lower() for item in settings.audit_booking_industries),
         slow_mobile_score=settings.audit_slow_mobile_score,
         stale_copyright_years=settings.audit_stale_copyright_years,
+        thin_content_words=settings.audit_thin_content_words,
+        quality_score_threshold=settings.audit_quality_score_threshold,
+        quality_score_medium_below=settings.audit_quality_score_medium_below,
         now=started,
     )
 
@@ -240,6 +244,28 @@ def _measure(psi: PageSpeedClient, url: str) -> tuple[dict[str, Any] | None, str
         return None, exc.reason
 
 
+def _listing_url(session: Session, business: Business) -> str | None:
+    """The source page of the record whose review count the business shows."""
+    if business.user_rating_count is None:
+        return None
+    return session.scalar(
+        select(DiscoveredRecord.source_url)
+        .join(BusinessFieldValue, BusinessFieldValue.discovered_record_id == DiscoveredRecord.id)
+        .where(
+            BusinessFieldValue.business_id == business.id,
+            BusinessFieldValue.field == "user_rating_count",
+            BusinessFieldValue.value == str(business.user_rating_count),
+        )
+        .order_by(BusinessFieldValue.observed_at.desc())
+        .limit(1)
+    )
+
+
+def _score(psi: dict[str, Any] | None, key: str) -> int | None:
+    value = (psi or {}).get(key)
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
 def _failed_outcome(
     url: str, reason: str, kind: str | None, *, tls_valid: bool = True
 ) -> FetchOutcome:
@@ -295,6 +321,14 @@ def _store(
     resolved_checks = checks or {}
     tech_stack = checks_module.value_of(resolved_checks, "tech_stack") or {}
     ttl_days = settings.audit_content_ttl_days
+    findings = [
+        *findings,
+        *findings_module.for_listing(
+            business.user_rating_count,
+            few_reviews=settings.places_few_reviews,
+            listing_url=_listing_url(session, business),
+        ),
+    ]
     audit = WebsiteAudit(
         business_id=business.id,
         job_run_id=job_run_id,
@@ -304,6 +338,8 @@ def _store(
         http_status=http_status,
         checks=checks_module.as_payload(resolved_checks),
         psi=psi,
+        accessibility_score=_score(psi, "accessibility_score"),
+        best_practices_score=_score(psi, "best_practices_score"),
         tech_stack=tech_stack,
         findings=findings_module.as_payload(findings),
         page_text=page_text,
@@ -559,6 +595,8 @@ def summarize(audit: WebsiteAudit) -> WebsiteAuditSummary:
         http_status=audit.http_status,
         finding_codes=audit.finding_codes,
         rules_version=audit.rules_version,
+        accessibility_score=audit.accessibility_score,
+        best_practices_score=audit.best_practices_score,
         started_at=audit.started_at,
         finished_at=audit.finished_at,
         created_at=audit.created_at,

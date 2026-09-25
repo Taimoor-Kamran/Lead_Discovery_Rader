@@ -122,6 +122,9 @@ def _audit_one(
         savepoint.commit()
         return audit
     except Exception as exc:
+        # The run's own time limit is `RunTimedOut`, a BaseException, so it is never
+        # caught here: until v0.11.0 it was, and a killed run recorded the business it
+        # was on as a failed audit and still reported done.
         savepoint.rollback()
         logger.exception("auditing one business failed", extra={"business_id": str(business.id)})
         return service.record_failure(

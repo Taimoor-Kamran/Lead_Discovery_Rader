@@ -223,7 +223,8 @@ def test_every_opportunity_carries_evidence_with_text_and_url(
             assert item["text"], item
             business = db.get(Business, row.business_id)
             assert business is not None
-            if business.website_kind.value != "none":
+            # A demo listing has no source page, so its `few_reviews` evidence has no URL.
+            if business.website_kind.value != "none" and item["finding_code"] != "few_reviews":
                 assert item["url"], item
         assert set(row.score_components) == {"facts", "inference", "intent", "contactability"}
         assert row.scoring_version == "scoring-1"
@@ -302,10 +303,16 @@ def test_schema_drift_is_retried_once_within_the_same_classification(
 
 
 def test_the_ai_never_removes_a_rule_opportunity(db: Session, classified: DemoLoadResult) -> None:
-    """The fake answer for Wix names booking_setup only; the other three rules stand."""
+    """The fake answer for Wix names booking_setup only; the other four rules stand."""
     opportunities = opportunities_of(db, "wixwaterworks.wixsite.com")
 
-    assert set(opportunities) == {"website_design", "seo_gbp", "booking_setup", "ads_social"}
+    assert set(opportunities) == {
+        "website_design",
+        "seo_gbp",
+        "booking_setup",
+        "ai_chat_setup",
+        "ads_social",
+    }
     assert opportunities["website_design"].ai_agrees is False
     assert opportunities["website_design"].source.value == "rules"
 

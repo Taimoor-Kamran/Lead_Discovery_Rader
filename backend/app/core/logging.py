@@ -9,11 +9,16 @@ import sys
 from contextvars import ContextVar
 from typing import Any
 
+from pydantic import SecretStr
+
 from app.core.config import get_settings
 
 request_id_ctx: ContextVar[str] = ContextVar("request_id", default="-")
 
 REDACTED = "[REDACTED]"
+
+# Third-party HTTP loggers held at WARNING: at INFO they print every request URL.
+QUIET_HTTP_LOGGERS = ("httpx", "httpcore")
 
 # Keys whose values must never reach a log line, whatever the nesting.
 SENSITIVE_KEYS = frozenset(
@@ -44,17 +49,27 @@ _BEARER_PATTERN = re.compile(r"(?i)bearer\s+[A-Za-z0-9._\-]+")
 _JWT_PATTERN = re.compile(r"\beyJ[A-Za-z0-9._\-]{10,}\b")
 
 
+# A credential in a URL's query string — `?key=…`, `&access_token=…` — whatever it belongs
+# to. PSI took its key this way, and httpx logged the whole URL (v0.11.0).
+_URL_CREDENTIAL_PATTERN = re.compile(
+    r"(?i)([?&](?:key|api_key|apikey|access_token|token|secret)=)[^&#\s\"']+"
+)
+
+
 def _literal_secrets() -> list[str]:
-    """Secret values pulled from settings, so their literal text can be scrubbed."""
+    """Every secret value in settings, so its literal text can be scrubbed.
+
+    Collected from the `SecretStr` fields rather than listed by hand: a hand-kept list is
+    how the PageSpeed key was left out and reached the logs. The connection URLs carry
+    passwords but are plain strings, so they are named.
+    """
     settings = get_settings()
     values = [
-        settings.jwt_secret.get_secret_value(),
-        settings.database_url,
-        settings.redis_url,
-        settings.google_places_api_key.get_secret_value(),
-        settings.openai_api_key.get_secret_value(),
-        settings.airtable_token.get_secret_value(),
+        value.get_secret_value()
+        for name in type(settings).model_fields
+        if isinstance(value := getattr(settings, name), SecretStr)
     ]
+    values += [settings.database_url, settings.redis_url]
     return [v for v in values if v and len(v) >= 6]
 
 
@@ -63,6 +78,7 @@ def scrub(text: str) -> str:
     for secret in _literal_secrets():
         if secret in text:
             text = text.replace(secret, REDACTED)
+    text = _URL_CREDENTIAL_PATTERN.sub(lambda m: f"{m.group(1)}{REDACTED}", text)
     text = _KV_PATTERN.sub(lambda m: f"{m.group(1)}={REDACTED}", text)
     text = _BEARER_PATTERN.sub(f"Bearer {REDACTED}", text)
     return _JWT_PATTERN.sub(REDACTED, text)
@@ -189,6 +205,12 @@ def configure_logging() -> None:
         logger = logging.getLogger(noisy)
         logger.handlers = []
         logger.propagate = True
+
+    # httpx logs every request's full URL at INFO. A URL can carry a credential — the
+    # PageSpeed key did, in plain text, until v0.11.0 — and our own client already logs
+    # what matters about each call (`api_calls`, warnings), so only their warnings pass.
+    for chatty in QUIET_HTTP_LOGGERS:
+        logging.getLogger(chatty).setLevel(logging.WARNING)
 
 
 def get_logger(name: str) -> logging.Logger:

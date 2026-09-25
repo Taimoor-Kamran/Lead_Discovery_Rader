@@ -58,3 +58,6 @@ class NormalizedBusiness(BaseModel):
     domain: str | None = None
     website_kind: WebsiteKind = WebsiteKind.none
     business_status: BusinessStatus = BusinessStatus.unknown
+    # The listing's own star rating (1 to 5) and review count, as the source reports them.
+    rating: float | None = None
+    user_rating_count: int | None = None

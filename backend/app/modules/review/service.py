@@ -818,6 +818,8 @@ def _queue_item(
         ],
         weak_hidden=weak_hidden,
         sources=sources,
+        rating=business.rating,
+        user_rating_count=business.user_rating_count,
     )
 
 

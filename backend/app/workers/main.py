@@ -1,12 +1,11 @@
 """RQ worker entrypoint: `python -m app.workers.main`."""
 
-from rq import Worker
-
 from app import models_registry  # noqa: F401
 from app.core.config import get_settings
 from app.core.logging import configure_logging, get_logger
 from app.core.redis import get_redis
 from app.core.startup import check_startup
+from app.workers.timeouts import RadarWorker
 
 
 def main() -> None:
@@ -21,7 +20,7 @@ def main() -> None:
         from app.workers.scheduler import start_scheduler_thread
 
         start_scheduler_thread(get_redis())
-    worker = Worker([settings.job_queue_name], connection=get_redis())
+    worker = RadarWorker([settings.job_queue_name], connection=get_redis())
     worker.work(with_scheduler=False)
 
 

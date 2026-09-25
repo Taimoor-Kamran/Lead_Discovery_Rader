@@ -20,7 +20,9 @@ from app.modules.adapters.google_places.schemas import TextSearchPage
 
 PLACES_BASE_URL = "https://places.googleapis.com"
 TEXT_SEARCH_PATH = "/v1/places:searchText"
-PAGE_SIZE = 20  # the API's maximum
+# The API's maximum, and always what discovery asks for: asking for fewer near the limit
+# made Places send short pages and then empty ones that still carried a token.
+PAGE_SIZE = 20
 
 
 class PlacesTextSearchClient:
@@ -74,6 +76,7 @@ def build_client(
     source: str,
     *,
     job_run_id: uuid.UUID | None = None,
+    max_calls: int | None = None,
     sleeper: Callable[[float], None] = time.sleep,
     clock: Callable[[], float] = time.time,
     redis_client: Redis | None = None,
@@ -81,7 +84,11 @@ def build_client(
     meter: Any = None,
     base_url: str = PLACES_BASE_URL,
 ) -> PlacesTextSearchClient:
-    """The production wiring: settings, the shared Redis limiter and the DB metering hook."""
+    """The production wiring: settings, the shared Redis limiter and the DB metering hook.
+
+    `max_calls` is the run's safety ceiling (`adapter.run_call_ceiling`): the client refuses
+    any call past it, counted per job run. Left unset, only the daily cap applies.
+    """
     settings = get_settings()
     api_key = settings.google_places_api_key.get_secret_value()
     limits = rate_limit or RateLimit(
@@ -105,6 +112,9 @@ def build_client(
             requests_per_second=limits.requests_per_second,
             burst=limits.burst,
             daily_call_cap=limits.daily_call_cap,
+            run_call_cap=max_calls,
+            run_call_cap_setting="PLACES_RUN_CALL_CAP_MULTIPLIER",
+            job_run_id=job_run_id,
             clock=clock,
             sleeper=sleeper,
         ),

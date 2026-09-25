@@ -241,7 +241,7 @@ describe("/admin/health shows AI as off rather than as zero of a budget", () => 
 const ESTIMATE = {
   max_results: 20,
   uses_places: true,
-  places_calls: 1,
+  places_max_calls: 4,
   places_used_today: 1,
   places_daily_cap: 200,
   places_remaining_today: 199,

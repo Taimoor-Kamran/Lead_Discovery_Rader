@@ -67,4 +67,17 @@ describe("AuditPanel", () => {
     render(<AuditPanel detail={reviewDetail({ audit: null })} />);
     expect(screen.getByText("This business has not been audited yet.")).toBeTruthy();
   });
+
+  it("names the block Speed and quality and adds the scores PageSpeed gave, never a zero", () => {
+    const scored = { ...AUDIT, psi: { ...AUDIT.psi, accessibility_score: 58, best_practices_score: 67 } };
+    const { unmount } = render(<AuditPanel detail={reviewDetail({ audit: scored })} />);
+    expect(screen.getByText("Speed and quality")).toBeTruthy();
+    const lines = screen.getAllByTestId("psi-line").map((line) => line.textContent);
+    expect(lines).toContain("Accessibility58/100needs work");
+    expect(lines).toContain("Best practices67/100needs work");
+    unmount();
+    render(<AuditPanel detail={reviewDetail({ audit: { ...AUDIT, psi: null } })} />);
+    expect(screen.getByText("No PageSpeed measurement.")).toBeTruthy();
+    expect(screen.queryByText(/0\/100/)).toBeNull();
+  });
 });

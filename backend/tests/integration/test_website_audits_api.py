@@ -189,12 +189,15 @@ def test_one_audit_carries_its_checks_findings_and_pagespeed(
     assert body["checks"]["title"]["value"] == "Wellington Plumbing"
     assert body["checks"]["title"]["evidence_url"] == "https://wellington.invalid/"
     assert body["psi"]["performance_score"] == 88
-    assert body["rules_version"] == "audit-2"
+    assert body["rules_version"] == "audit-3"
     assert {f["code"] for f in body["findings"]} == {
         "missing_meta_description",
         "no_structured_data",
         "no_contact_on_homepage",
         "no_online_booking",
+        "no_live_chat",
+        "thin_content",
+        "no_section_headings",
     }
 
 
@@ -523,3 +526,112 @@ def test_the_openapi_document_describes_the_new_endpoints() -> None:
     assert "/api/v1/businesses/{business_id}/audits" in paths
     assert "/api/v1/jobs/{job_run_id}/audit" in paths
     assert "/api/v1/website-audits/{website_audit_id}" in paths
+
+
+# --- v0.11.0: accessibility and best-practices scores ------------------------------------
+
+
+class ThreeScorePsi:
+    def analyse(self, url: str) -> PsiResult:
+        return PsiResult(performance_score=61, accessibility_score=58, best_practices_score=67)
+
+
+def test_accessibility_and_best_practices_are_stored_shown_and_reported(
+    client: TestClient, db: Session, admin_user: User
+) -> None:
+    business = make_business(db, name="Scored Plumbing")
+    audit_tools = tools()
+    audit_tools = service.AuditTools(
+        fetcher=audit_tools.fetcher, psi=ThreeScorePsi(), settings=audit_tools.settings
+    )
+    audit = service.audit_business(db, business, tools=audit_tools)
+    db.commit()
+
+    assert (audit.accessibility_score, audit.best_practices_score) == (58, 67)
+    body = client.get(
+        f"/api/v1/website-audits/{audit.id}", headers=auth_headers(client, admin_user)
+    ).json()
+    assert body["accessibility_score"] == 58
+    assert body["best_practices_score"] == 67
+    messages = {f["code"]: f["message"] for f in body["findings"]}
+    assert messages["low_accessibility_score"] == "PageSpeed scored accessibility at 58 out of 100."
+    assert messages["low_best_practices_score"] == (
+        "PageSpeed scored best practices at 67 out of 100."
+    )
+
+
+def test_without_a_pagespeed_key_every_score_is_null_and_nothing_is_reported(
+    client: TestClient, db: Session, admin_user: User
+) -> None:
+    from app.core.http import ApiHttpClient
+    from app.modules.audit_web.psi import NetworkPageSpeedClient
+
+    business = make_business(db, name="Keyless Plumbing")
+    audit_tools = tools()
+    keyless = NetworkPageSpeedClient(ApiHttpClient(source="pagespeed_insights"), api_key="")
+    audit_tools = service.AuditTools(
+        fetcher=audit_tools.fetcher, psi=keyless, settings=audit_tools.settings
+    )
+    audit = service.audit_business(db, business, tools=audit_tools)
+    db.commit()
+
+    body = client.get(
+        f"/api/v1/website-audits/{audit.id}", headers=auth_headers(client, admin_user)
+    ).json()
+    assert body["psi"] is None
+    assert body["accessibility_score"] is None
+    assert body["best_practices_score"] is None
+    assert "PAGESPEED_API_KEY" in body["checks"]["psi_error"]["value"]
+    codes = {f["code"] for f in body["findings"]}
+    assert not codes & {"slow_mobile", "low_accessibility_score", "low_best_practices_score"}
+
+
+def test_few_reviews_cites_the_listing_the_count_came_from(db: Session) -> None:
+    from app.modules.businesses.models import BusinessFieldValue
+    from app.modules.discovery.models import DiscoveredRecord
+    from app.modules.sources.models import Source, SourceKind
+
+    business = make_business(db, name="Quiet Plumbing")
+    business.user_rating_count = 11
+    places = Source(name="google_places", kind=SourceKind.api, config={}, enabled=True)
+    db.add(places)
+    db.flush()
+    now = datetime.now(UTC)
+    record = DiscoveredRecord(
+        source_id=places.id,
+        source_record_id="ChIJquiet",
+        source_url="https://www.google.com/maps/place/?q=place_id:ChIJquiet",
+        raw_payload={"id": "ChIJquiet"},
+        first_discovered_at=now,
+        last_discovered_at=now,
+        business_id=business.id,
+    )
+    db.add(record)
+    db.flush()
+    db.add(
+        BusinessFieldValue(
+            business_id=business.id,
+            field="user_rating_count",
+            value="11",
+            source_id=places.id,
+            discovered_record_id=record.id,
+            observed_at=now,
+        )
+    )
+    db.flush()
+
+    audit = service.audit_business(db, business, tools=tools())
+
+    [finding] = [f for f in audit.findings if f["code"] == "few_reviews"]
+    assert finding["message"] == "Listing shows 11 reviews."
+    assert finding["evidence_url"] == "https://www.google.com/maps/place/?q=place_id:ChIJquiet"
+
+
+def test_a_business_with_no_website_still_gets_few_reviews(db: Session) -> None:
+    business = make_business(db, name="Offline Plumbing", website=None, kind=WebsiteKind.none)
+    business.user_rating_count = 3
+
+    audit = service.audit_business(db, business, tools=tools())
+
+    assert audit.status is AuditStatus.skipped
+    assert set(audit.finding_codes) == {"no_website", "few_reviews"}

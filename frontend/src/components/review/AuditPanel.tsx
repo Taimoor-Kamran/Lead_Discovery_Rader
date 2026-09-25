@@ -59,7 +59,7 @@ export function AuditPanel({ detail }: { detail: ReviewDetail }) {
       </div>
 
       <div className="mt-5 border-t border-line pt-4">
-        <h3 className="mb-2 text-base font-semibold text-ink">Speed</h3>
+        <h3 className="mb-2 text-base font-semibold text-ink">Speed and quality</h3>
         <PsiPanel psi={psi} />
       </div>
 

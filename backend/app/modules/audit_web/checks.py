@@ -21,6 +21,7 @@ import json
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from itertools import pairwise
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -28,8 +29,10 @@ from bs4 import BeautifulSoup, Tag
 
 from app.core.safe_fetch import FetchOutcome
 from app.modules.audit_web.fingerprints import (
+    BOOKING_HREF_SEGMENTS,
     BOOKING_SIGNATURES,
     CART_LINK_PATTERNS,
+    CHAT_SIGNATURES,
     ECOMMERCE_SIGNATURES,
     SOCIAL_PLATFORMS,
     TECH_SIGNATURES,
@@ -221,12 +224,17 @@ def analyse_html(
     checks.update(_content_checks(soup, url, text))
     checks.update(_contact_checks(soup, url))
     checks["booking"] = _booking(soup, lowered, url)
+    checks["live_chat"] = _live_chat(lowered, url)
     checks["ecommerce"] = _ecommerce(soup, lowered, url)
     checks["social_links"] = _social_links(soup, url)
     checks["structured_data"] = _structured_data(soup, url)
     checks["tech_stack"] = _tech_stack(soup, lowered, url)
     checks["copyright_year"] = _copyright_year(text, url, moment)
     checks["js_shell_suspected"] = _js_shell(soup, url, text)
+    checks["images_without_alt"] = _images_without_alt(soup, url)
+    checks["unlabelled_inputs"] = _unlabelled_inputs(soup, url)
+    checks["word_count"] = _word_count(text, url)
+    checks["heading_structure"] = _heading_structure(soup, url)
     stored = text[:page_text_limit] or None if page_text_limit else None
     return checks, stored
 
@@ -319,17 +327,70 @@ def _contact_checks(soup: BeautifulSoup, url: str) -> Checks:
 
 
 def _booking(soup: BeautifulSoup, lowered: str, url: str) -> CheckResult:
+    """A booking widget, a call to action that offers to book, or a link to a booking page.
+
+    Three ways in, most specific first. A widget script names the tool. A call to action is
+    read from whatever a visitor clicks — a link, a button, a submit input or an element
+    marked `role="button"` — by its text, or by its `aria-label`, `title` or `value` when
+    it has no text (an icon button). A link whose path is a booking page counts whatever
+    its label says.
+    """
     hits = find_signatures(lowered, BOOKING_SIGNATURES)
     if hits:
         return CheckResult(hits[0].label, evidence_text=hits[0].evidence, evidence_url=url)
-    for link in find_tags(soup, ["a", "button"]):
-        label = link.get_text(" ", strip=True)
-        match = booking_text_match(label.lower())
-        if match is not None:
-            return CheckResult(f"link text: {label}", evidence_text=str(link), evidence_url=url)
+    for element in _clickables(soup):
+        label = _clickable_label(element)
+        if label and booking_text_match(label.lower()) is not None:
+            return CheckResult(f"link text: {label}", evidence_text=str(element), evidence_url=url)
+    for link in find_tags(soup, "a", href=True):
+        href = str(link["href"]).strip()
+        if _is_booking_path(href):
+            return CheckResult(f"link href: {href}", evidence_text=str(link), evidence_url=url)
     return CheckResult(
         False,
         evidence_text="No known booking widget or 'book online' link on the homepage",
+        evidence_url=url,
+    )
+
+
+def _clickables(soup: BeautifulSoup) -> list[Tag]:
+    """What a visitor can click, in document order."""
+    return [
+        tag
+        for tag in find_tags(soup, True)
+        if tag.name in ("a", "button")
+        or (tag.name == "input" and str(tag.get("type", "")).lower() in ("submit", "button"))
+        or str(tag.get("role", "")).lower() == "button"
+    ]
+
+
+def _clickable_label(tag: Tag) -> str:
+    text = tag.get_text(" ", strip=True)
+    if text:
+        return text
+    for attribute in ("aria-label", "title", "value"):
+        value = _attr(tag, attribute)
+        if value:
+            return value
+    return ""
+
+
+def _is_booking_path(href: str) -> bool:
+    lowered = href.lower()
+    if lowered.startswith(("mailto:", "tel:", "javascript:", "#")):
+        return False
+    segments = {segment for segment in urlsplit(lowered).path.split("/") if segment}
+    return bool(segments & BOOKING_HREF_SEGMENTS)
+
+
+def _live_chat(lowered: str, url: str) -> CheckResult:
+    """A live-chat or messaging widget, recognised by its script host."""
+    hits = find_signatures(lowered, CHAT_SIGNATURES)
+    if hits:
+        return CheckResult(hits[0].label, evidence_text=hits[0].evidence, evidence_url=url)
+    return CheckResult(
+        False,
+        evidence_text="No known live chat or messaging widget script on the homepage",
         evidence_url=url,
     )
 
@@ -467,6 +528,137 @@ def _js_shell(soup: BeautifulSoup, url: str, text: str) -> CheckResult:
         ),
         evidence_url=url,
     )
+
+
+# --- page quality: counts, never judgements ---------------------------------------------
+
+
+def _images_without_alt(soup: BeautifulSoup, url: str) -> CheckResult:
+    """How many images carry no `alt` attribute at all, of how many a reader is shown.
+
+    `alt=""` is not counted: an empty alternative is the correct markup for a decorative
+    image. Nor is an image hidden from assistive technology (`aria-hidden="true"`,
+    `role="presentation"` or `role="none"`), which is exactly what Lighthouse ignores too.
+    """
+    shown = [image for image in find_tags(soup, "img") if not _hidden_from_readers(image)]
+    missing = [image for image in shown if image.get("alt") is None]
+    return CheckResult(
+        {"images": len(shown), "without_alt": len(missing)},
+        evidence_text=(
+            _first_tags(missing) if missing else f"All {len(shown)} images carry an alt attribute"
+        ),
+        evidence_url=url,
+    )
+
+
+def _unlabelled_inputs(soup: BeautifulSoup, url: str) -> CheckResult:
+    """Form fields a screen reader cannot name: no `<label>`, `aria-label` or `title`.
+
+    A placeholder is not a label — it disappears as soon as someone types. Hidden fields
+    and buttons are not fields a person fills in, so they are not counted at all.
+    """
+    labelled_ids = {
+        str(label["for"]).strip() for label in find_tags(soup, "label", attrs={"for": True})
+    }
+    fields = [
+        field for field in find_tags(soup, ["input", "select", "textarea"]) if _fillable(field)
+    ]
+    unlabelled = [field for field in fields if not _has_label(field, labelled_ids)]
+    return CheckResult(
+        {"fields": len(fields), "unlabelled": len(unlabelled)},
+        evidence_text=(
+            _first_tags(unlabelled)
+            if unlabelled
+            else f"All {len(fields)} form fields have an associated label"
+        ),
+        evidence_url=url,
+    )
+
+
+def _word_count(text: str, url: str) -> CheckResult:
+    """Words of visible text. The count is the evidence; the text itself is not quoted.
+
+    Quoting the page here would copy whatever its header prints into a check that never
+    expires — on a real homepage that was a named person's email address. The visible text
+    is already kept, with its own expiry, as `page_text`.
+    """
+    words = len(text.split())
+    return CheckResult(
+        words, evidence_text=f"The homepage carries {words} words of visible text", evidence_url=url
+    )
+
+
+def _heading_structure(soup: BeautifulSoup, url: str) -> CheckResult:
+    """The page's headings in order, and where a level is skipped on the way down.
+
+    `levels` lists every heading with text, in document order. A skip is a heading more
+    than one level deeper than the one before it (`h2` → `h4`); going back up is never a
+    skip. `sections_below_h1` is `None` when there is no `h1`, which is its own finding.
+    """
+    headings = [
+        tag
+        for tag in find_tags(soup, ["h1", "h2", "h3", "h4", "h5", "h6"])
+        if tag.get_text(strip=True)
+    ]
+    levels = [int(tag.name[1]) for tag in headings]
+    skips: list[str] = []
+    for previous, current in pairwise(headings):
+        if int(current.name[1]) > int(previous.name[1]) + 1:
+            skips.append(f"{previous.name} to {current.name}: {clip(str(current))}")
+    first_h1 = next((index for index, level in enumerate(levels) if level == 1), None)
+    sections_below_h1 = (
+        None if first_h1 is None else sum(1 for level in levels[first_h1 + 1 :] if level > 1)
+    )
+    if skips:
+        evidence = "; ".join(skips)
+    elif headings:
+        evidence = " ".join(f"<{tag.name}>" for tag in headings)
+    else:
+        evidence = "No headings with text on the homepage"
+    return CheckResult(
+        {
+            "levels": [f"h{level}" for level in levels],
+            "sections_below_h1": sections_below_h1,
+            "skips": [skip.split(":", 1)[0] for skip in skips],
+            "first_h1": clip(str(headings[first_h1])) if first_h1 is not None else None,
+        },
+        evidence_text=evidence,
+        evidence_url=url,
+    )
+
+
+def _hidden_from_readers(tag: Tag) -> bool:
+    return str(tag.get("aria-hidden", "")).lower() == "true" or str(
+        tag.get("role", "")
+    ).lower() in ("presentation", "none")
+
+
+NOT_FILLABLE_INPUT_TYPES = frozenset({"hidden", "submit", "button", "reset", "image"})
+
+
+def _fillable(field: Tag) -> bool:
+    if field.name != "input":
+        return True
+    return str(field.get("type", "text")).strip().lower() not in NOT_FILLABLE_INPUT_TYPES
+
+
+def _has_label(field: Tag, labelled_ids: set[str]) -> bool:
+    if field.find_parent("label") is not None:
+        return True
+    identifier = _attr(field, "id")
+    if identifier and identifier in labelled_ids:
+        return True
+    return any(_attr(field, attribute) for attribute in ("aria-label", "aria-labelledby", "title"))
+
+
+# How many offending tags are quoted, and how much of each, so three always fit.
+QUOTED_TAGS = 3
+QUOTED_TAG_CHARS = 95
+
+
+def _first_tags(tags: list[Tag]) -> str:
+    """The first few offending tags, verbatim and each cut short: evidence, not a dump."""
+    return " ".join(" ".join(str(tag).split())[:QUOTED_TAG_CHARS] for tag in tags[:QUOTED_TAGS])
 
 
 # --- small helpers ---------------------------------------------------------------------

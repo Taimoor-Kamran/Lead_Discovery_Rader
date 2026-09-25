@@ -21,6 +21,9 @@ class WebsiteAuditSummary(BaseModel):
     http_status: int | None
     finding_codes: list[str]
     rules_version: str
+    # PageSpeed's category scores out of 100; null whenever PageSpeed did not score them.
+    accessibility_score: int | None = None
+    best_practices_score: int | None = None
     started_at: datetime | None
     finished_at: datetime | None
     created_at: datetime

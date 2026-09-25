@@ -411,3 +411,73 @@ def test_a_hand_triggered_audit_ignores_how_recently_the_business_was_audited(
     run_with(db, second, tools(), monkeypatch)
 
     assert len(list(db.scalars(select(WebsiteAudit)))) == 2
+
+
+# --- the run's time limit (v0.11.0) ---------------------------------------------------------
+
+
+def test_a_run_that_reaches_its_time_limit_fails_as_a_timeout_not_as_a_failed_audit(
+    db: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Until v0.11.0 RQ's timeout was an `Exception`: the audit loop caught it, stored the
+    business it was on as a failed audit, and the run carried on and reported done."""
+    from app.workers.timeouts import RunTimedOut
+
+    others = [make_business(db, name=f"Another Business {n}") for n in range(2)]
+    on_the_clock = make_business(db, name="Interrupted By The Limit")
+    _, resolution = pipeline(db, [*others, on_the_clock])
+    run = JobRun(
+        kind=AUDIT_JOB_KIND,
+        status=JobRunStatus.queued,
+        params={"parent_run_id": str(resolution.id)},
+    )
+    db.add(run)
+    db.commit()
+
+    real = service.audit_business
+
+    def limit_reached_midway(session: Session, business: Business, **kwargs: Any) -> WebsiteAudit:
+        if business.display_name == "Interrupted By The Limit":
+            raise RunTimedOut(180)
+        return real(session, business, **kwargs)
+
+    monkeypatch.setattr(service, "audit_business", limit_reached_midway)
+    monkeypatch.setattr(service.AuditTools, "build", classmethod(lambda cls, **kwargs: tools()))
+
+    with pytest.raises(RunTimedOut):
+        tasks.execute_job_run(run.id, sleeper=lambda seconds: None)
+
+    db.expire_all()
+    stored = db.get(JobRun, run.id)
+    assert stored is not None
+    assert stored.status is JobRunStatus.failed, "not left `running` for the watchdog"
+    assert stored.attempts == 1, "the same work would meet the same limit"
+    assert stored.error is not None and "time limit of 180 s" in stored.error
+    assert service.latest_audit(db, on_the_clock.id) is None, "no false 'failed audit'"
+    stored_audits = list(db.scalars(select(WebsiteAudit).where(WebsiteAudit.job_run_id == run.id)))
+    assert all(audit.status is not AuditStatus.failed for audit in stored_audits)
+
+
+def test_an_audit_run_is_given_a_time_limit_for_its_businesses_not_rqs_180_seconds(
+    db: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.core.config import get_settings
+    from app.core.redis import get_queue
+
+    settings = get_settings()
+    monkeypatch.setattr(settings, "audit_seconds_per_business", 1000)
+    businesses = [make_business(db, name=f"Business {n}") for n in range(3)]
+    _, resolution = pipeline(db, businesses)
+    db.commit()
+
+    run = service.enqueue_audits_for_run(db, resolution.id)
+    job = get_queue().fetch_job(str(run.id))
+
+    assert job is not None
+    assert job.timeout == 3 * 1000, "one budget per business, not RQ's default"
+
+    monkeypatch.setattr(settings, "audit_seconds_per_business", 1)
+    small = service.enqueue_audits_for_run(db, resolution.id, idempotency_key="small")
+    small_job = get_queue().fetch_job(str(small.id))
+    assert small_job is not None
+    assert small_job.timeout == settings.job_timeout_seconds == 1800, "never below the floor"

@@ -26,7 +26,11 @@ from app.core.models import created_at_column, uuid_pk
 # audit-2: `tls_valid` is null (not true) on a page served over http; a presence check on
 # a parsed page answers false rather than null when the thing is absent; snippet evidence
 # comes from the page's visible text instead of a window cut out of its HTML.
-RULES_VERSION = "audit-2"
+# audit-3 (v0.11.0): booking is also recognised from button labels and booking-page link
+# paths; new checks `live_chat`, `images_without_alt`, `unlabelled_inputs`, `word_count`
+# and `heading_structure`, and the findings built on them plus `builder_subdomain`;
+# PageSpeed accessibility and best-practices scores, and their two findings.
+RULES_VERSION = "audit-3"
 
 
 class AuditStatus(enum.StrEnum):
@@ -71,6 +75,10 @@ class WebsiteAudit(Base):
 
     checks: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
     psi: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    # Lighthouse's own category scores out of 100 (v0.11.0). Null whenever PSI did not
+    # answer — no key, quota, an error — or did not score the category: never a zero.
+    accessibility_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    best_practices_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
     tech_stack: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
     findings: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False, default=list)
 

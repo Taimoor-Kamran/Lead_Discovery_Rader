@@ -145,7 +145,8 @@ def test_the_estimate_counts_places_pages_and_the_remaining_caps(
     estimate = response.json()
     assert estimate["max_results"] == 45
     assert estimate["uses_places"] is True
-    assert estimate["places_calls"] == 3, "ceil(45 / 20)"
+    # The enforced safety limit, not a guess: 4 x ceil(45 / 20).
+    assert estimate["places_max_calls"] == 12
     assert estimate["places_used_today"] == 2
     assert estimate["places_daily_cap"] == 200
     assert estimate["places_remaining_today"] == 198
@@ -169,25 +170,30 @@ def test_a_run_is_refused_when_the_daily_cap_would_be_exceeded(
     monkeypatch: pytest.MonkeyPatch,
     fake_redis: fakeredis.FakeStrictRedis,
 ) -> None:
-    monkeypatch.setenv("PLACES_DAILY_CALL_CAP", "3")
+    monkeypatch.setenv("PLACES_DAILY_CALL_CAP", "10")
     get_settings.cache_clear()
-    for _ in range(2):
-        DailyCallCap(fake_redis, source=GOOGLE_PLACES, cap=3).reserve()
-    created = _job(client, sales_user, max_results=40)  # 2 pages, 1 call left today
+    for _ in range(6):
+        DailyCallCap(fake_redis, source=GOOGLE_PLACES, cap=10).reserve()
+    # Blocked on the enforced maximum, 4 x 2 = 8, not on a typical figure: a run allowed to
+    # start with fewer calls left can be stopped by the daily cap part way through.
+    created = _job(client, sales_user, max_results=40)
     headers = auth_headers(client, sales_user)
 
     estimate = client.get(f"{API}/search-jobs/{created['id']}/estimate", headers=headers).json()
     assert estimate["can_run"] is False
-    assert estimate["places_remaining_today"] == 1
-    assert "only 1 of today's 3 remain" in estimate["blockers"][0]
+    assert estimate["places_remaining_today"] == 4
+    assert (
+        "may make up to 8 Google Places call(s) but only 4 of today's 10 remain"
+        in (estimate["blockers"][0])
+    )
 
     refused = client.post(f"{API}/search-jobs/{created['id']}/run", headers=headers)
     assert refused.status_code == 422, refused.text
     assert refused.json()["error"]["code"] == "daily_cap_exceeded"
-    assert refused.json()["error"]["details"]["estimate"]["places_calls"] == 2
+    assert refused.json()["error"]["details"]["estimate"]["places_max_calls"] == 8
     assert db.query(JobRun).count() == 0, "nothing was queued"
 
-    smaller = client.patch(
+    smaller = client.patch(  # up to 4 x 1 calls: exactly what is left
         f"{API}/search-jobs/{created['id']}", json={"max_results": 20}, headers=headers
     )
     assert smaller.status_code == 200
