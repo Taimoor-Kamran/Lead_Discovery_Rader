@@ -1007,8 +1007,8 @@
         "seo_gbp": {
           "source": "rules",
           "confidence": [
-            0.76,
-            0.76
+            0.64,
+            0.64
           ],
           "ai_agrees": false
         }

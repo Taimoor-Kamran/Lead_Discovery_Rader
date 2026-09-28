@@ -136,25 +136,64 @@ TECH_SIGNATURES: tuple[Signature, ...] = (
     Signature("gtm", "Google Tag Manager", ("googletagmanager.com",)),
 )
 
+
 # The website builders whose use is itself a finding (v0.12.0, item 6), and the evidence
-# strong enough to say so to the business. Stricter than `TECH_SIGNATURES` on purpose: that
-# table records context and matches `wix.com` anywhere, including in a blog post that links
-# to Wix. These patterns are the builder's own asset hosts and markup, which only a page
-# the builder rendered carries. A generator tag naming the builder counts too.
-BUILDER_SIGNATURES: tuple[Signature, ...] = (
-    Signature("wix", "Wix", ("static.wixstatic.com", "static.parastorage.com", "_wixcssimports")),
-    Signature(
+# strong enough to say so to the business: a script the builder serves, or a class name its
+# templates put on the page. A generator tag naming the builder counts too (read separately).
+# An *asset* on the builder's CDN never counts: in production a Squarespace-hosted og:image
+# was the only "evidence" for one site, and an image URL proves where an image is stored,
+# not what built the page. Hosts are matched against a script's `src` (host and path);
+# classes by prefix, case-insensitive.
+@dataclass(frozen=True)
+class BuilderSignature:
+    key: str
+    label: str
+    script_hosts: tuple[str, ...]
+    class_prefixes: tuple[str, ...] = ()
+
+
+BUILDER_SIGNATURES: tuple[BuilderSignature, ...] = (
+    BuilderSignature("wix", "Wix", ("static.parastorage.com",), ("wixui-",)),
+    BuilderSignature(
         "squarespace",
         "Squarespace",
-        ("static1.squarespace.com", "assets.squarespace.com", "sqs-block"),
+        ("assets.squarespace.com", "static1.squarespace.com/static/vta"),
+        ("sqs-block", "sqs-layout"),
     ),
-    Signature("godaddy_builder", "GoDaddy Website Builder", ("img1.wsimg.com/isteam",)),
-    Signature(
-        "duda", "Duda", ("irp.cdn-website.com", "lirp.cdn-website.com", "multiscreensite.com")
+    BuilderSignature(
+        "godaddy_builder",
+        "GoDaddy Website Builder",
+        ("img1.wsimg.com/blobby/go", "img1.wsimg.com/ceph-p3-01/website-builder"),
     ),
-    Signature("weebly", "Weebly", ("editmysite.com", "weebly-footer")),
+    BuilderSignature(
+        "duda", "Duda", ("static.cdn-website.com", "dd-cdn.multiscreensite.com"), ("dmbody",)
+    ),
+    BuilderSignature("weebly", "Weebly", ("editmysite.com",), ("wsite-",)),
 )
 BUILDER_LABELS = frozenset(signature.label for signature in BUILDER_SIGNATURES)
+
+# --- bot protection --------------------------------------------------------------------
+
+# A site that answered with one of these instead of its homepage (v0.12.0, item 3b). Only a
+# challenge *status* counts (403, 429, 503): Cloudflare also injects
+# `/cdn-cgi/challenge-platform/` scripts into ordinary 200 pages, which are real homepages.
+BOT_CHALLENGE_STATUSES = frozenset({403, 429, 503})
+# (vendor, lowercase marker found in the body or the exact lowercase title)
+BOT_CHALLENGE_TITLES: tuple[tuple[str, str], ...] = (
+    ("Cloudflare", "just a moment..."),
+    ("Cloudflare", "just a moment\u2026"),
+    ("Cloudflare", "attention required! | cloudflare"),
+    ("Cloudflare", "please wait... | cloudflare"),
+    ("Sucuri", "sucuri website firewall - access denied"),
+)
+BOT_CHALLENGE_MARKERS: tuple[tuple[str, str], ...] = (
+    ("Cloudflare", "/cdn-cgi/challenge-platform/"),
+    ("Cloudflare", "_cf_chl_opt"),
+    ("Cloudflare", 'id="cf-error-details"'),
+    ("Imperva", "_incapsula_resource"),
+    ("DataDome", "captcha-delivery.com"),
+    ("Sucuri", "sucuri website firewall"),
+)
 
 # `<meta name="generator">` values, which say it outright.
 GENERATOR_LABELS: tuple[tuple[str, str], ...] = (
@@ -535,7 +574,6 @@ def is_local_business_type(raw: object) -> bool:
 ALL_SIGNATURE_GROUPS: tuple[tuple[str, tuple[Signature, ...]], ...] = (
     ("booking", BOOKING_SIGNATURES),
     ("chat", CHAT_SIGNATURES),
-    ("builder", BUILDER_SIGNATURES),
     ("tech", TECH_SIGNATURES),
     ("social", SOCIAL_PLATFORMS),
 )

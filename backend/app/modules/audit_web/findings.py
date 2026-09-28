@@ -235,11 +235,15 @@ CATALOGUE: dict[str, FindingSpec] = {
             "Audit found structured data on the homepage that does not parse, so search "
             "engines cannot read it.",
         ),
+        # Low, and says why: call tracking is normal practice for these businesses, and the
+        # canary found this on 7 of 17 plumbers (v0.12.0). It states a difference worth
+        # confirming, never that the listing is wrong.
         FindingSpec(
             "nap_phone_mismatch",
-            Severity.medium,
+            Severity.low,
             _SEO,
-            "Audit found the homepage phone link differs from the listing's phone number.",
+            "Audit found the homepage phone link differs from the listing's phone number; a "
+            "call-tracking line is the usual explanation and is worth confirming.",
         ),
         FindingSpec(
             "nap_address_mismatch",

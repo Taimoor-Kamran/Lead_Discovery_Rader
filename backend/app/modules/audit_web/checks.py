@@ -34,6 +34,9 @@ from app.modules.audit_web.fingerprints import (
     AMBIGUOUS_EMAIL_DOMAINS,
     BOOKING_HREF_SEGMENTS,
     BOOKING_SIGNATURES,
+    BOT_CHALLENGE_MARKERS,
+    BOT_CHALLENGE_STATUSES,
+    BOT_CHALLENGE_TITLES,
     BUILDER_LABELS,
     BUILDER_SIGNATURES,
     CHAT_SIGNATURES,
@@ -82,6 +85,10 @@ COPYRIGHT_ADJACENT_PATTERN = re.compile(
 FUTURE_COPYRIGHT_MAX_YEARS = 30
 # Most `tel:` numbers kept for the listing comparison.
 MAX_TEL_NUMBERS = 3
+# The longest piece of footer text a placeholder phrase is looked for in, and how much of
+# the text after a copyright mark counts as its line (spec v0.12.0, canary fix).
+PLACEHOLDER_TEXT_MAX_CHARS = 60
+COPYRIGHT_LINE_CHARS = 80
 # Zoom is treated as blocked below this `maximum-scale` (spec v0.12.0, item 5).
 MIN_MAXIMUM_SCALE = 1.5
 
@@ -221,6 +228,33 @@ def fetch_checks(outcome: FetchOutcome) -> Checks:
         evidence_url=final_url,
     )
     return checks
+
+
+def bot_challenge(outcome: FetchOutcome) -> CheckResult | None:
+    """A bot-protection challenge served instead of the homepage, or `None` (item 3b).
+
+    Needs both a challenge status (403, 429, 503) and a vendor's own mark — its challenge
+    title or a marker in the body. Either alone is not enough: a plain 403 is a site
+    refusing us for its own reasons, and Cloudflare puts its challenge-platform script on
+    ordinary 200 homepages too.
+    """
+    if outcome.status_code not in BOT_CHALLENGE_STATUSES or outcome.text is None:
+        return None
+    url = outcome.final_url or outcome.url
+    lowered = outcome.text.lower()
+    title_tag = BeautifulSoup(outcome.text, "lxml").title
+    title = " ".join(title_tag.get_text().split()).lower() if title_tag is not None else ""
+    vendor = next((name for name, known in BOT_CHALLENGE_TITLES if title == known), None)
+    if vendor is None:
+        vendor = next((name for name, marker in BOT_CHALLENGE_MARKERS if marker in lowered), None)
+    if vendor is None:
+        return None
+    shown = str(title_tag) if title_tag is not None else "no <title>"
+    return CheckResult(
+        vendor,
+        evidence_text=f"HTTP {outcome.status_code} with a {vendor} bot-protection page: {shown}",
+        evidence_url=url,
+    )
 
 
 # --- from the HTML ---------------------------------------------------------------------
@@ -603,8 +637,9 @@ def _tech_stack(soup: BeautifulSoup, lowered: str, url: str) -> CheckResult:
     """The platforms the page gives away, and — separately — a website builder, if any.
 
     `platforms` is context and matches loosely. `builder` is a claim made to the business
-    ("built with Wix"), so it needs a generator tag naming the builder or one of the
-    builder's own asset hosts (`BUILDER_SIGNATURES`), never a mere link to the builder.
+    ("built with Wix"), so it needs a generator tag naming the builder, a script the builder
+    serves, or a class its templates write (`BUILDER_SIGNATURES`) — never a link to the
+    builder, and never an image or other asset that merely sits on the builder's CDN.
     """
     generator_tag = _meta_tag(soup, "generator")
     generator = _attr(generator_tag, "content")
@@ -626,18 +661,38 @@ def _tech_stack(soup: BeautifulSoup, lowered: str, url: str) -> CheckResult:
             evidence.append(hit.pattern)
 
     if builder is None:
-        hits = find_signatures(lowered, BUILDER_SIGNATURES)
-        if hits:
-            builder = {"label": hits[0].label, "evidence": hits[0].evidence}
-            if hits[0].label not in platforms:
-                platforms.append(hits[0].label)
-                evidence.append(hits[0].pattern)
+        builder = _builder_from_markup(soup)
+        if builder is not None and builder["label"] not in platforms:
+            platforms.append(builder["label"])
+            evidence.append(builder["evidence"])
 
     return CheckResult(
         {"generator": generator or None, "platforms": platforms, "builder": builder},
         evidence_text="; ".join(evidence) if evidence else "No platform signature on the homepage",
         evidence_url=url,
     )
+
+
+def _builder_from_markup(soup: BeautifulSoup) -> dict[str, str] | None:
+    """A builder named by a script it serves or a class its templates write, or `None`."""
+    for script in find_tags(soup, "script", src=True):
+        source = str(script["src"]).strip().lower()
+        location = source.split("//", 1)[1] if "//" in source else source
+        for signature in BUILDER_SIGNATURES:
+            if any(location.startswith(host) for host in signature.script_hosts):
+                return {"label": signature.label, "evidence": _opening(script)}
+    for tag in find_tags(soup, class_=True):
+        classes = [str(name).lower() for name in (tag.get("class") or [])]
+        for signature in BUILDER_SIGNATURES:
+            if any(
+                name.startswith(prefix) for name in classes for prefix in signature.class_prefixes
+            ):
+                return {"label": signature.label, "evidence": _opening(tag)}
+    return None
+
+
+def _opening(tag: Tag) -> str:
+    return str(tag).split(">", 1)[0][: QUOTED_TAG_CHARS * 2] + ">"
 
 
 def _copyright_year(text: str, url: str, now: datetime) -> CheckResult:
@@ -679,10 +734,11 @@ def _copyright_year(text: str, url: str, now: datetime) -> CheckResult:
 def _placeholder_text(cleaned: BeautifulSoup, text: str, url: str) -> CheckResult:
     """Template text nobody replaced: "Your Company", "Business Name", "Lorem ipsum".
 
-    The footer phrases are only looked for in the footer — a `<footer>`, a
-    `role="contentinfo"` element, or an element whose id or class says footer — and on the
-    line a copyright notice is printed on, because "Company Name" is also an ordinary label
-    in a quote form. "Lorem ipsum" is a placeholder wherever it appears. Whether a phrase is
+    The footer phrases are only looked for in short pieces of footer text — inside a
+    `<footer>`, a `role="contentinfo"` element, or an element whose id or class says
+    footer — and on the line a copyright notice is printed on, because "Company Name" is
+    also an ordinary label in a quote form and "your company" an ordinary phrase in a
+    testimonial. "Lorem ipsum" is a placeholder wherever it appears. Whether a phrase is
     in fact part of the business's own name is decided by the finding, which knows it.
     """
     regions: list[str] = []
@@ -692,9 +748,15 @@ def _placeholder_text(cleaned: BeautifulSoup, text: str, url: str) -> CheckResul
         # the last thing read from it.
         for control in find_tags(footer, ["form", "label", "button", "select", "textarea"]):
             control.decompose()
-        regions.append(_text_of(footer))
+        # Only short pieces of footer text: a template placeholder stands alone ("Your
+        # Company", "Business Name, LLC"). Running text is prose, and in production a
+        # customer testimonial in a footer ("…impressed by … your company") was read as one.
+        for piece in footer.find_all(string=True):
+            words = " ".join(str(piece).split())
+            if words and len(words) <= PLACEHOLDER_TEXT_MAX_CHARS:
+                regions.append(words)
     for match in COPYRIGHT_PATTERN.finditer(text):
-        regions.append(snippet_forward(text, match.start(), COPYRIGHT_EVIDENCE_CHARS))
+        regions.append(snippet_forward(text, match.start(), COPYRIGHT_LINE_CHARS))
 
     found: list[str] = []
     evidence: str | None = None

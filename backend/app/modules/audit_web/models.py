@@ -40,7 +40,11 @@ from app.core.models import created_at_column, uuid_pk
 # a page** (docs/release-checklist.md). It is stored on every audit, and `needs_audit` makes
 # a business whose newest audit carries an older version due at once, however recent that
 # audit is — without the bump nobody sees the change until AUDIT_MAX_AGE_DAYS pass.
-AUDIT_LOGIC_VERSION = 4
+# audit-5 (v0.12.0, after the production canary): a bot-challenge page is its own status
+# (`bot_challenge`) with no findings; a unit is read only when it has a digit; footer
+# placeholders only in short footer text and the copyright line; a builder only from its
+# generator tag, script host or classes; `nap_phone_mismatch` is low and names call tracking.
+AUDIT_LOGIC_VERSION = 5
 RULES_VERSION = f"audit-{AUDIT_LOGIC_VERSION}"
 
 
@@ -50,6 +54,11 @@ class AuditStatus(enum.StrEnum):
     skipped = "skipped"
     robots_blocked = "robots_blocked"
     unreachable = "unreachable"
+    # The site answered with a bot-protection challenge (Cloudflare's "Just a moment...",
+    # and the like) instead of its homepage (v0.12.0). Nothing was read, so nothing is
+    # reported: not `done`, which would audit the challenge page, and not `unreachable`,
+    # which would say the site is down.
+    bot_challenge = "bot_challenge"
     # Something in our own code or infrastructure went wrong for this one business.
     failed = "failed"
 

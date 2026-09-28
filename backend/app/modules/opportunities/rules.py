@@ -52,7 +52,11 @@ def rule_opportunities(business: Business, audit: WebsiteAudit) -> list[RuleOppo
     """Every service the audit points at, in catalogue order, with its combined confidence."""
     if business.business_status is BusinessStatus.closed_permanently:
         return []
-    if audit.status is AuditStatus.robots_blocked or audit.status is AuditStatus.failed:
+    if audit.status in (
+        AuditStatus.robots_blocked,
+        AuditStatus.failed,
+        AuditStatus.bot_challenge,
+    ):
         return []
     codes = set(audit.finding_codes)
     if codes & NO_OPPORTUNITY_FINDINGS:

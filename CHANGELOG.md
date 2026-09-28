@@ -5,7 +5,7 @@ Format: `## [vX.Y.Z] - YYYY-MM-DD` followed by Added / Changed / Fixed.
 
 ## [v0.12.0] - 2026-09-26
 
-**Bumps the audit logic version to 4.** Every stored audit counts as due, so the next audit
+**Bumps the audit logic version to 5** (4 during the build; 5 after the production canary). Every stored audit counts as due, so the next audit
 run re-audits every business it considers, not in 30 days. Re-running a saved search does
 that but spends Places calls; `POST /api/v1/jobs/{job_run_id}/audit` on a search's latest
 resolution run does it without (API only; see `docs/operations.md` → *Upgrading*).
@@ -29,17 +29,27 @@ resolution run does it without (API only; see `docs/operations.md` → *Upgradin
   network was down — a laptop that slept mid-run — the audit is `failed`, with no finding,
   and is retried after `AUDIT_FAILED_RETRY_HOURS`.
 
+- **Bot-protection pages:** a homepage that answers with a bot challenge (Cloudflare's
+  "Just a moment...", its block page, Imperva, DataDome, Sucuri) is the new audit status
+  `bot_challenge` ("Blocked by bot protection") with no findings and no opportunity, instead
+  of being audited as if it were the homepage. Due again after
+  `AUDIT_BOT_CHALLENGE_RETRY_DAYS` (7). Migration `0012`.
+- A listing unit that already names its designator is no longer stored as "Suite Suite 402".
+
 ### Added — data the audit collected and never judged
 
 - Title: `default_title` (a template title, or one naming nothing of the business),
   `short_title` (< 20 characters), `long_title` (> 60).
 - `viewport_blocks_zoom`: `user-scalable=no` or `maximum-scale` below 1.5.
 - `site_builder`: Wix, Squarespace, GoDaddy, Duda or Weebly on the business's own domain,
-  recognised by a generator tag or the builder's own asset hosts, never by a link.
+  recognised by a generator tag, a script the builder serves or its template classes —
+  never by a link or an asset on the builder's CDN.
 - `multiple_h1`, and `no_click_to_call` when the page has a form or email but no `tel:` link.
 - `placeholder_email` (`info@mysite.com` and other template domains) and `placeholder_text`
-  ("Your Company", "Business Name" in the footer; "Lorem ipsum" anywhere).
-- Listing comparisons (`checks.listing_comparison`): `nap_phone_mismatch`,
+  ("Your Company", "Business Name" in short footer text or on the copyright line; "Lorem
+  ipsum" anywhere).
+- Listing comparisons (`checks.listing_comparison`): `nap_phone_mismatch` (low, and it
+  names call tracking as the usual explanation),
   `nap_address_mismatch` (street number, unit and ZIP), `listing_website_http` and
   `listing_website_host_mismatch` (www). Each is `match`, `mismatch` or `not_compared`
   with the reason, and only a conflict between two known values becomes a finding.
@@ -48,7 +58,8 @@ resolution run does it without (API only; see `docs/operations.md` → *Upgradin
 - `website_audits.audit_logic_version` (migration `0011`, backfilled from `rules_version`),
   in the audit API; `needs_audit` makes a business due at once when its newest audit was
   written by older logic.
-- Settings `AUDIT_CONNECTIVITY_CHECK_URL` and `AUDIT_UNREACHABLE_RECHECK_SECONDS`.
+- Settings `AUDIT_CONNECTIVITY_CHECK_URL`, `AUDIT_UNREACHABLE_RECHECK_SECONDS` and
+  `AUDIT_BOT_CHALLENGE_RETRY_DAYS`.
 
 ### Changed
 

@@ -116,6 +116,7 @@ export const AUDIT_STATUS_LABELS: Record<string, string> = {
   done: "Audited",
   skipped: "Skipped",
   robots_blocked: "Blocked by robots.txt",
+  bot_challenge: "Blocked by bot protection",
   unreachable: "Unreachable",
   failed: "Failed",
 };

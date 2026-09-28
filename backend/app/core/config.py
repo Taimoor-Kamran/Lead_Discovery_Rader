@@ -100,6 +100,10 @@ class Settings(BaseSettings):
     audit_connectivity_check_url: str = "https://www.googleapis.com/"
     # How long to wait before the one re-check of a site that did not answer.
     audit_unreachable_recheck_seconds: float = Field(default=10.0, ge=0)
+    # A site that answered with a bot-protection challenge is due again after this many
+    # days (v0.12.0). The challenge is aimed at automated visitors like us, so it rarely
+    # lifts in hours; a week keeps the business visible without asking every run.
+    audit_bot_challenge_retry_days: int = Field(default=7, ge=1)
     audit_slow_mobile_score: int = 50
     audit_stale_copyright_years: int = 3
     # Fewer words of visible homepage text than this is reported as `thin_content`.

@@ -111,6 +111,7 @@ def test_a_run_audits_the_businesses_its_resolution_run_touched(
         "audited": 2,
         "skipped": 0,
         "robots_blocked": 0,
+        "bot_challenge": 0,
         "unreachable": 0,
         "failed": 0,
         "psi_calls": 2,

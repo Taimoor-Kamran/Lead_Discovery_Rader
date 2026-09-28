@@ -34,11 +34,13 @@ MATCH = "match"
 MISMATCH = "mismatch"
 NOT_COMPARED = "not_compared"
 
-# A unit designator and the unit it names: "Suite #11", "Ste 303", "#4B", "Unit 2". No
+# A unit designator and the unit it names: "Suite #11", "Ste 303", "#4B", "Unit 2". The
+# unit must contain a digit: a listing stored "Suite Suite 402" in production, and reading
+# the second "Suite" as the unit accused a business of a wrong address (v0.12.0 canary). No
 # "Fl"/"Floor": in a one-line address "Miami, FL 33101" would read as unit 33101.
 _UNIT = re.compile(
     r"(?:\b(?:suite|ste|unit|apt|apartment|room|rm|bldg|building)\b\.?\s*#?|#)\s*"
-    r"([a-z0-9][a-z0-9-]*)",
+    r"([a-z0-9-]*\d[a-z0-9-]*)",
     re.IGNORECASE,
 )
 _HOUSE_NUMBER = re.compile(r"^\s*(\d+[a-z]?)\b", re.IGNORECASE)

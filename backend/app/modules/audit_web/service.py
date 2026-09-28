@@ -189,6 +189,12 @@ def audit_business(
     checks = checks_module.fetch_checks(outcome)
     final_url = outcome.final_url or url
 
+    challenge = checks_module.bot_challenge(outcome)
+    if challenge is not None:
+        return _challenged(
+            session, business, job_run_id, url, outcome, challenge, started, settings
+        )
+
     if not outcome.reachable or (outcome.status_code or 0) >= 500:
         return _store(
             session,
@@ -299,6 +305,9 @@ def _no_robots(robots: RobotsDecision) -> bool:
 def _no_page(outcome: FetchOutcome) -> bool:
     if not outcome.tls_valid:
         return False
+    # A bot-protection page is an answer, not a silence: re-asking gets the same page.
+    if checks_module.bot_challenge(outcome) is not None:
+        return False
     if not outcome.reachable:
         return outcome.error_kind in NO_ANSWER_KINDS
     return (outcome.status_code or 0) >= 500
@@ -347,6 +356,46 @@ def _recheck_note(tools: AuditTools, url: str) -> str | None:
         else "(our own connectivity was not checked)"
     )
     return f"tried twice, {seconds:g} s apart, {network}"
+
+
+def _challenged(
+    session: Session,
+    business: Business,
+    job_run_id: uuid.UUID | None,
+    url: str,
+    outcome: FetchOutcome,
+    challenge: checks_module.CheckResult,
+    started: datetime,
+    settings: Settings,
+) -> WebsiteAudit:
+    """The site served a bot-protection challenge instead of its homepage (item 3b).
+
+    Nothing about the business's site was read, so nothing is reported: no page findings,
+    no PageSpeed call, no page text, and not even the listing's own `few_reviews`, so the
+    audit cannot become an opportunity. The status says what happened, and the check
+    carries the challenge page's status and title as evidence.
+    """
+    checks = checks_module.fetch_checks(outcome)
+    checks["bot_challenge"] = challenge
+    logger.info(
+        "a site answered with a bot-protection challenge",
+        extra={"business_id": str(business.id), "vendor": challenge.value},
+    )
+    return _store(
+        session,
+        business=business,
+        job_run_id=job_run_id,
+        url_audited=url,
+        final_url=outcome.final_url or url,
+        status=AuditStatus.bot_challenge,
+        http_status=outcome.status_code,
+        checks=checks,
+        findings=[],
+        html_sha256=outcome.html_sha256,
+        started_at=started,
+        settings=settings,
+        listing_findings=False,
+    )
 
 
 def _our_outage(
@@ -468,18 +517,20 @@ def _store(
     psi: dict[str, Any] | None = None,
     page_text: str | None = None,
     html_sha256: str | None = None,
+    listing_findings: bool = True,
 ) -> WebsiteAudit:
     resolved_checks = checks or {}
     tech_stack = checks_module.value_of(resolved_checks, "tech_stack") or {}
     ttl_days = settings.audit_content_ttl_days
-    findings = [
-        *findings,
-        *findings_module.for_listing(
-            business.user_rating_count,
-            few_reviews=settings.places_few_reviews,
-            listing_url=_listing_url(session, business),
-        ),
-    ]
+    if listing_findings:
+        findings = [
+            *findings,
+            *findings_module.for_listing(
+                business.user_rating_count,
+                few_reviews=settings.places_few_reviews,
+                listing_url=_listing_url(session, business),
+            ),
+        ]
     audit = WebsiteAudit(
         business_id=business.id,
         job_run_id=job_run_id,
@@ -636,8 +687,9 @@ def needs_audit(session: Session, business: Business, *, now: datetime | None = 
     AUDIT_FAILED_RETRY_HOURS; before, one timeout hid a business for a month. An
     `unreachable` one backs off through AUDIT_UNREACHABLE_BACKOFF_DAYS, a step per
     consecutive unreachable audit, so a site that was briefly down is looked at again
-    soon and one that is gone settles into the normal AUDIT_MAX_AGE_DAYS. Everything
-    else keeps AUDIT_MAX_AGE_DAYS.
+    soon and one that is gone settles into the normal AUDIT_MAX_AGE_DAYS. A
+    `bot_challenge` audit waits AUDIT_BOT_CHALLENGE_RETRY_DAYS (v0.12.0). Everything else
+    keeps AUDIT_MAX_AGE_DAYS.
 
     Before any of that: an audit written by older check logic (`audit_logic_version` below
     AUDIT_LOGIC_VERSION, v0.12.0) is due now, whatever its age or status. It concluded
@@ -655,6 +707,8 @@ def needs_audit(session: Session, business: Business, *, now: datetime | None = 
         return True
     if latest.status is AuditStatus.failed:
         wait = timedelta(hours=settings.audit_failed_retry_hours)
+    elif latest.status is AuditStatus.bot_challenge:
+        wait = timedelta(days=settings.audit_bot_challenge_retry_days)
     elif latest.status is AuditStatus.unreachable:
         streak = next(
             (i for i, audit in enumerate(recent) if audit.status is not AuditStatus.unreachable),

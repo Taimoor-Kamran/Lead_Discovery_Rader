@@ -14,6 +14,7 @@
     "failed": 0,
     "psi_calls": 23,
     "robots_blocked": 2,
+    "bot_challenge": 0,
     "skipped": 3,
     "unreachable": 2
   },

@@ -338,6 +338,7 @@ def audit_outcomes(session: Session, *, since: datetime) -> AuditOutcomes:
     return AuditOutcomes(
         done=counts.get("done", 0),
         robots_blocked=counts.get("robots_blocked", 0),
+        bot_challenge=counts.get("bot_challenge", 0),
         unreachable=counts.get("unreachable", 0),
         failed=counts.get("failed", 0),
         skipped=counts.get("skipped", 0),

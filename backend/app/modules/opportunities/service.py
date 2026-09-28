@@ -254,10 +254,12 @@ def classify(
 
 
 def _no_opportunities(business: Business, audit: WebsiteAudit) -> bool:
-    """Businesses the spec says get nothing: closed for good, or a site that refused us."""
+    """Businesses the spec says get nothing: closed for good, or a site that refused us —
+    by robots.txt, or with a bot-protection challenge (v0.12.0)."""
     return (
         business.business_status is BusinessStatus.closed_permanently
         or audit.status is AuditStatus.robots_blocked
+        or audit.status is AuditStatus.bot_challenge
         or "robots_blocked" in audit.finding_codes
     )
 

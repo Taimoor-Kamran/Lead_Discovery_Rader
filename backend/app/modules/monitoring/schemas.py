@@ -105,6 +105,7 @@ class SourceFreshness(BaseModel):
 class AuditOutcomes(BaseModel):
     done: int
     robots_blocked: int
+    bot_challenge: int
     unreachable: int
     failed: int
     skipped: int

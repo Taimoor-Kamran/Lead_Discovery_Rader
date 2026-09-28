@@ -140,6 +140,7 @@ def test_the_report_has_every_metric_block(client: TestClient, db: Session) -> N
     assert set(body["audits"]) == {
         "done",
         "robots_blocked",
+        "bot_challenge",
         "unreachable",
         "failed",
         "skipped",

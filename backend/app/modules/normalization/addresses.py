@@ -162,7 +162,7 @@ def from_components(
     country = short("country")
 
     line1 = " ".join(p for p in (street_number, route) if p) or None
-    line2 = f"Suite {subpremise}" if subpremise else None
+    line2 = _unit_line(subpremise)
 
     fallback = _from_formatted(formatted)
     city = long("locality") or long("postal_town") or fallback.city
@@ -178,6 +178,20 @@ def from_components(
         postal_code=postal,
         country=(country or fallback.country or None),
     )
+
+
+# A Places `subpremise` that already names its designator: "Suite 402", "Ste 11", "#4".
+_DESIGNATED_UNIT = re.compile(
+    r"^(?:suite|ste|unit|apt|apartment|room|rm|bldg|building|floor|fl)\b|^#", re.IGNORECASE
+)
+
+
+def _unit_line(subpremise: str | None) -> str | None:
+    """`402` → `Suite 402`; `Suite 402` stays `Suite 402`, never `Suite Suite 402` (v0.12.0)."""
+    if not subpremise or not subpremise.strip():
+        return None
+    value = subpremise.strip()
+    return value if _DESIGNATED_UNIT.match(value) else f"Suite {value}"
 
 
 def _from_formatted(formatted: str | None) -> Address:
