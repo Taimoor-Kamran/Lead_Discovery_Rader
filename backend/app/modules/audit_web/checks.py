@@ -64,13 +64,21 @@ COPYRIGHT_EVIDENCE_CHARS = 160
 JS_SHELL_TEXT_CHARS = 200
 JS_SHELL_SCRIPT_TAGS = 5
 CONTACT_INPUT_HINTS = ("email", "e-mail", "mail", "phone", "tel", "mobile")
-COPYRIGHT_PATTERN = re.compile(r"(?:©|&copy;|\(c\)|copyright)[^0-9]{0,40}(\d{4})", re.IGNORECASE)
+# A year is exactly four digits: "© 20015" (a typo on a real site) is no year, never 2001.
+COPYRIGHT_PATTERN = re.compile(
+    r"(?:©|&copy;|\(c\)|copyright)[^0-9]{0,40}(\d{4})(?!\d)", re.IGNORECASE
+)
 # A range such as "© 2018-2024" (with any of the three dashes): the later year is the one
 # that matters. `\u2013` and `\u2014` are written escaped so the source stays ASCII.
 COPYRIGHT_RANGE_PATTERN = re.compile(
-    r"(?:©|&copy;|\(c\)|copyright)[^0-9]{0,40}\d{4}\s*[-\u2013\u2014]\s*(\d{4})",
+    r"(?:©|&copy;|\(c\)|copyright)[^0-9]{0,40}\d{4}\s*[-\u2013\u2014]\s*(\d{4})(?!\d)",
     re.IGNORECASE,
 )
+# What follows a year that opens a range with no end year: "© Copyright 2006 - | …". The
+# end year is usually written by a script, which this audit does not run (v0.12.0, run 4).
+OPEN_RANGE_TAIL = re.compile(r"\s*[-\u2013\u2014](?!\s*\d)")
+# Said before every copyright year quoted as evidence.
+AS_IN_SOURCE = "As written in the page's HTML source (a year a script fills in is not seen): "
 # A year printed *directly* after the mark — "© 2035", "Copyright © 2018-2035" — and the
 # range it may end. Only a year in this position is believed when it lies in the future:
 # the looser patterns above allow forty characters of text before the year, and in
@@ -753,7 +761,23 @@ def _copyright_year(text: str, url: str, now: datetime) -> CheckResult:
     template placeholder, "© 2035"), and a range's later year is always the one that
     counts: "© 2018-2035" is a future year, never a stale 2018. A future year is only
     believed when it sits directly after the mark (`COPYRIGHT_ADJACENT_PATTERN`).
+
+    After production run 4: a year is exactly four digits ("© 20015" is none), and a range
+    with no end year in the source ("© 2006 - | …", the end written by a script) makes the
+    year `"unknown"` — no claim either way. The evidence says the year is as written in
+    the HTML source.
     """
+    for match in COPYRIGHT_PATTERN.finditer(text):
+        if OPEN_RANGE_TAIL.match(text, match.end()):
+            return CheckResult(
+                "unknown",
+                evidence_text=(
+                    "The copyright range has no end year in the page's HTML source; a "
+                    "script probably fills it in, so the year is unknown: "
+                    + snippet_forward(text, match.start(), COPYRIGHT_EVIDENCE_CHARS)
+                ),
+                evidence_url=url,
+            )
     years: list[tuple[int, str]] = []
     for pattern in (COPYRIGHT_RANGE_PATTERN, COPYRIGHT_PATTERN):
         for match in pattern.finditer(text):
@@ -773,7 +797,7 @@ def _copyright_year(text: str, url: str, now: datetime) -> CheckResult:
             False, evidence_text="No copyright year on the homepage", evidence_url=url
         )
     best = max(years, key=lambda item: item[0])
-    return CheckResult(best[0], evidence_text=best[1], evidence_url=url)
+    return CheckResult(best[0], evidence_text=AS_IN_SOURCE + best[1], evidence_url=url)
 
 
 def _placeholder_text(cleaned: BeautifulSoup, text: str, url: str) -> CheckResult:

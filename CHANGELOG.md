@@ -5,7 +5,7 @@ Format: `## [vX.Y.Z] - YYYY-MM-DD` followed by Added / Changed / Fixed.
 
 ## [v0.12.0] - 2026-09-26
 
-**Bumps the audit logic version to 7** (4 during the build, then 5, 6 and 7 as the production verification runs found false findings). Every stored audit counts as due, so the next audit
+**Bumps the audit logic version to 8** (4 during the build, then 5–8 as the production verification runs found false findings). Every stored audit counts as due, so the next audit
 run re-audits every business it considers, not in 30 days. Re-running a saved search does
 that but spends Places calls; `POST /api/v1/jobs/{job_run_id}/audit` on a search's latest
 resolution run does it without (API only; see `docs/operations.md` → *Upgrading*).
@@ -23,11 +23,16 @@ resolution run does it without (API only; see `docs/operations.md` → *Upgradin
   extracted (`checks.local_business`).
 - **Copyright:** a future year is `future_copyright` (`© 2035`), and a range's later year
   counts, so `© 2018-2035` is no longer reported as a stale 2018 and `© 2018-2026` is current.
+  A year is exactly four digits (`© 20015` is no year, not 2001); a range with no end year
+  in the HTML source (`© 2006 -`, the end written by a script) is an unknown year; and the
+  evidence says the year is as written in the source.
 - **Unreachable vs our own outage:** before recording a site as `unreachable` the audit
   checks this machine's connection (`AUDIT_CONNECTIVITY_CHECK_URL`, a TCP connection with no
   request) and asks the site once more after `AUDIT_UNREACHABLE_RECHECK_SECONDS`. If our
   network was down — a laptop that slept mid-run — the audit is `failed`, with no finding,
-  and is retried after `AUDIT_FAILED_RETRY_HOURS`.
+  and is retried after `AUDIT_FAILED_RETRY_HOURS`. A site that gives no answer is `unreachable` only when its
+  previous audit got no page either; the first time it is `not_readable`, with no finding
+  (a site that loaded earlier and stops answering is usually limiting us, not offline).
 
 - **Bot-protection pages:** a homepage that answers with a bot challenge (Cloudflare's
   "Just a moment...", its block page, Imperva, DataDome, Sucuri) is the new audit status

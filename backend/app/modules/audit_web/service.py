@@ -153,6 +153,8 @@ def audit_business(
         checks = checks_module.fetch_checks(
             _failed_outcome(url, robots.reason, robots.error_kind, tls_valid=robots.tls_valid)
         )
+        if robots.tls_valid and not _load_failed_before(session, business):
+            return _unanswered(session, business, job_run_id, url, checks, started, settings)
         return _store(
             session,
             business=business,
@@ -202,6 +204,8 @@ def audit_business(
         )
 
     if not outcome.reachable:
+        if outcome.tls_valid and not _load_failed_before(session, business):
+            return _unanswered(session, business, job_run_id, url, checks, started, settings)
         return _store(
             session,
             business=business,
@@ -398,6 +402,59 @@ def _challenged(
         checks=checks,
         findings=[],
         html_sha256=outcome.html_sha256,
+        started_at=started,
+        settings=settings,
+        listing_findings=False,
+    )
+
+
+def _load_failed_before(session: Session, business: Business) -> bool:
+    """Whether the business's previous audit also got no page (v0.12.0, run 4).
+
+    A site that loaded on its last audit and gives no answer now is most often limiting how
+    often we may ask — Mister Sparky of Austin loaded twice in a day, then timed out twice
+    — and calling it offline would tell a rep something false. So no answer is `unreachable`
+    only the second time in a row. Our own `failed` audits say nothing about the site and
+    are looked past; "no page" is an `unreachable` audit or a `not_readable` one that got
+    no HTTP answer at all.
+    """
+    for audit in _recent_audits(session, business.id, limit=10):
+        if audit.status is AuditStatus.failed:
+            continue
+        return audit.status is AuditStatus.unreachable or (
+            audit.status is AuditStatus.not_readable and audit.http_status is None
+        )
+    return False
+
+
+def _unanswered(
+    session: Session,
+    business: Business,
+    job_run_id: uuid.UUID | None,
+    url: str,
+    checks: checks_module.Checks,
+    started: datetime,
+    settings: Settings,
+) -> WebsiteAudit:
+    """No answer, twice, with our network up — but the page loaded last time: not readable."""
+    reachable = checks.get("reachable")
+    reason = reachable.evidence_text if reachable is not None else f"No HTTP answer from {url}"
+    checks["not_readable"] = checks_module.CheckResult(
+        None,
+        evidence_text=(
+            f"{reason}. The previous audit of this business loaded or has not yet tried the "
+            "page, so this is recorded as not readable, not as the site being offline"
+        ),
+        evidence_url=url,
+    )
+    return _store(
+        session,
+        business=business,
+        job_run_id=job_run_id,
+        url_audited=url,
+        status=AuditStatus.not_readable,
+        checks=checks,
+        findings=[],
         started_at=started,
         settings=settings,
         listing_findings=False,

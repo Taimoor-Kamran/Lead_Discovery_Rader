@@ -7,6 +7,7 @@ that "goes over the network" (it resolves DNS through an injected resolver, so n
 ever opened) and a connectivity probe that says whatever the test needs.
 """
 
+from datetime import timedelta
 from typing import Any
 
 import fakeredis
@@ -29,6 +30,7 @@ from app.modules.audit_web import service
 from app.modules.audit_web.models import AuditStatus
 from app.modules.businesses.models import Business
 from tests.conftest import FakeClock
+from tests.factories import make_audit
 from tests.integration.test_website_audits_api import PAGE, ScriptedPsi, make_business
 
 RECHECK_SECONDS = 7.0
@@ -125,6 +127,12 @@ def business(db: Session) -> Business:
     return make_business(db, website="https://wellington.example/")
 
 
+def previously_unreachable(db: Session, business: Business) -> None:
+    """A site is only `unreachable` the second time in a row it gives no page (run 4)."""
+    db.add(make_audit(business, status=AuditStatus.unreachable))
+    db.flush()
+
+
 # --- acceptance ----------------------------------------------------------------------------
 
 
@@ -163,6 +171,7 @@ def test_a_homepage_that_fails_once_and_loads_on_the_recheck_is_done(
 def test_a_homepage_that_fails_twice_while_we_are_online_is_unreachable(
     db: Session, business: Business
 ) -> None:
+    previously_unreachable(db, business)
     backend = FlakyBackend(failures={"/": 2})
     probe = ScriptedProbe(True, True)
     audit_tools, clock = tools_for(backend, probe)
@@ -248,6 +257,7 @@ def test_a_certificate_failure_is_an_answer_and_is_not_rechecked(
 def test_without_a_probe_a_failure_is_still_rechecked_but_never_blamed_on_us(
     db: Session, business: Business
 ) -> None:
+    previously_unreachable(db, business)
     backend = FlakyBackend(failures={"/": 2})
     audit_tools, clock = tools_for(backend, None)
 
@@ -269,7 +279,71 @@ def test_a_fixture_answered_from_disk_is_neither_probed_nor_rechecked(
 
     audit = service.audit_business(db, business, tools=audit_tools)
 
-    assert audit.status is AuditStatus.unreachable
+    # A first audit: no answer is `not_readable` until a second audit also gets none.
+    assert audit.status is AuditStatus.not_readable
+    assert audit.findings == []
     assert probe.calls == 0
     assert clock.delays == []
     assert backend.calls == ["/robots.txt", "/"]
+
+
+# --- unreachable only the second time in a row (v0.12.0, production run 4) ----------------
+
+
+def test_a_site_that_loaded_last_time_and_gives_no_answer_now_is_not_readable(
+    db: Session, business: Business
+) -> None:
+    """Mister Sparky of Austin: loaded twice in a day, then timed out twice."""
+    db.add(make_audit(business, status=AuditStatus.done))
+    db.flush()
+    backend = FlakyBackend(failures={"/": 2}, error=FetchTimeoutError)
+    audit_tools, _ = tools_for(backend, ScriptedProbe(True, True))
+
+    audit = service.audit_business(db, business, tools=audit_tools)
+
+    assert audit.status is AuditStatus.not_readable
+    assert audit.findings == []
+    assert "not as the site being offline" in audit.checks["not_readable"]["evidence_text"]
+
+
+def test_a_site_that_could_not_be_loaded_last_time_either_is_unreachable(
+    db: Session, business: Business
+) -> None:
+    """Grayzer Electric: no answer on every audit since 2026-09-23."""
+    previously_unreachable(db, business)
+    backend = FlakyBackend(failures={"/robots.txt": 2})
+    audit_tools, _ = tools_for(backend, ScriptedProbe(True, True))
+
+    audit = service.audit_business(db, business, tools=audit_tools)
+
+    assert audit.status is AuditStatus.unreachable
+    assert audit.finding_codes == ["unreachable"]
+
+
+def test_our_own_failed_audit_in_between_is_looked_past(db: Session, business: Business) -> None:
+    previously_unreachable(db, business)
+    ours = make_audit(business, status=AuditStatus.failed)
+    ours.created_at = ours.created_at + timedelta(days=1)  # newer than the unreachable one
+    db.add(ours)
+    db.flush()
+    backend = FlakyBackend(failures={"/": 2})
+    audit_tools, _ = tools_for(backend, ScriptedProbe(True, True))
+
+    assert service.audit_business(db, business, tools=audit_tools).status is (
+        AuditStatus.unreachable
+    )
+
+
+def test_two_unanswered_audits_in_a_row_make_the_second_unreachable(
+    db: Session, business: Business
+) -> None:
+    first = service.audit_business(
+        db, business, tools=tools_for(FlakyBackend(failures={"/": 2}), ScriptedProbe())[0]
+    )
+    db.flush()
+    second = service.audit_business(
+        db, business, tools=tools_for(FlakyBackend(failures={"/": 2}), ScriptedProbe())[0]
+    )
+
+    assert first.status is AuditStatus.not_readable
+    assert second.status is AuditStatus.unreachable

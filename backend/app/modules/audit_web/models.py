@@ -50,7 +50,11 @@ from app.core.models import created_at_column, uuid_pk
 # `not_readable` (or `bot_challenge` with a vendor mark), with no page findings and no
 # PageSpeed; JSON-LD is parsed leniently (concatenated objects, trailing text) before a block
 # is called broken, and that finding keeps enough evidence to verify.
-AUDIT_LOGIC_VERSION = 7
+# audit-8 (v0.12.0, after run 4): a copyright year is exactly four digits, an open range
+# is "unknown", and the evidence says the year is as written in the HTML source; a site
+# that gives no answer is `unreachable` only when its previous audit could not load it
+# either — otherwise `not_readable`.
+AUDIT_LOGIC_VERSION = 8
 RULES_VERSION = f"audit-{AUDIT_LOGIC_VERSION}"
 
 

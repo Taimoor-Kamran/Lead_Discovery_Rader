@@ -24,6 +24,7 @@ import pytest
 from app.core.fetch_backends import demo_sites_root
 from app.core.safe_fetch import FetchOutcome
 from app.modules.audit_web.checks import (
+    AS_IN_SOURCE,
     NOT_APPLICABLE_OVER_HTTP,
     Checks,
     analyse_html,
@@ -184,7 +185,9 @@ def test_the_copyright_evidence_is_the_visible_line_not_a_slice_of_html(
     check = barton_creek["copyright_year"]
 
     assert check.value == 2016
-    assert check.evidence_text == "© 2016 Barton Creek Plumbing LLC. All rights reserved."
+    assert check.evidence_text == (
+        AS_IN_SOURCE + "© 2016 Barton Creek Plumbing LLC. All rights reserved."
+    )
 
 
 @pytest.mark.parametrize("host", DEMO_HOSTS)

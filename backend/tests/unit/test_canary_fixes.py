@@ -261,3 +261,45 @@ def test_broken_markup_evidence_quotes_the_fault_in_full() -> None:
     assert "<<HERE>>" in stored
     assert '"name": "Late Error",' in stored.split("<<HERE>>")[0][-60:]
     assert "Whole block:" in stored
+
+
+# --- run 4: copyright years as the HTML source has them ----------------------------------
+
+
+def copyright_of(footer: str) -> CheckResult:
+    html = f"<html><body><h1>x</h1><footer>{footer}</footer></body></html>"
+    return checks_for(html, listing=PROVEN)["copyright_year"]
+
+
+def test_an_open_range_has_no_known_year() -> None:
+    """Lightning Volts: "© Copyright 2006 - | …" — a script writes the end year."""
+    check = copyright_of(
+        "© Copyright 2006 - | Lightning Volts Electric Service | All Rights Reserved"
+    )
+
+    assert check.value == "unknown"
+    assert "no end year" in (check.evidence_text or "")
+    produced = found_html("<footer>© Copyright 2006 - | Lightning Volts Electric Service</footer>")
+    assert "stale_copyright" not in produced
+    assert "future_copyright" not in produced
+
+
+def test_five_digits_are_not_a_year() -> None:
+    """Genesis Electrical Services: "© 20015" is a typo, never the year 2001."""
+    check = copyright_of("© 20015 Genesis Electrical Services Designed By Arcos Multimedia Group")
+
+    assert check.value is False
+    assert "stale_copyright" not in found_html("<footer>© 20015 Genesis Electrical</footer>")
+
+
+def test_a_closed_range_and_a_single_year_still_count_and_say_where_they_were_read() -> None:
+    check = copyright_of("© 2018-2021 Pritchard Electric, LLC")
+
+    assert check.value == 2021
+    assert (check.evidence_text or "").startswith("As written in the page's HTML source")
+    assert "stale_copyright" in found_html("<footer>Copyright © 2021 Pritchard Electric</footer>")
+
+
+def found_html(body: str) -> list[str]:
+    html = f"<html><body><h1>x</h1>{body}</body></html>"
+    return codes(for_page(checks_for(html, listing=PROVEN), None, context(PROVEN)))
