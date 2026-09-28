@@ -14,8 +14,10 @@
     "failed": 0,
     "psi_calls": 23,
     "robots_blocked": 2,
+    "bot_challenge": 0,
+    "not_readable": 1,
     "skipped": 3,
-    "unreachable": 2
+    "unreachable": 1
   },
   "not_audited": {
     "demo-e8": "closed_permanently — a business that has closed for good is not a lead"
@@ -94,17 +96,17 @@
       "case": "The listing gives http; the site redirects to https, which the audit follows.",
       "status": "done",
       "findings": [
+        "listing_website_http",
+        "nap_phone_mismatch",
         "no_live_chat",
         "thin_content"
       ],
       "psi_score": 83
     },
     "badphoneplumbing.invalid": {
-      "case": "No fixture at all: a reserved host that cannot connect.",
-      "status": "unreachable",
-      "findings": [
-        "unreachable"
-      ]
+      "case": "No fixture at all: a reserved host that cannot connect. First audit, so not_readable: a site is only called unreachable when its previous audit could not load it either.",
+      "status": "not_readable",
+      "findings": []
     },
     "squaresitesewer.square.site": {
       "case": "A JavaScript shell: a handful of scripts and almost no text in the HTML.",
@@ -117,7 +119,8 @@
         "no_h1",
         "no_live_chat",
         "no_online_booking",
-        "no_structured_data"
+        "no_structured_data",
+        "short_title"
       ],
       "psi_score": 52
     },
@@ -316,6 +319,7 @@
         "no_online_booking",
         "no_section_headings",
         "no_structured_data",
+        "site_builder",
         "thin_content",
         "unlabelled_form_fields"
       ],

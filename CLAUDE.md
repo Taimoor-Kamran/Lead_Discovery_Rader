@@ -74,4 +74,7 @@ scripts/
 - `make check` passes (ruff, mypy, pytest; frontend lint/typecheck/test once frontend exists)
 - New Alembic migration(s) apply cleanly on an empty DB and downgrade cleanly
 - New env vars documented in `.env.example`
+- A spec that changes what an audit check or finding concludes bumps `AUDIT_LOGIC_VERSION`
+  (`backend/app/modules/audit_web/models.py`) and says so in the changelog; otherwise
+  stored audits look fresh and nobody sees the change for `AUDIT_MAX_AGE_DAYS`
 - `CHANGELOG.md` has an entry under the spec's version

@@ -268,7 +268,9 @@ export function HealthPage() {
 
         <Metric title="Audit outcomes (7 d)" testId="m-audits">
           <p className="text-sm">
-            Done {report.audits.done}, blocked by robots {report.audits.robots_blocked}, unreachable{" "}
+            Done {report.audits.done}, blocked by robots {report.audits.robots_blocked}, blocked by bot
+            protection {report.audits.bot_challenge}, not readable {report.audits.not_readable},
+            unreachable{" "}
             {report.audits.unreachable}, failed {report.audits.failed}, skipped {report.audits.skipped}, of{" "}
             {report.audits.total} in total
           </p>

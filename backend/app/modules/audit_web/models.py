@@ -30,7 +30,32 @@ from app.core.models import created_at_column, uuid_pk
 # paths; new checks `live_chat`, `images_without_alt`, `unlabelled_inputs`, `word_count`
 # and `heading_structure`, and the findings built on them plus `builder_subdomain`;
 # PageSpeed accessibility and best-practices scores, and their two findings.
-RULES_VERSION = "audit-3"
+# audit-4 (v0.12.0): structured data read in JSON-LD, microdata and RDFa, with broken
+# blocks reported; future and range copyright years; title, viewport-zoom, builder, H1-count,
+# click-to-call, placeholder and listing-comparison findings; `ecommerce` and `favicon`
+# deleted; `service` and `method` on every finding; a network outage on our side is
+# `failed`, not `unreachable`.
+#
+# **Bump AUDIT_LOGIC_VERSION whenever a check or a finding changes what it concludes about
+# a page** (docs/release-checklist.md). It is stored on every audit, and `needs_audit` makes
+# a business whose newest audit carries an older version due at once, however recent that
+# audit is — without the bump nobody sees the change until AUDIT_MAX_AGE_DAYS pass.
+# audit-5 (v0.12.0, after the production canary): a bot-challenge page is its own status
+# (`bot_challenge`) with no findings; a unit is read only when it has a digit; footer
+# placeholders only in short footer text and the copyright line; a builder only from its
+# generator tag, script host or classes; `nap_phone_mismatch` is low and names call tracking.
+# audit-6 (v0.12.0, after run 1): a unit is compared by its number only, and the address
+# comparison is stored but no longer emitted as `nap_address_mismatch`.
+# audit-7 (v0.12.0, after run 2): any non-2xx homepage answer is never read as the page —
+# `not_readable` (or `bot_challenge` with a vendor mark), with no page findings and no
+# PageSpeed; JSON-LD is parsed leniently (concatenated objects, trailing text) before a block
+# is called broken, and that finding keeps enough evidence to verify.
+# audit-8 (v0.12.0, after run 4): a copyright year is exactly four digits, an open range
+# is "unknown", and the evidence says the year is as written in the HTML source; a site
+# that gives no answer is `unreachable` only when its previous audit could not load it
+# either — otherwise `not_readable`.
+AUDIT_LOGIC_VERSION = 8
+RULES_VERSION = f"audit-{AUDIT_LOGIC_VERSION}"
 
 
 class AuditStatus(enum.StrEnum):
@@ -39,6 +64,15 @@ class AuditStatus(enum.StrEnum):
     skipped = "skipped"
     robots_blocked = "robots_blocked"
     unreachable = "unreachable"
+    # The site answered with a bot-protection challenge (Cloudflare's "Just a moment...",
+    # and the like) instead of its homepage (v0.12.0). Nothing was read, so nothing is
+    # reported: not `done`, which would audit the challenge page, and not `unreachable`,
+    # which would say the site is down.
+    bot_challenge = "bot_challenge"
+    # The homepage answered, but not with a page: any non-2xx status (a plain 403, a 404, a
+    # 5xx that stayed a 5xx on the re-check) without a bot-protection mark (v0.12.0). The
+    # response is never read as the homepage; the status code and title are the evidence.
+    not_readable = "not_readable"
     # Something in our own code or infrastructure went wrong for this one business.
     failed = "failed"
 
@@ -87,6 +121,11 @@ class WebsiteAudit(Base):
     page_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     html_sha256: Mapped[str | None] = mapped_column(Text, nullable=True)
     rules_version: Mapped[str] = mapped_column(Text, nullable=False, default=RULES_VERSION)
+    # The same version as a number, so "older than the running code" is a comparison, not a
+    # string parse (v0.12.0). 0 for a row whose `rules_version` was not `audit-<n>`.
+    audit_logic_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=AUDIT_LOGIC_VERSION, server_default="0"
+    )
     content_expires_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

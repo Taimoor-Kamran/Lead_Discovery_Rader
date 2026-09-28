@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.modules.adapters import registry
 from app.modules.adapters.google_places.adapter import SOURCE_NAME as PLACES_SOURCE
 from app.modules.audit_web import service
-from app.modules.audit_web.models import AuditStatus, WebsiteAudit
+from app.modules.audit_web.models import AUDIT_LOGIC_VERSION, AuditStatus, WebsiteAudit
 from app.modules.audit_web.worker import run_audits
 from app.modules.businesses.models import Business
 from app.modules.discovery.models import DiscoveredRecord, RecordSighting
@@ -111,6 +111,8 @@ def test_a_run_audits_the_businesses_its_resolution_run_touched(
         "audited": 2,
         "skipped": 0,
         "robots_blocked": 0,
+        "bot_challenge": 0,
+        "not_readable": 0,
         "unreachable": 0,
         "failed": 0,
         "psi_calls": 2,
@@ -186,7 +188,7 @@ def test_a_robots_disallowed_site_is_never_asked_for_its_homepage(
     assert audit.page_text is None
 
 
-def test_a_site_that_answers_500_is_recorded_as_unreachable(
+def test_a_site_that_keeps_answering_503_is_not_readable(
     db: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     business = make_business(db, name="Server Error Plumbing")
@@ -208,9 +210,11 @@ def test_a_site_that_answers_500_is_recorded_as_unreachable(
 
     audit = service.latest_audit(db, business.id)
     assert audit is not None
-    assert audit.status is AuditStatus.unreachable
+    # Since v0.12.0 any non-2xx answer is `not_readable`: the site answered, with an error
+    # page that says nothing about the business, so no finding is made from it.
+    assert audit.status is AuditStatus.not_readable
     assert audit.http_status == 503
-    assert audit.finding_codes == ["unreachable"]
+    assert audit.finding_codes == []
 
 
 def test_a_business_audited_recently_is_not_audited_again(
@@ -246,6 +250,31 @@ def test_a_business_whose_audit_is_older_than_the_max_age_is_audited_again(
 
     assert second.progress_total == 1
     assert len(list(db.scalars(select(WebsiteAudit)))) == 2
+
+
+def test_bumping_the_logic_version_makes_every_business_due_on_the_next_run(
+    db: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Spec v0.12.0, item 11: a check change is seen on the next run, not in 30 days."""
+    businesses = [make_business(db, name=f"Plumber {index}") for index in range(3)]
+    _, resolution = pipeline(db, businesses)
+    run_with(db, audit_run(db, resolution), tools(), monkeypatch)
+
+    unchanged = audit_run(db, resolution)
+    run_with(db, unchanged, tools(), monkeypatch)
+    assert unchanged.progress_total == 0, "fresh audits by the same logic are not redone"
+
+    bumped_version = AUDIT_LOGIC_VERSION + 1
+    # Patched where it is read: `needs_audit` and `_store` both use the service's name.
+    monkeypatch.setattr(service, "AUDIT_LOGIC_VERSION", bumped_version)
+    bumped = audit_run(db, resolution)
+    run_with(db, bumped, tools(), monkeypatch)
+
+    assert bumped.progress_total == 3
+    for business in businesses:
+        latest = service.latest_audit(db, business.id)
+        assert latest is not None
+        assert latest.audit_logic_version == bumped_version
 
 
 def test_an_audit_run_that_names_no_resolution_run_fails_loudly(db: Session) -> None:

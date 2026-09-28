@@ -6,8 +6,13 @@ The shape of one audit:
    with **zero network calls** — the finding is about the listing, not about a page;
 2. ask `robots.txt` first. Disallowed means the homepage is never requested at all;
 3. fetch the homepage through the SSRF guard, once;
-4. run the deterministic checks, then ask PageSpeed for the mobile numbers;
+4. run the deterministic checks, compare the page with the business's own listing, then
+   ask PageSpeed for the mobile numbers;
 5. turn the gaps into findings, each carrying the text and URL it came from.
+
+A request that gets no answer at all is not taken at its word (v0.12.0, item 3a). Our own
+connectivity is checked first — a laptop that slept mid-run must not record a prospect's
+site as down — and the site is asked once more before it is called unreachable.
 
 Every step that can fail produces a *status* rather than an exception, because an audit
 that did not work is still information about that business. The only thing that raises is
@@ -15,6 +20,7 @@ a bug in our own code, and the worker catches that per business too.
 """
 
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -23,13 +29,26 @@ from sqlalchemy import Select, func, select, update
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
+from app.core.connectivity import ConnectivityProbe, ProbeResult, build_probe
 from app.core.errors import NotFoundError, ValidationFailedError
 from app.core.logging import get_logger
 from app.core.pagination import DEFAULT_LIMIT, Page, apply_cursor, encode_cursor
-from app.core.safe_fetch import FetchOutcome, SafeFetcher, UnsafeUrlError, build_fetcher
+from app.core.safe_fetch import (
+    FetchOutcome,
+    RobotsDecision,
+    SafeFetcher,
+    UnsafeUrlError,
+    build_fetcher,
+)
 from app.modules.audit_web import checks as checks_module
 from app.modules.audit_web import findings as findings_module
-from app.modules.audit_web.models import RULES_VERSION, AuditStatus, WebsiteAudit
+from app.modules.audit_web import listing as listing_module
+from app.modules.audit_web.models import (
+    AUDIT_LOGIC_VERSION,
+    RULES_VERSION,
+    AuditStatus,
+    WebsiteAudit,
+)
 from app.modules.audit_web.psi import (
     PageSpeedClient,
     PageSpeedUnavailableError,
@@ -46,15 +65,23 @@ logger = get_logger("app.audit_web")
 # The two kinds of website worth fetching. A social profile is recorded, never fetched —
 # the blueprint's hard rule — and a business with no website has nothing to fetch.
 AUDITABLE_WEBSITE_KINDS = frozenset({WebsiteKind.own_site, WebsiteKind.builder_subdomain})
+# Failures where no answer came back at all — which is also what our own outage looks like.
+# A certificate that did not verify, or a URL the guard refused, is an answer: never re-checked.
+NO_ANSWER_KINDS = frozenset({"connect", "timeout", "network"})
 
 
 @dataclass
 class AuditTools:
-    """The two outside things an audit needs. Injected so a test can drive either one."""
+    """The outside things an audit needs. Injected so a test can drive each one.
+
+    `connectivity` is `None` in tests unless one is given: then a failure is still
+    re-checked, but nothing can say our own network was down.
+    """
 
     fetcher: SafeFetcher
     psi: PageSpeedClient
     settings: Settings = field(default_factory=get_settings)
+    connectivity: ConnectivityProbe | None = None
 
     @classmethod
     def build(cls, *, job_run_id: uuid.UUID | None = None) -> "AuditTools":
@@ -63,6 +90,7 @@ class AuditTools:
             fetcher=build_fetcher(settings=settings),
             psi=build_psi_client(job_run_id=job_run_id, settings=settings),
             settings=settings,
+            connectivity=build_probe(settings),
         )
 
 
@@ -91,6 +119,7 @@ def audit_business(
         quality_score_threshold=settings.audit_quality_score_threshold,
         quality_score_medium_below=settings.audit_quality_score_medium_below,
         now=started,
+        business_name=business.display_name,
     )
 
     if business.website_kind not in AUDITABLE_WEBSITE_KINDS or not business.website:
@@ -109,9 +138,11 @@ def audit_business(
 
     url = business.website
     try:
-        robots = tools.fetcher.robots(url)
+        robots, outage = _with_recheck(tools, url, lambda: tools.fetcher.robots(url), _no_robots)
     except UnsafeUrlError as exc:
         return _refused(session, business, job_run_id, url, exc, started, settings)
+    if outage is not None:
+        return _our_outage(session, business, job_run_id, url, outage, started, settings)
 
     # A certificate that does not verify, or a host that never answers, shows up on the
     # robots request — before the homepage is asked for. Neither is a robots decision, so
@@ -122,6 +153,8 @@ def audit_business(
         checks = checks_module.fetch_checks(
             _failed_outcome(url, robots.reason, robots.error_kind, tls_valid=robots.tls_valid)
         )
+        if robots.tls_valid and not _load_failed_before(session, business):
+            return _unanswered(session, business, job_run_id, url, checks, started, settings)
         return _store(
             session,
             business=business,
@@ -129,7 +162,9 @@ def audit_business(
             url_audited=url,
             status=AuditStatus.unreachable,
             checks=checks,
-            findings=findings_module.for_unreachable(checks, url),
+            findings=findings_module.for_unreachable(
+                checks, url, note=_recheck_note(tools, url) if robots.tls_valid else None
+            ),
             started_at=started,
             settings=settings,
         )
@@ -147,14 +182,30 @@ def audit_business(
         )
 
     try:
-        outcome = tools.fetcher.fetch(url)
+        outcome, outage = _with_recheck(tools, url, lambda: tools.fetcher.fetch(url), _no_page)
     except UnsafeUrlError as exc:
         return _refused(session, business, job_run_id, url, exc, started, settings)
+    if outage is not None:
+        return _our_outage(session, business, job_run_id, url, outage, started, settings)
 
     checks = checks_module.fetch_checks(outcome)
     final_url = outcome.final_url or url
 
-    if not outcome.reachable or (outcome.status_code or 0) >= 500:
+    challenge = checks_module.bot_challenge(outcome)
+    if challenge is not None:
+        return _challenged(
+            session, business, job_run_id, url, outcome, challenge, started, settings
+        )
+
+    refused = checks_module.not_readable(outcome) if outcome.reachable else None
+    if refused is not None:
+        return _not_readable(
+            session, business, job_run_id, url, outcome, refused, started, settings
+        )
+
+    if not outcome.reachable:
+        if outcome.tls_valid and not _load_failed_before(session, business):
+            return _unanswered(session, business, job_run_id, url, checks, started, settings)
         return _store(
             session,
             business=business,
@@ -164,7 +215,9 @@ def audit_business(
             status=AuditStatus.unreachable,
             http_status=outcome.status_code,
             checks=checks,
-            findings=findings_module.for_unreachable(checks, final_url),
+            findings=findings_module.for_unreachable(
+                checks, final_url, note=_recheck_note(tools, url) if outcome.tls_valid else None
+            ),
             html_sha256=outcome.html_sha256,
             started_at=started,
             settings=settings,
@@ -174,6 +227,8 @@ def audit_business(
         outcome, now=started, page_text_limit=settings.audit_page_text_max_chars
     )
     checks.update(html)
+    if html:
+        checks["listing_comparison"] = listing_module.compare(checks, _listing(business))
     psi, psi_error = _measure(tools.psi, final_url)
     if psi_error is not None:
         checks["psi_error"] = checks_module.CheckResult(
@@ -233,6 +288,259 @@ def record_failure(
         extra={"business_id": str(business.id), "reason": reason},
     )
     return audit
+
+
+def _listing(business: Business) -> listing_module.Listing:
+    """The business record's own facts, as the listing comparison reads them."""
+    return listing_module.Listing(
+        name=business.display_name,
+        phone_e164=business.phone_e164,
+        address_line1=business.address_line1,
+        address_line2=business.address_line2,
+        city=business.city,
+        state=business.state,
+        postal_code=business.postal_code,
+        country=business.country,
+        website=business.website,
+    )
+
+
+# --- no answer: their site, or our network? ---------------------------------------------
+
+
+def _no_robots(robots: RobotsDecision) -> bool:
+    return robots.tls_valid and robots.error_kind in NO_ANSWER_KINDS
+
+
+def _no_page(outcome: FetchOutcome) -> bool:
+    if not outcome.tls_valid:
+        return False
+    # A bot-protection page is an answer, not a silence: re-asking gets the same page.
+    if checks_module.bot_challenge(outcome) is not None:
+        return False
+    if not outcome.reachable:
+        return outcome.error_kind in NO_ANSWER_KINDS
+    return (outcome.status_code or 0) >= 500
+
+
+def _with_recheck[T](
+    tools: AuditTools, url: str, attempt: Callable[[], T], no_answer: Callable[[T], bool]
+) -> tuple[T, ProbeResult | None]:
+    """One request, re-checked once if nothing answered. Returns `(result, outage)`.
+
+    `outage` is set when our own connectivity check failed at either attempt: the site was
+    never fairly asked, so nothing may be concluded about it. Otherwise the site gets a
+    second chance `AUDIT_UNREACHABLE_RECHECK_SECONDS` later, and only a second failure
+    stands. A fixture on disk is deterministic and is neither re-checked nor probed.
+    """
+    result = attempt()
+    if not no_answer(result) or not tools.fetcher.uses_network(url):
+        return result, None
+    outage = _outage(tools)
+    if outage is not None:
+        return result, outage
+    logger.info("no answer from a site; checking once more", extra={"url": url})
+    tools.fetcher.sleeper(tools.settings.audit_unreachable_recheck_seconds)
+    result = attempt()
+    if no_answer(result):
+        return result, _outage(tools)
+    return result, None
+
+
+def _outage(tools: AuditTools) -> ProbeResult | None:
+    """The probe's answer when our own network is down; `None` when it is up or unknown."""
+    if tools.connectivity is None:
+        return None
+    probe = tools.connectivity.check()
+    return None if probe.online else probe
+
+
+def _recheck_note(tools: AuditTools, url: str) -> str | None:
+    """What an unreachable finding's evidence adds about how hard we tried."""
+    if not tools.fetcher.uses_network(url):
+        return None
+    seconds = tools.settings.audit_unreachable_recheck_seconds
+    network = (
+        "while our own connectivity check succeeded"
+        if tools.connectivity is not None
+        else "(our own connectivity was not checked)"
+    )
+    return f"tried twice, {seconds:g} s apart, {network}"
+
+
+def _challenged(
+    session: Session,
+    business: Business,
+    job_run_id: uuid.UUID | None,
+    url: str,
+    outcome: FetchOutcome,
+    challenge: checks_module.CheckResult,
+    started: datetime,
+    settings: Settings,
+) -> WebsiteAudit:
+    """The site served a bot-protection challenge instead of its homepage (item 3b).
+
+    Nothing about the business's site was read, so nothing is reported: no page findings,
+    no PageSpeed call, no page text, and not even the listing's own `few_reviews`, so the
+    audit cannot become an opportunity. The status says what happened, and the check
+    carries the challenge page's status and title as evidence.
+    """
+    checks = checks_module.fetch_checks(outcome)
+    checks["bot_challenge"] = challenge
+    logger.info(
+        "a site answered with a bot-protection challenge",
+        extra={"business_id": str(business.id), "vendor": challenge.value},
+    )
+    return _store(
+        session,
+        business=business,
+        job_run_id=job_run_id,
+        url_audited=url,
+        final_url=outcome.final_url or url,
+        status=AuditStatus.bot_challenge,
+        http_status=outcome.status_code,
+        checks=checks,
+        findings=[],
+        html_sha256=outcome.html_sha256,
+        started_at=started,
+        settings=settings,
+        listing_findings=False,
+    )
+
+
+def _load_failed_before(session: Session, business: Business) -> bool:
+    """Whether the business's previous audit also got no page (v0.12.0, run 4).
+
+    A site that loaded on its last audit and gives no answer now is most often limiting how
+    often we may ask — Mister Sparky of Austin loaded twice in a day, then timed out twice
+    — and calling it offline would tell a rep something false. So no answer is `unreachable`
+    only the second time in a row. Our own `failed` audits say nothing about the site and
+    are looked past; "no page" is an `unreachable` audit or a `not_readable` one that got
+    no HTTP answer at all.
+    """
+    for audit in _recent_audits(session, business.id, limit=10):
+        if audit.status is AuditStatus.failed:
+            continue
+        return audit.status is AuditStatus.unreachable or (
+            audit.status is AuditStatus.not_readable and audit.http_status is None
+        )
+    return False
+
+
+def _unanswered(
+    session: Session,
+    business: Business,
+    job_run_id: uuid.UUID | None,
+    url: str,
+    checks: checks_module.Checks,
+    started: datetime,
+    settings: Settings,
+) -> WebsiteAudit:
+    """No answer, twice, with our network up — but the page loaded last time: not readable."""
+    reachable = checks.get("reachable")
+    reason = reachable.evidence_text if reachable is not None else f"No HTTP answer from {url}"
+    checks["not_readable"] = checks_module.CheckResult(
+        None,
+        evidence_text=(
+            f"{reason}. The previous audit of this business loaded or has not yet tried the "
+            "page, so this is recorded as not readable, not as the site being offline"
+        ),
+        evidence_url=url,
+    )
+    return _store(
+        session,
+        business=business,
+        job_run_id=job_run_id,
+        url_audited=url,
+        status=AuditStatus.not_readable,
+        checks=checks,
+        findings=[],
+        started_at=started,
+        settings=settings,
+        listing_findings=False,
+    )
+
+
+def _not_readable(
+    session: Session,
+    business: Business,
+    job_run_id: uuid.UUID | None,
+    url: str,
+    outcome: FetchOutcome,
+    refused: checks_module.CheckResult,
+    started: datetime,
+    settings: Settings,
+) -> WebsiteAudit:
+    """The homepage answered with a non-2xx status (v0.12.0, run 2).
+
+    A "403 Forbidden" error page was audited as the homepage in production and reported as a
+    template title, thin content and more. Now nothing in the response is read as the page:
+    no page findings, no PageSpeed call, no page text. What does stand are the findings that
+    come from the URLs alone — the listing's website against the address we were sent to.
+    """
+    checks = checks_module.fetch_checks(outcome)
+    checks["not_readable"] = refused
+    checks["listing_comparison"] = checks_module.CheckResult(
+        {"website": listing_module.compare_website(checks, _listing(business))},
+        evidence_text="Only the website address is compared: the page was not readable",
+        evidence_url=outcome.final_url or url,
+    )
+    logger.info(
+        "a homepage answered with a non-2xx status",
+        extra={"business_id": str(business.id), "status": refused.value},
+    )
+    return _store(
+        session,
+        business=business,
+        job_run_id=job_run_id,
+        url_audited=url,
+        final_url=outcome.final_url or url,
+        status=AuditStatus.not_readable,
+        http_status=outcome.status_code,
+        checks=checks,
+        findings=findings_module.for_not_readable(checks),
+        html_sha256=outcome.html_sha256,
+        started_at=started,
+        settings=settings,
+        listing_findings=False,
+    )
+
+
+def _our_outage(
+    session: Session,
+    business: Business,
+    job_run_id: uuid.UUID | None,
+    url: str,
+    probe: ProbeResult,
+    started: datetime,
+    settings: Settings,
+) -> WebsiteAudit:
+    """Our network was down, so the site was never fairly asked. A fact about us: `failed`.
+
+    No finding is made about the site, and `failed` is due again after
+    AUDIT_FAILED_RETRY_HOURS rather than backing off like a site that is really down.
+    """
+    reason = f"Our own network was unavailable ({probe.detail}), so {url} was not judged"
+    logger.warning(
+        "an audit hit our own network outage",
+        extra={"business_id": str(business.id), "detail": probe.detail},
+    )
+    return _store(
+        session,
+        business=business,
+        job_run_id=job_run_id,
+        url_audited=url,
+        status=AuditStatus.failed,
+        checks={
+            "error": checks_module.CheckResult(reason, evidence_text=reason, evidence_url=url),
+            "network_available": checks_module.CheckResult(
+                False, evidence_text=probe.detail, evidence_url=url
+            ),
+        },
+        findings=[],
+        started_at=started,
+        settings=settings,
+    )
 
 
 def _measure(psi: PageSpeedClient, url: str) -> tuple[dict[str, Any] | None, str | None]:
@@ -317,18 +625,20 @@ def _store(
     psi: dict[str, Any] | None = None,
     page_text: str | None = None,
     html_sha256: str | None = None,
+    listing_findings: bool = True,
 ) -> WebsiteAudit:
     resolved_checks = checks or {}
     tech_stack = checks_module.value_of(resolved_checks, "tech_stack") or {}
     ttl_days = settings.audit_content_ttl_days
-    findings = [
-        *findings,
-        *findings_module.for_listing(
-            business.user_rating_count,
-            few_reviews=settings.places_few_reviews,
-            listing_url=_listing_url(session, business),
-        ),
-    ]
+    if listing_findings:
+        findings = [
+            *findings,
+            *findings_module.for_listing(
+                business.user_rating_count,
+                few_reviews=settings.places_few_reviews,
+                listing_url=_listing_url(session, business),
+            ),
+        ]
     audit = WebsiteAudit(
         business_id=business.id,
         job_run_id=job_run_id,
@@ -345,6 +655,7 @@ def _store(
         page_text=page_text,
         html_sha256=html_sha256,
         rules_version=RULES_VERSION,
+        audit_logic_version=AUDIT_LOGIC_VERSION,
         content_expires_at=(
             started_at + timedelta(days=ttl_days) if ttl_days > 0 and page_text else None
         ),
@@ -484,8 +795,14 @@ def needs_audit(session: Session, business: Business, *, now: datetime | None = 
     AUDIT_FAILED_RETRY_HOURS; before, one timeout hid a business for a month. An
     `unreachable` one backs off through AUDIT_UNREACHABLE_BACKOFF_DAYS, a step per
     consecutive unreachable audit, so a site that was briefly down is looked at again
-    soon and one that is gone settles into the normal AUDIT_MAX_AGE_DAYS. Everything
-    else keeps AUDIT_MAX_AGE_DAYS.
+    soon and one that is gone settles into the normal AUDIT_MAX_AGE_DAYS. A
+    `bot_challenge` or `not_readable` audit waits AUDIT_BOT_CHALLENGE_RETRY_DAYS (v0.12.0): a
+    site that refused us once rarely changes its mind within hours. Everything else
+    keeps AUDIT_MAX_AGE_DAYS.
+
+    Before any of that: an audit written by older check logic (`audit_logic_version` below
+    AUDIT_LOGIC_VERSION, v0.12.0) is due now, whatever its age or status. It concluded
+    things the current code no longer would.
     """
     settings = get_settings()
     if settings.audit_max_age_days <= 0:
@@ -495,8 +812,12 @@ def needs_audit(session: Session, business: Business, *, now: datetime | None = 
     if not recent:
         return True
     latest = recent[0]
+    if latest.audit_logic_version < AUDIT_LOGIC_VERSION:
+        return True
     if latest.status is AuditStatus.failed:
         wait = timedelta(hours=settings.audit_failed_retry_hours)
+    elif latest.status in (AuditStatus.bot_challenge, AuditStatus.not_readable):
+        wait = timedelta(days=settings.audit_bot_challenge_retry_days)
     elif latest.status is AuditStatus.unreachable:
         streak = next(
             (i for i, audit in enumerate(recent) if audit.status is not AuditStatus.unreachable),
@@ -631,6 +952,7 @@ def summarize(audit: WebsiteAudit) -> WebsiteAuditSummary:
         http_status=audit.http_status,
         finding_codes=audit.finding_codes,
         rules_version=audit.rules_version,
+        audit_logic_version=audit.audit_logic_version,
         accessibility_score=audit.accessibility_score,
         best_practices_score=audit.best_practices_score,
         started_at=audit.started_at,

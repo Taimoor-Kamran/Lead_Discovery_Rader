@@ -36,17 +36,8 @@
       "rejected_rules": []
     },
     "badphoneplumbing.invalid": {
-      "case": "unreachable: only website_design.",
-      "services": {
-        "website_design": {
-          "source": "rules",
-          "confidence": [
-            0.8,
-            0.8
-          ],
-          "ai_agrees": null
-        }
-      },
+      "case": "not_readable (first audit of a host that cannot connect): no finding, so no opportunity.",
+      "services": {},
       "ai_statuses": [],
       "escalated": false,
       "buying_intent": null,
@@ -867,8 +858,8 @@
         "seo_gbp": {
           "source": "rules",
           "confidence": [
-            0.856,
-            0.856
+            0.914,
+            0.914
           ],
           "ai_agrees": null
         },
@@ -1001,6 +992,14 @@
           "confidence": [
             0.4,
             0.4
+          ],
+          "ai_agrees": false
+        },
+        "seo_gbp": {
+          "source": "rules",
+          "confidence": [
+            0.64,
+            0.64
           ],
           "ai_agrees": false
         }

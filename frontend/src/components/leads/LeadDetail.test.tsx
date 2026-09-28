@@ -91,6 +91,7 @@ function detail() {
       http_status: 200,
       finding_codes: ["no_https"],
       rules_version: "audit-1",
+      audit_logic_version: 1,
       started_at: null,
       finished_at: null,
       created_at: "2026-09-20T09:00:00Z",

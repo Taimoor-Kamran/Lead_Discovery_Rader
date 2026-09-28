@@ -576,6 +576,18 @@ class SafeFetcher:
         finally:
             self.concurrency.release()
 
+    def uses_network(self, url: str) -> bool:
+        """Whether a request for `url` would go over the network, not to a fixture on disk.
+
+        Only a network answer can be wrong because *our* network was down, so only then is
+        a failure worth re-checking (spec v0.12.0, item 3a).
+        """
+        try:
+            parts = split_safe_url(url)
+            return self._backend(parts.hostname or "").resolves_dns
+        except UnsafeUrlError:
+            return False
+
     def _backend(self, host: str) -> FetchBackend:
         for backend in self.backends:
             if backend.handles(host):

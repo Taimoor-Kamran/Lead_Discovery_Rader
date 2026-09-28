@@ -24,6 +24,7 @@ import pytest
 from app.core.fetch_backends import demo_sites_root
 from app.core.safe_fetch import FetchOutcome
 from app.modules.audit_web.checks import (
+    AS_IN_SOURCE,
     NOT_APPLICABLE_OVER_HTTP,
     Checks,
     analyse_html,
@@ -46,14 +47,17 @@ PRESENCE_CHECKS = (
     "viewport_meta",
     "title",
     "meta_description",
-    "favicon",
     "h1_present",
     "tel_link",
     "mailto_link",
+    "mailto_address",
     "contact_form",
     "booking",
-    "ecommerce",
     "structured_data",
+    "local_business",
+    "canonical_url",
+    "viewport_zoom_blocked",
+    "placeholder_text",
     "copyright_year",
     "js_shell_suspected",
 )
@@ -140,14 +144,15 @@ def test_a_parsed_page_answers_every_presence_check_true_or_false(
 
 
 def test_what_barton_creek_is_missing_all_reads_false(barton_creek: Checks) -> None:
-    """The five that used to answer `null` here, beside the two that already said `false`."""
+    """The ones that used to answer `null` here, beside the one that already said `false`.
+
+    `favicon` and `ecommerce` were in this list until v0.12.0 deleted both checks.
+    """
     for check in (
         "viewport_meta",
         "meta_description",
         "booking",
-        "ecommerce",
         "structured_data",
-        "favicon",
         "mailto_link",
     ):
         assert value_of(barton_creek, check) is False, check
@@ -180,7 +185,9 @@ def test_the_copyright_evidence_is_the_visible_line_not_a_slice_of_html(
     check = barton_creek["copyright_year"]
 
     assert check.value == 2016
-    assert check.evidence_text == "© 2016 Barton Creek Plumbing LLC. All rights reserved."
+    assert check.evidence_text == (
+        AS_IN_SOURCE + "© 2016 Barton Creek Plumbing LLC. All rights reserved."
+    )
 
 
 @pytest.mark.parametrize("host", DEMO_HOSTS)

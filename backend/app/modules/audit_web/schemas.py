@@ -21,6 +21,7 @@ class WebsiteAuditSummary(BaseModel):
     http_status: int | None
     finding_codes: list[str]
     rules_version: str
+    audit_logic_version: int
     # PageSpeed's category scores out of 100; null whenever PageSpeed did not score them.
     accessibility_score: int | None = None
     best_practices_score: int | None = None
@@ -59,6 +60,8 @@ class AuditResultSummary(BaseModel):
     audited: int = 0
     skipped: int = 0
     robots_blocked: int = 0
+    bot_challenge: int = 0
+    not_readable: int = 0
     unreachable: int = 0
     failed: int = 0
     psi_calls: int = 0

@@ -1423,10 +1423,14 @@ export interface components {
         };
         /** AuditOutcomes */
         AuditOutcomes: {
+            /** Bot Challenge */
+            bot_challenge: number;
             /** Done */
             done: number;
             /** Failed */
             failed: number;
+            /** Not Readable */
+            not_readable: number;
             /** Robots Blocked */
             robots_blocked: number;
             /** Skipped */
@@ -1440,7 +1444,7 @@ export interface components {
          * AuditStatus
          * @enum {string}
          */
-        AuditStatus: "done" | "skipped" | "robots_blocked" | "unreachable" | "failed";
+        AuditStatus: "done" | "skipped" | "robots_blocked" | "unreachable" | "bot_challenge" | "not_readable" | "failed";
         /** BackupStatus */
         BackupStatus: {
             /** Backups Kept */
@@ -3483,6 +3487,8 @@ export interface components {
         WebsiteAuditDetail: {
             /** Accessibility Score */
             accessibility_score?: number | null;
+            /** Audit Logic Version */
+            audit_logic_version: number;
             /** Best Practices Score */
             best_practices_score?: number | null;
             /**
@@ -3551,6 +3557,8 @@ export interface components {
         WebsiteAuditSummary: {
             /** Accessibility Score */
             accessibility_score?: number | null;
+            /** Audit Logic Version */
+            audit_logic_version: number;
             /** Best Practices Score */
             best_practices_score?: number | null;
             /**

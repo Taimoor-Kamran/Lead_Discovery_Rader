@@ -3,6 +3,92 @@
 All notable changes, one section per merged spec. Newest first.
 Format: `## [vX.Y.Z] - YYYY-MM-DD` followed by Added / Changed / Fixed.
 
+## [v0.12.0] - 2026-09-26
+
+**Bumps the audit logic version to 8** (4 during the build, then 5–8 as the production verification runs found false findings). Every stored audit counts as due, so the next audit
+run re-audits every business it considers, not in 30 days. Re-running a saved search does
+that but spends Places calls; `POST /api/v1/jobs/{job_run_id}/audit` on a search's latest
+resolution run does it without (API only; see `docs/operations.md` → *Upgrading*).
+
+### Fixed — findings that stated something false about a business
+
+- **Structured data** is read as JSON-LD, microdata and RDFa. A page carrying its
+  LocalBusiness as microdata is no longer told it has none. A JSON-LD block that does not
+  parse is reported as `invalid_structured_data` (medium), quoting the block, instead of
+  being silently skipped; a page with only `Organization`/`WebSite` gets
+  `no_local_business_schema`, naming the types. Blocks wrapped in an HTML comment or
+  `CDATA`, as some CMSes write them, are not called broken. The LocalBusiness type list is
+  now schema.org's whole subtree, and the stored `@type` is normalised (`Plumber`, not
+  `https://schema.org/Plumber`). Name, address, telephone, `sameAs` and opening hours are
+  extracted (`checks.local_business`).
+- **Copyright:** a future year is `future_copyright` (`© 2035`), and a range's later year
+  counts, so `© 2018-2035` is no longer reported as a stale 2018 and `© 2018-2026` is current.
+  A year is exactly four digits (`© 20015` is no year, not 2001); a range with no end year
+  in the HTML source (`© 2006 -`, the end written by a script) is an unknown year; and the
+  evidence says the year is as written in the source.
+- **Unreachable vs our own outage:** before recording a site as `unreachable` the audit
+  checks this machine's connection (`AUDIT_CONNECTIVITY_CHECK_URL`, a TCP connection with no
+  request) and asks the site once more after `AUDIT_UNREACHABLE_RECHECK_SECONDS`. If our
+  network was down — a laptop that slept mid-run — the audit is `failed`, with no finding,
+  and is retried after `AUDIT_FAILED_RETRY_HOURS`. A site that gives no answer is `unreachable` only when its
+  previous audit got no page either; the first time it is `not_readable`, with no finding
+  (a site that loaded earlier and stops answering is usually limiting us, not offline).
+
+- **Bot-protection pages:** a homepage that answers with a bot challenge (Cloudflare's
+  "Just a moment...", its block page, Imperva, DataDome, Sucuri) is the new audit status
+  `bot_challenge` ("Blocked by bot protection") with no findings and no opportunity, instead
+  of being audited as if it were the homepage. Due again after
+  `AUDIT_BOT_CHALLENGE_RETRY_DAYS` (7). Migration `0012`.
+- A listing unit that already names its designator is no longer stored as "Suite Suite 402".
+- **A homepage that answers non-2xx is never read as the page.** Without a bot-protection mark
+  it is the new status `not_readable` ("Homepage not readable"), carrying the status code and
+  the response title, with no page findings and no PageSpeed call; only the listing-website
+  findings, which come from the URLs, stand. A 5xx that is still a 5xx on the re-check is
+  `not_readable` too (it used to be `unreachable`). Migration `0013`.
+- JSON-LD is parsed leniently before `invalid_structured_data` is claimed (objects back to back,
+  trailing text), and that finding's evidence quotes the parse error, the text around it and
+  the whole block (up to 2,000 characters).
+
+### Added — data the audit collected and never judged
+
+- Title: `default_title` (a template title, or one naming nothing of the business),
+  `short_title` (< 20 characters), `long_title` (> 60).
+- `viewport_blocks_zoom`: `user-scalable=no` or `maximum-scale` below 1.5.
+- `site_builder`: Wix, Squarespace, GoDaddy, Duda or Weebly on the business's own domain,
+  recognised by a generator tag, a script the builder serves or its template classes —
+  never by a link or an asset on the builder's CDN.
+- `multiple_h1`, and `no_click_to_call` when the page has a form or email but no `tel:` link.
+- `placeholder_email` (`info@mysite.com` and other template domains) and `placeholder_text`
+  ("Your Company", "Business Name" in short footer text or on the copyright line; "Lorem
+  ipsum" anywhere).
+- Listing comparisons (`checks.listing_comparison`): `nap_phone_mismatch` (low, and it
+  names call tracking as the usual explanation), an address comparison that is stored for a
+  reviewer but never emitted as a finding (in production it was wrong both times it fired;
+  a library-based comparison is v0.12.1's),
+  `listing_website_http` and
+  `listing_website_host_mismatch` (www). Each is `match`, `mismatch` or `not_compared`
+  with the reason, and only a conflict between two known values becomes a finding.
+- `method` on every finding: `deterministic`, `api` (PageSpeed, the listing's review
+  count) or `ai`.
+- `website_audits.audit_logic_version` (migration `0011`, backfilled from `rules_version`),
+  in the audit API; `needs_audit` makes a business due at once when its newest audit was
+  written by older logic.
+- Settings `AUDIT_CONNECTIVITY_CHECK_URL`, `AUDIT_UNREACHABLE_RECHECK_SECONDS` and
+  `AUDIT_BOT_CHALLENGE_RETRY_DAYS`.
+
+### Changed
+
+- A finding carries `service` (the opportunity service it is filed under) instead of
+  `service_category`. The finding catalogue is the one finding → service mapping, and
+  `opportunities/catalogue.py` derives its lists from it. No existing finding changed
+  service, so no opportunity is re-filed.
+- A finding's message never quotes the page or a contact detail (they reach the AI step
+  unscrubbed); the title, phone numbers and email address are in its evidence.
+
+### Removed
+
+- The `ecommerce` and `favicon` checks, which collected data no rule read.
+
 ## [v0.11.2] - 2026-09-26
 
 ### Added

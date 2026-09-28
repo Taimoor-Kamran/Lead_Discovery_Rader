@@ -189,7 +189,8 @@ def test_one_audit_carries_its_checks_findings_and_pagespeed(
     assert body["checks"]["title"]["value"] == "Wellington Plumbing"
     assert body["checks"]["title"]["evidence_url"] == "https://wellington.invalid/"
     assert body["psi"]["performance_score"] == 88
-    assert body["rules_version"] == "audit-3"
+    assert body["rules_version"] == "audit-8"
+    assert body["audit_logic_version"] == 8
     assert {f["code"] for f in body["findings"]} == {
         "missing_meta_description",
         "no_structured_data",
@@ -198,7 +199,10 @@ def test_one_audit_carries_its_checks_findings_and_pagespeed(
         "no_live_chat",
         "thin_content",
         "no_section_headings",
+        "short_title",  # "Wellington Plumbing" is 19 characters
     }
+    assert all(f["method"] in ("deterministic", "api") for f in body["findings"])
+    assert all("service" in f and "service_category" not in f for f in body["findings"])
 
 
 def test_an_unknown_audit_is_a_404(client: TestClient, admin_user: User) -> None:
