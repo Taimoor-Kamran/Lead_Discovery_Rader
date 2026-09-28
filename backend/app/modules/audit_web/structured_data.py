@@ -63,11 +63,17 @@ class LocalBusinessNode:
 
 @dataclass(frozen=True)
 class BrokenBlock:
-    """A JSON-LD block that does not parse, verbatim, and the type it appears to declare."""
+    """A JSON-LD block that does not parse, verbatim, and the type it appears to declare.
+
+    `text` is the block as parsed (wrappers removed) and `position` the character the
+    parser gave up at, so the evidence can quote the fault rather than only its start.
+    """
 
     raw: str
     type_hint: str | None
     error: str
+    text: str = ""
+    position: int = 0
 
 
 @dataclass
@@ -107,14 +113,16 @@ def _read_json_ld(soup: BeautifulSoup, found: StructuredData) -> None:
         if not text:
             continue
         try:
-            parsed = json.loads(text, strict=False)
-        except (ValueError, TypeError) as exc:
+            parsed = parse_json_ld(text)
+        except json.JSONDecodeError as exc:
             hint = _TYPE_HINT.search(text)
             found.broken_blocks.append(
                 BrokenBlock(
                     raw=" ".join(text.split()),
                     type_hint=schema_type_name(hint.group(1)) if hint else None,
-                    error=str(exc),
+                    error=exc.msg + f" (line {exc.lineno}, column {exc.colno})",
+                    text=text,
+                    position=exc.pos,
                 )
             )
             continue
@@ -136,6 +144,37 @@ def _read_json_ld(soup: BeautifulSoup, found: StructuredData) -> None:
 def _is_json_ld(script: Tag) -> bool:
     kind = str(script.get("type") or "").split(";", 1)[0].strip().lower()
     return kind == "application/ld+json"
+
+
+_DECODER = json.JSONDecoder(strict=False)
+_SEPARATORS = " \t\r\n;,"
+
+
+def parse_json_ld(text: str) -> object:
+    """Parse a block the way search engines forgive it (v0.12.0, run 2).
+
+    Several JSON values back to back (`{...}{...}`, or separated by `;` or `,`) are read as
+    a list of all of them, and anything after the last value that parses is ignored.
+    Raises `json.JSONDecodeError` only when not even the first value parses — a trailing
+    comma inside an object, say, which search engines reject too.
+    """
+    values: list[object] = []
+    index = 0
+    while True:
+        while index < len(text) and text[index] in _SEPARATORS:
+            index += 1
+        if index >= len(text):
+            break
+        try:
+            value, index = _DECODER.raw_decode(text, index)
+        except json.JSONDecodeError:
+            if values:
+                break  # trailing text after at least one good value
+            raise
+        values.append(value)
+    if not values:
+        raise json.JSONDecodeError("Expecting value", text, 0)
+    return values[0] if len(values) == 1 else values
 
 
 def unwrap_json_ld(raw: str) -> str:

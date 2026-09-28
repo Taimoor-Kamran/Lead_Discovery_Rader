@@ -195,7 +195,13 @@ def audit_business(
             session, business, job_run_id, url, outcome, challenge, started, settings
         )
 
-    if not outcome.reachable or (outcome.status_code or 0) >= 500:
+    refused = checks_module.not_readable(outcome) if outcome.reachable else None
+    if refused is not None:
+        return _not_readable(
+            session, business, job_run_id, url, outcome, refused, started, settings
+        )
+
+    if not outcome.reachable:
         return _store(
             session,
             business=business,
@@ -391,6 +397,51 @@ def _challenged(
         http_status=outcome.status_code,
         checks=checks,
         findings=[],
+        html_sha256=outcome.html_sha256,
+        started_at=started,
+        settings=settings,
+        listing_findings=False,
+    )
+
+
+def _not_readable(
+    session: Session,
+    business: Business,
+    job_run_id: uuid.UUID | None,
+    url: str,
+    outcome: FetchOutcome,
+    refused: checks_module.CheckResult,
+    started: datetime,
+    settings: Settings,
+) -> WebsiteAudit:
+    """The homepage answered with a non-2xx status (v0.12.0, run 2).
+
+    A "403 Forbidden" error page was audited as the homepage in production and reported as a
+    template title, thin content and more. Now nothing in the response is read as the page:
+    no page findings, no PageSpeed call, no page text. What does stand are the findings that
+    come from the URLs alone — the listing's website against the address we were sent to.
+    """
+    checks = checks_module.fetch_checks(outcome)
+    checks["not_readable"] = refused
+    checks["listing_comparison"] = checks_module.CheckResult(
+        {"website": listing_module.compare_website(checks, _listing(business))},
+        evidence_text="Only the website address is compared: the page was not readable",
+        evidence_url=outcome.final_url or url,
+    )
+    logger.info(
+        "a homepage answered with a non-2xx status",
+        extra={"business_id": str(business.id), "status": refused.value},
+    )
+    return _store(
+        session,
+        business=business,
+        job_run_id=job_run_id,
+        url_audited=url,
+        final_url=outcome.final_url or url,
+        status=AuditStatus.not_readable,
+        http_status=outcome.status_code,
+        checks=checks,
+        findings=findings_module.for_not_readable(checks),
         html_sha256=outcome.html_sha256,
         started_at=started,
         settings=settings,
@@ -688,7 +739,8 @@ def needs_audit(session: Session, business: Business, *, now: datetime | None = 
     `unreachable` one backs off through AUDIT_UNREACHABLE_BACKOFF_DAYS, a step per
     consecutive unreachable audit, so a site that was briefly down is looked at again
     soon and one that is gone settles into the normal AUDIT_MAX_AGE_DAYS. A
-    `bot_challenge` audit waits AUDIT_BOT_CHALLENGE_RETRY_DAYS (v0.12.0). Everything else
+    `bot_challenge` or `not_readable` audit waits AUDIT_BOT_CHALLENGE_RETRY_DAYS (v0.12.0): a
+    site that refused us once rarely changes its mind within hours. Everything else
     keeps AUDIT_MAX_AGE_DAYS.
 
     Before any of that: an audit written by older check logic (`audit_logic_version` below
@@ -707,7 +759,7 @@ def needs_audit(session: Session, business: Business, *, now: datetime | None = 
         return True
     if latest.status is AuditStatus.failed:
         wait = timedelta(hours=settings.audit_failed_retry_hours)
-    elif latest.status is AuditStatus.bot_challenge:
+    elif latest.status in (AuditStatus.bot_challenge, AuditStatus.not_readable):
         wait = timedelta(days=settings.audit_bot_challenge_retry_days)
     elif latest.status is AuditStatus.unreachable:
         streak = next(

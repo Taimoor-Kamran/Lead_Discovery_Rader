@@ -41,6 +41,7 @@ const AUDIT_TONE: Record<string, "neutral" | "ok" | "warn" | "risk"> = {
   skipped: "neutral",
   robots_blocked: "warn",
   bot_challenge: "warn",
+  not_readable: "warn",
   unreachable: "risk",
   failed: "risk",
 };

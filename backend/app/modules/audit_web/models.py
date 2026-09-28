@@ -46,7 +46,11 @@ from app.core.models import created_at_column, uuid_pk
 # generator tag, script host or classes; `nap_phone_mismatch` is low and names call tracking.
 # audit-6 (v0.12.0, after run 1): a unit is compared by its number only, and the address
 # comparison is stored but no longer emitted as `nap_address_mismatch`.
-AUDIT_LOGIC_VERSION = 6
+# audit-7 (v0.12.0, after run 2): any non-2xx homepage answer is never read as the page —
+# `not_readable` (or `bot_challenge` with a vendor mark), with no page findings and no
+# PageSpeed; JSON-LD is parsed leniently (concatenated objects, trailing text) before a block
+# is called broken, and that finding keeps enough evidence to verify.
+AUDIT_LOGIC_VERSION = 7
 RULES_VERSION = f"audit-{AUDIT_LOGIC_VERSION}"
 
 
@@ -61,6 +65,10 @@ class AuditStatus(enum.StrEnum):
     # reported: not `done`, which would audit the challenge page, and not `unreachable`,
     # which would say the site is down.
     bot_challenge = "bot_challenge"
+    # The homepage answered, but not with a page: any non-2xx status (a plain 403, a 404, a
+    # 5xx that stayed a 5xx on the re-check) without a bot-protection mark (v0.12.0). The
+    # response is never read as the homepage; the status code and title are the evidence.
+    not_readable = "not_readable"
     # Something in our own code or infrastructure went wrong for this one business.
     failed = "failed"
 

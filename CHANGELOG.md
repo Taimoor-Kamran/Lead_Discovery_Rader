@@ -5,7 +5,7 @@ Format: `## [vX.Y.Z] - YYYY-MM-DD` followed by Added / Changed / Fixed.
 
 ## [v0.12.0] - 2026-09-26
 
-**Bumps the audit logic version to 6** (4 during the build; 5 after the production canary; 6 after the first full production run). Every stored audit counts as due, so the next audit
+**Bumps the audit logic version to 7** (4 during the build, then 5, 6 and 7 as the production verification runs found false findings). Every stored audit counts as due, so the next audit
 run re-audits every business it considers, not in 30 days. Re-running a saved search does
 that but spends Places calls; `POST /api/v1/jobs/{job_run_id}/audit` on a search's latest
 resolution run does it without (API only; see `docs/operations.md` → *Upgrading*).
@@ -35,6 +35,14 @@ resolution run does it without (API only; see `docs/operations.md` → *Upgradin
   of being audited as if it were the homepage. Due again after
   `AUDIT_BOT_CHALLENGE_RETRY_DAYS` (7). Migration `0012`.
 - A listing unit that already names its designator is no longer stored as "Suite Suite 402".
+- **A homepage that answers non-2xx is never read as the page.** Without a bot-protection mark
+  it is the new status `not_readable` ("Homepage not readable"), carrying the status code and
+  the response title, with no page findings and no PageSpeed call; only the listing-website
+  findings, which come from the URLs, stand. A 5xx that is still a 5xx on the re-check is
+  `not_readable` too (it used to be `unreachable`). Migration `0013`.
+- JSON-LD is parsed leniently before `invalid_structured_data` is claimed (objects back to back,
+  trailing text), and that finding's evidence quotes the parse error, the text around it and
+  the whole block (up to 2,000 characters).
 
 ### Added — data the audit collected and never judged
 

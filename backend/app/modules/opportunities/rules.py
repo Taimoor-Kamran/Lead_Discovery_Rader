@@ -27,6 +27,8 @@ ADS_SOCIAL_REASON = "Audit found no social profile links on the homepage."
 # so nothing about its content is known.
 # `few_reviews` is read from the listing, not the site, so it stands however the site did.
 UNREACHABLE_FINDINGS = frozenset({"unreachable", "tls_invalid", "few_reviews"})
+# A homepage that answered non-2xx (v0.12.0): only what the URLs show, never the page.
+NOT_READABLE_FINDINGS = frozenset({"listing_website_http", "listing_website_host_mismatch"})
 
 
 @dataclass(frozen=True)
@@ -65,6 +67,8 @@ def rule_opportunities(business: Business, audit: WebsiteAudit) -> list[RuleOppo
     findings = [item for item in (audit.findings or []) if item.get("code")]
     if audit.status is AuditStatus.unreachable:
         findings = [item for item in findings if item["code"] in UNREACHABLE_FINDINGS]
+    elif audit.status is AuditStatus.not_readable:
+        findings = [item for item in findings if item["code"] in NOT_READABLE_FINDINGS]
 
     grouped: dict[str, list[dict[str, Any]]] = {}
     for item in findings:

@@ -118,6 +118,7 @@ export const AUDIT_STATUS_LABELS: Record<string, string> = {
   skipped: "Skipped",
   robots_blocked: "Blocked by robots.txt",
   bot_challenge: "Blocked by bot protection",
+  not_readable: "Homepage not readable",
   unreachable: "Unreachable",
   failed: "Failed",
 };

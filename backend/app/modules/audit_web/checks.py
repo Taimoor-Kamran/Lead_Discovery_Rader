@@ -100,11 +100,14 @@ class CheckResult:
     value: Any
     evidence_text: str | None = None
     evidence_url: str | None = None
+    # How much evidence is kept. 300 characters for almost everything; more only where a
+    # person could not otherwise verify the claim (a broken JSON-LD block, v0.12.0).
+    evidence_max: int = 300
 
     def as_dict(self) -> dict[str, Any]:
         return {
             "value": self.value,
-            "evidence_text": clip(self.evidence_text),
+            "evidence_text": clip(self.evidence_text, self.evidence_max),
             "evidence_url": self.evidence_url,
         }
 
@@ -117,14 +120,14 @@ def find_tags(node: BeautifulSoup | Tag, *args: Any, **kwargs: Any) -> list[Tag]
     return [tag for tag in node.find_all(*args, **kwargs) if isinstance(tag, Tag)]
 
 
-def clip(text: str | None) -> str | None:
+def clip(text: str | None, limit: int = EVIDENCE_MAX_CHARS) -> str | None:
     """Collapse whitespace and cut evidence to its limit. Verbatim otherwise."""
     if text is None:
         return None
     collapsed = " ".join(text.split())
     if not collapsed:
         return None
-    return collapsed[:EVIDENCE_MAX_CHARS]
+    return collapsed[:limit]
 
 
 def as_payload(checks: Checks) -> dict[str, Any]:
@@ -253,6 +256,27 @@ def bot_challenge(outcome: FetchOutcome) -> CheckResult | None:
     return CheckResult(
         vendor,
         evidence_text=f"HTTP {outcome.status_code} with a {vendor} bot-protection page: {shown}",
+        evidence_url=url,
+    )
+
+
+def not_readable(outcome: FetchOutcome) -> CheckResult | None:
+    """A non-2xx answer, which is never read as the homepage (v0.12.0, run 2), or `None`.
+
+    Only the status code and the response's `<title>` are read — as evidence of what came
+    back, never as facts about the business's page.
+    """
+    status = outcome.status_code
+    if status is None or 200 <= status < 300:
+        return None
+    url = outcome.final_url or outcome.url
+    title = None
+    if outcome.text:
+        tag = BeautifulSoup(outcome.text, "lxml").title
+        title = str(tag) if tag is not None else None
+    return CheckResult(
+        status,
+        evidence_text=f"HTTP {status} from {url}: {title or 'no <title>'}",
         evidence_url=url,
     )
 
@@ -612,9 +636,12 @@ def _structured_data(soup: BeautifulSoup, url: str) -> Checks:
                 "error": broken.error if broken is not None else None,
             },
             evidence_text=(
-                broken.raw if broken is not None else "Every JSON-LD block on the homepage parses"
+                _broken_evidence(broken)
+                if broken is not None
+                else "Every JSON-LD block on the homepage parses"
             ),
             evidence_url=url,
+            evidence_max=BROKEN_BLOCK_EVIDENCE_CHARS,
         ),
         "local_business": CheckResult(
             (
@@ -631,6 +658,24 @@ def _structured_data(soup: BeautifulSoup, url: str) -> Checks:
             evidence_url=url,
         ),
     }
+
+
+# Enough of a broken JSON-LD block for a person to find the fault themselves: the parser's
+# message, the text around the point it gave up, then the block itself (v0.12.0, run 2).
+BROKEN_BLOCK_EVIDENCE_CHARS = 2000
+BROKEN_BLOCK_CONTEXT_CHARS = 160
+
+
+def _broken_evidence(broken: structured_data.BrokenBlock) -> str:
+    start = max(broken.position - BROKEN_BLOCK_CONTEXT_CHARS, 0)
+    end = broken.position + BROKEN_BLOCK_CONTEXT_CHARS
+    around = broken.text[start:end]
+    marker = broken.position - start
+    near = f"{around[:marker]} <<HERE>> {around[marker:]}"
+    return (
+        f"JSON-LD does not parse: {broken.error}. Near the error: {near} "
+        f"|| Whole block: {broken.raw}"
+    )
 
 
 def _tech_stack(soup: BeautifulSoup, lowered: str, url: str) -> CheckResult:

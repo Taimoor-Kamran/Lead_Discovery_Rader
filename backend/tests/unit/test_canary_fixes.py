@@ -207,3 +207,57 @@ def test_a_phone_difference_is_low_and_names_call_tracking() -> None:
     assert spec.severity is Severity.low
     assert "call-tracking" in spec.wording
     assert "wrong" not in spec.wording and "incorrect" not in spec.wording
+
+
+# --- run 2: a 403 error page, and JSON-LD that search engines forgive -------------------
+
+
+def test_a_plain_403_error_page_is_not_readable_with_its_code_and_title() -> None:
+    """Public Service Plumbers and Total Plumbing Service: "Error 403 Forbidden", 2 words."""
+    detect = getattr(checks_module, "not_readable")  # noqa: B009
+    result: CheckResult | None = detect(outcome("canary_error_403_forbidden.html", 403))
+
+    assert result is not None
+    assert result.value == 403
+    assert "HTTP 403" in (result.evidence_text or "")
+    assert "<title>Error 403 Forbidden</title>" in (result.evidence_text or "")
+
+
+def test_a_2xx_answer_is_readable() -> None:
+    detect = getattr(checks_module, "not_readable")  # noqa: B009
+
+    assert detect(outcome("canary_proven_plumbing.html", 200)) is None
+
+
+def test_json_objects_back_to_back_are_read_as_search_engines_read_them() -> None:
+    """Baker Brothers: "Extra data: line 103 column 3" was two objects in one script tag."""
+    checks = checks_for(page("canary_baker_brothers_concatenated.html"), listing=PROVEN)
+
+    assert checks_module.value_of(checks, "structured_data_errors")["count"] == 0
+    assert checks_module.value_of(checks, "structured_data") == "HomeAndConstructionBusiness"
+    assert "WebSite" in checks_module.value_of(checks, "structured_data_types")
+    assert "WebPage" in checks_module.value_of(checks, "structured_data_types")
+    assert "invalid_structured_data" not in found("canary_baker_brothers_concatenated.html", PROVEN)
+
+
+def test_a_block_whose_first_value_is_broken_is_still_invalid() -> None:
+    """A trailing comma inside the object: search engines reject it, and so do we."""
+    assert "invalid_structured_data" in found("sd_invalid_json_ld.html", PROVEN)
+
+
+def test_broken_markup_evidence_quotes_the_fault_in_full() -> None:
+    """300 characters could not settle Baker Brothers; the evidence now points at the fault."""
+    padding = ", ".join(f'"field{i}": "{"x" * 20}"' for i in range(20))
+    html = (
+        '<script type="application/ld+json">{"@type": "Plumber", '
+        + padding
+        + ', "name": "Late Error",}</script>'
+    )
+    produced = for_page(checks_for(html, listing=PROVEN), None, context(PROVEN))
+    [finding] = [f for f in produced if f.code == "invalid_structured_data"]
+    stored = finding.as_dict()["evidence_text"] or ""
+
+    assert len(stored) > 300
+    assert "<<HERE>>" in stored
+    assert '"name": "Late Error",' in stored.split("<<HERE>>")[0][-60:]
+    assert "Whole block:" in stored

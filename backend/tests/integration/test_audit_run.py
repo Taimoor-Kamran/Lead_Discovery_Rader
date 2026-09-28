@@ -112,6 +112,7 @@ def test_a_run_audits_the_businesses_its_resolution_run_touched(
         "skipped": 0,
         "robots_blocked": 0,
         "bot_challenge": 0,
+        "not_readable": 0,
         "unreachable": 0,
         "failed": 0,
         "psi_calls": 2,
@@ -187,7 +188,7 @@ def test_a_robots_disallowed_site_is_never_asked_for_its_homepage(
     assert audit.page_text is None
 
 
-def test_a_site_that_answers_500_is_recorded_as_unreachable(
+def test_a_site_that_keeps_answering_503_is_not_readable(
     db: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     business = make_business(db, name="Server Error Plumbing")
@@ -209,9 +210,11 @@ def test_a_site_that_answers_500_is_recorded_as_unreachable(
 
     audit = service.latest_audit(db, business.id)
     assert audit is not None
-    assert audit.status is AuditStatus.unreachable
+    # Since v0.12.0 any non-2xx answer is `not_readable`: the site answered, with an error
+    # page that says nothing about the business, so no finding is made from it.
+    assert audit.status is AuditStatus.not_readable
     assert audit.http_status == 503
-    assert audit.finding_codes == ["unreachable"]
+    assert audit.finding_codes == []
 
 
 def test_a_business_audited_recently_is_not_audited_again(

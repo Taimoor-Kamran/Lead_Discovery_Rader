@@ -97,6 +97,7 @@ class Finding:
     message: str
     evidence_text: str | None
     evidence_url: str | None
+    evidence_max: int = 300
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -105,7 +106,7 @@ class Finding:
             "service": self.service.value if self.service is not None else None,
             "method": self.method.value,
             "message": self.message,
-            "evidence_text": clip(self.evidence_text),
+            "evidence_text": clip(self.evidence_text, self.evidence_max),
             "evidence_url": self.evidence_url,
         }
 
@@ -391,6 +392,7 @@ def build(
     evidence_text: str | None = None,
     evidence_url: str | None = None,
     severity: Severity | None = None,
+    evidence_max: int = 300,
     **wording: object,
 ) -> Finding:
     """Instantiate one catalogue entry. An unknown code is a programming error.
@@ -407,6 +409,7 @@ def build(
         message=spec.wording.format(**wording),
         evidence_text=evidence_text,
         evidence_url=evidence_url,
+        evidence_max=evidence_max,
     )
 
 
@@ -498,6 +501,11 @@ def for_unreachable(checks: Checks, url: str, *, note: str | None = None) -> lis
     if note:
         evidence = f"{evidence}; {note}" if evidence else note
     return [build("unreachable", url=url, evidence_text=evidence, evidence_url=url)]
+
+
+def for_not_readable(checks: Checks) -> list[Finding]:
+    """A non-2xx homepage: only the findings that come from the URLs, never from the page."""
+    return _listing_findings(checks)
 
 
 def for_page(
@@ -904,6 +912,7 @@ def _from_check(checks: Checks, check_key: str, code: str, **wording: Any) -> Fi
     check = checks.get(check_key)
     return build(
         code,
+        evidence_max=check.evidence_max if check is not None else 300,
         evidence_text=check.evidence_text if check is not None else None,
         evidence_url=(check.evidence_url if check is not None else None)
         or value_of(checks, "final_url"),

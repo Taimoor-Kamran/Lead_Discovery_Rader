@@ -40,7 +40,7 @@ const REPORT = {
   duplicates: { auto_merged: 2, sent_to_review: 1, merged_by_review: 0, kept_apart: 1, pending_review: 0 },
   crm: { destination: "fake", scheduled: 1, held: 2, synced_today: 0 },
   freshness: [{ source: "google_places", enabled: true, records: 20, last_discovered_at: "2026-09-20T08:00:00Z" }],
-  audits: { done: 15, robots_blocked: 1, bot_challenge: 0, unreachable: 2, failed: 0, skipped: 1, total: 19 },
+  audits: { done: 15, robots_blocked: 1, bot_challenge: 0, not_readable: 0, unreachable: 2, failed: 0, skipped: 1, total: 19 },
   backups: { directory: "/app/backups", backups_kept: 3, keep: 14, last_backup_file: "radar-20260920-020000.dump", last_backup_at: "2026-09-20T02:00:00Z", last_backup_size_bytes: 1024, last_verify_at: "2026-09-20T04:00:00Z", last_verify_ok: true, last_verify_file: "radar-20260920-020000.dump", last_verify_error: null },
   thresholds: { job_success_rate_min: 0.8, source_error_rate_max: 0.2, ai_budget_ratio: 0.8, backup_max_age_hours: 36, queue_length_max: 500, watchdog_stale_minutes: 30 },
   alerts: [ALERT],

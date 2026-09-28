@@ -380,3 +380,39 @@ def _enums_values(engine: Engine, name: str) -> set[str]:
                 {"name": name},
             )
         }
+
+
+def test_the_not_readable_status_comes_off_as_failed(database_url: str) -> None:
+    url = _fresh_database(database_url)
+    config = alembic_config(url)
+    command.upgrade(config, "head")
+    engine = create_engine(url)
+    with engine.begin() as connection:
+        business_id = uuid.uuid4()
+        connection.execute(
+            text(
+                "INSERT INTO businesses (id, display_name, website_kind, business_status) "
+                "VALUES (:id, 'Forbidden Plumbing', 'own_site', 'operational')"
+            ),
+            {"id": business_id},
+        )
+        connection.execute(
+            text(
+                "INSERT INTO website_audits (id, business_id, url_audited, status, checks, "
+                "tech_stack, findings, rules_version, audit_logic_version) VALUES (:id, "
+                ":business, 'https://x.invalid/', 'not_readable', '{}', '{}', '[]', 'audit-7', 7)"
+            ),
+            {"id": uuid.uuid4(), "business": business_id},
+        )
+    engine.dispose()
+
+    command.downgrade(config, "0012_bot_challenge_status")
+    engine = create_engine(url)
+    with engine.connect() as connection:
+        statuses = [row[0] for row in connection.execute(text("SELECT status FROM website_audits"))]
+    assert "not_readable" not in _enums_values(engine, "website_audit_status")
+    assert "bot_challenge" in _enums_values(engine, "website_audit_status")
+    engine.dispose()
+    assert statuses == ["failed"]
+
+    command.upgrade(config, "head")

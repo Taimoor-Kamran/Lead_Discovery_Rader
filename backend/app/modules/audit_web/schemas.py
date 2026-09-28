@@ -61,6 +61,7 @@ class AuditResultSummary(BaseModel):
     skipped: int = 0
     robots_blocked: int = 0
     bot_challenge: int = 0
+    not_readable: int = 0
     unreachable: int = 0
     failed: int = 0
     psi_calls: int = 0

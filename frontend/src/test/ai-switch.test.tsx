@@ -186,7 +186,7 @@ const HEALTH = {
   },
   crm: { destination: "csv", scheduled: 0, held: 0, synced_today: 0 },
   freshness: [],
-  audits: { done: 0, robots_blocked: 0, bot_challenge: 0, unreachable: 0, failed: 0, skipped: 0, total: 0 },
+  audits: { done: 0, robots_blocked: 0, bot_challenge: 0, not_readable: 0, unreachable: 0, failed: 0, skipped: 0, total: 0 },
   backups: {
     directory: "/app/backups",
     backups_kept: 0,

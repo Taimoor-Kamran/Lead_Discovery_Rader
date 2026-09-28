@@ -1429,6 +1429,8 @@ export interface components {
             done: number;
             /** Failed */
             failed: number;
+            /** Not Readable */
+            not_readable: number;
             /** Robots Blocked */
             robots_blocked: number;
             /** Skipped */
@@ -1442,7 +1444,7 @@ export interface components {
          * AuditStatus
          * @enum {string}
          */
-        AuditStatus: "done" | "skipped" | "robots_blocked" | "unreachable" | "bot_challenge" | "failed";
+        AuditStatus: "done" | "skipped" | "robots_blocked" | "unreachable" | "bot_challenge" | "not_readable" | "failed";
         /** BackupStatus */
         BackupStatus: {
             /** Backups Kept */

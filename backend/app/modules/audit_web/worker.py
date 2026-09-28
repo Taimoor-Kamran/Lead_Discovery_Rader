@@ -141,6 +141,8 @@ def _count(summary: AuditResultSummary, audit: WebsiteAudit) -> None:
         summary.robots_blocked += 1
     elif audit.status is AuditStatus.bot_challenge:
         summary.bot_challenge += 1
+    elif audit.status is AuditStatus.not_readable:
+        summary.not_readable += 1
     elif audit.status is AuditStatus.unreachable:
         summary.unreachable += 1
     else:
