@@ -281,40 +281,44 @@ def test_one_matching_number_among_several_is_agreement() -> None:
     assert value_of(checks_for(html), "listing_comparison")["phone"]["status"] == "match"
 
 
-def test_address_agreeing_with_the_listing_produces_no_finding() -> None:
-    """ "Ave" and "Avenue", "Suite #11" and "Suite 11" are the same address."""
-    assert "nap_address_mismatch" not in found(NAP_PAGE)
-
-
-def test_a_different_suite_is_a_nap_finding() -> None:
-    """ATX Electrical's case: the site says Suite #11, the listing says Ste 303."""
-    listing = replace(LISTING, address_line2="Ste 303")
+def address_status(listing: Listing = LISTING) -> str:
     html = (PAGES / NAP_PAGE).read_text(encoding="utf-8")
-    produced = for_page(checks_for(html, listing=listing), None, context(listing))
-    [finding] = [f for f in produced if f.code == "nap_address_mismatch"]
-
-    assert "unit" in finding.message
-    assert "Suite #11" in (finding.evidence_text or "")
-    assert "Ste 303" in (finding.evidence_text or "")
+    return str(
+        value_of(checks_for(html, listing=listing), "listing_comparison")["address"]["status"]
+    )
 
 
-def test_a_different_zip_is_a_nap_finding() -> None:
-    listing = replace(LISTING, postal_code="78702")
+def test_the_address_comparison_is_data_and_never_a_finding() -> None:
+    """Retired as a finding in v0.12.0 after two false accusations in production; the
+    comparison stays in `listing_comparison` for a reviewer, and no listing makes a claim."""
+    for listing in (
+        LISTING,
+        replace(LISTING, address_line2="Ste 303"),
+        replace(LISTING, postal_code="78702"),
+    ):
+        assert "nap_address_mismatch" not in found(NAP_PAGE, listing=listing)
 
-    assert "nap_address_mismatch" in found(NAP_PAGE, listing=listing)
+
+def test_address_agreeing_with_the_listing_is_recorded_as_a_match() -> None:
+    """ "Ave" and "Avenue", "Suite #11" and "Suite 11" are the same address."""
+    assert address_status() == "match"
+
+
+def test_a_different_suite_is_recorded_as_a_mismatch_for_a_reviewer() -> None:
+    assert address_status(replace(LISTING, address_line2="Ste 303")) == "mismatch"
+
+
+def test_a_different_zip_is_recorded_as_a_mismatch_for_a_reviewer() -> None:
+    assert address_status(replace(LISTING, postal_code="78702")) == "mismatch"
 
 
 def test_a_street_name_spelled_differently_is_not_a_mismatch() -> None:
     """Street names are never compared: "N Congress Ave" and "Congress Avenue" may be one."""
-    listing = replace(LISTING, address_line1="1234 N Congress Avenue")
-
-    assert "nap_address_mismatch" not in found(NAP_PAGE, listing=listing)
+    assert address_status(replace(LISTING, address_line1="1234 N Congress Avenue")) == "match"
 
 
 def test_a_unit_on_one_side_only_is_not_a_mismatch() -> None:
-    listing = replace(LISTING, address_line2=None)
-
-    assert "nap_address_mismatch" not in found(NAP_PAGE, listing=listing)
+    assert address_status(replace(LISTING, address_line2=None)) == "match"
 
 
 def test_a_site_describing_several_locations_is_not_compared() -> None:

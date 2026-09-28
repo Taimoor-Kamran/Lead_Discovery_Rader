@@ -11,6 +11,10 @@ On 2026-09-28 the first real re-audit (Plumbing in Austin, 18 businesses) produc
 * 1st Home & Commercial — `site_builder` Squarespace, evidenced only by an og:image URL on
   Squarespace's CDN.
 
+Run 1 of the full re-audit then found a second false address claim — DC Electric, "Suite 204
+AB" against "Suite 204AB" — after which `nap_address_mismatch` stopped being a finding at all;
+the comparison is kept as data.
+
 Each fixture below reproduces the real strings, and each test fails on the code the canary
 ran. Where a fix narrows a rule, a matched test proves the rule still fires on the real thing.
 """
@@ -108,14 +112,45 @@ def found(name: str, listing: Listing) -> list[str]:
     return codes(for_page(checks_for(page(name), listing=listing), None, context(listing)))
 
 
-def test_the_same_suite_written_twice_over_is_not_a_nap_finding() -> None:
-    assert "nap_address_mismatch" not in found("canary_proven_plumbing.html", PROVEN)
+def address_status(name: str, listing: Listing) -> str:
+    comparison = checks_module.value_of(
+        checks_for(page(name), listing=listing), "listing_comparison"
+    )
+    return str(comparison["address"]["status"])
 
 
-def test_a_really_different_suite_is_still_a_nap_finding() -> None:
+def test_the_same_suite_written_twice_over_is_a_match() -> None:
+    assert address_status("canary_proven_plumbing.html", PROVEN) == "match"
+
+
+def test_a_really_different_suite_is_still_recorded_as_a_mismatch() -> None:
     listing = replace(PROVEN, address_line2="Suite Suite 403")
 
-    assert "nap_address_mismatch" in found("canary_proven_plumbing.html", listing)
+    assert address_status("canary_proven_plumbing.html", listing) == "mismatch"
+
+
+# DC Electric, production run 1: the site writes "Suite 204 AB", the listing "Suite 204AB".
+DC_ELECTRIC = replace(
+    PROVEN,
+    name="DC Electric",
+    address_line1="3906 North Lamar Boulevard",
+    address_line2="Suite 204AB",
+    city="Austin",
+    postal_code="78756",
+)
+
+
+def test_a_unit_letter_written_apart_is_the_same_suite() -> None:
+    assert address_status("canary_dc_electric.html", DC_ELECTRIC) == "match"
+
+
+def test_no_address_comparison_ever_becomes_a_finding() -> None:
+    """Retired as a finding after run 1: two claims in 36 businesses, both false."""
+    different = replace(DC_ELECTRIC, address_line2="Suite 310", postal_code="78701")
+
+    assert address_status("canary_dc_electric.html", different) == "mismatch"
+    for listing in (DC_ELECTRIC, different):
+        assert "nap_address_mismatch" not in found("canary_dc_electric.html", listing)
 
 
 def test_a_places_unit_that_names_its_designator_is_not_prefixed_again() -> None:

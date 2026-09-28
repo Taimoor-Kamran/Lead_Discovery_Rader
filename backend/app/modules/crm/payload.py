@@ -68,6 +68,7 @@ FINDING_LABELS: dict[str, str] = {
     "no_local_business_schema": "Structured data, but not LocalBusiness",
     "invalid_structured_data": "Broken structured data",
     "nap_phone_mismatch": "Site phone differs from listing",
+    # Retired in v0.12.0 (no longer emitted); kept so audits stored before then still read.
     "nap_address_mismatch": "Site address differs from listing",
     "listing_website_http": "Listing links to the http:// site",
     "listing_website_host_mismatch": "Listing website differs (www)",

@@ -245,8 +245,11 @@ def _unit(text: str) -> str | None:
     match = _UNIT.search(text)
     if match is None:
         return None
-    # "Suite 011" and "Suite 11" are one unit; "11B" and "11b" too.
-    return match.group(1).lower().lstrip("0") or "0"
+    # Only the unit's number is compared (v0.12.0, run 1): "Suite 204 AB" on a site and
+    # "Suite 204AB" on the listing are one suite, and a letter suffix is spelled too many ways
+    # to compare. "Suite 011" and "Suite 11" are one unit too.
+    digits = re.search(r"\d+", match.group(1))
+    return (digits.group(0).lstrip("0") or "0") if digits else None
 
 
 # --- website --------------------------------------------------------------------------

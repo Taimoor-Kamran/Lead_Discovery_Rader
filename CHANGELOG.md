@@ -5,7 +5,7 @@ Format: `## [vX.Y.Z] - YYYY-MM-DD` followed by Added / Changed / Fixed.
 
 ## [v0.12.0] - 2026-09-26
 
-**Bumps the audit logic version to 5** (4 during the build; 5 after the production canary). Every stored audit counts as due, so the next audit
+**Bumps the audit logic version to 6** (4 during the build; 5 after the production canary; 6 after the first full production run). Every stored audit counts as due, so the next audit
 run re-audits every business it considers, not in 30 days. Re-running a saved search does
 that but spends Places calls; `POST /api/v1/jobs/{job_run_id}/audit` on a search's latest
 resolution run does it without (API only; see `docs/operations.md` → *Upgrading*).
@@ -49,8 +49,10 @@ resolution run does it without (API only; see `docs/operations.md` → *Upgradin
   ("Your Company", "Business Name" in short footer text or on the copyright line; "Lorem
   ipsum" anywhere).
 - Listing comparisons (`checks.listing_comparison`): `nap_phone_mismatch` (low, and it
-  names call tracking as the usual explanation),
-  `nap_address_mismatch` (street number, unit and ZIP), `listing_website_http` and
+  names call tracking as the usual explanation), an address comparison that is stored for a
+  reviewer but never emitted as a finding (in production it was wrong both times it fired;
+  a library-based comparison is v0.12.1's),
+  `listing_website_http` and
   `listing_website_host_mismatch` (www). Each is `match`, `mismatch` or `not_compared`
   with the reason, and only a conflict between two known values becomes a finding.
 - `method` on every finding: `deterministic`, `api` (PageSpeed, the listing's review

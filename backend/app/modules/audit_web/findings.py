@@ -246,13 +246,6 @@ CATALOGUE: dict[str, FindingSpec] = {
             "call-tracking line is the usual explanation and is worth confirming.",
         ),
         FindingSpec(
-            "nap_address_mismatch",
-            Severity.medium,
-            _SEO,
-            "Audit found the address in the homepage's structured data differs from the "
-            "listing's address in its {parts}.",
-        ),
-        FindingSpec(
             "listing_website_http",
             Severity.low,
             _SEO,
@@ -764,19 +757,11 @@ def _listing_findings(checks: Checks) -> list[Finding]:
             )
         )
 
-    address = comparison.get("address") or {}
-    if address.get("status") == MISMATCH:
-        parts = list(address.get("differs_in") or [])
-        findings.append(
-            build(
-                "nap_address_mismatch",
-                parts=_and_list(parts),
-                evidence_text=(
-                    f"Homepage structured data: {address['site']}; listing: {address['listing']}"
-                ),
-                evidence_url=url,
-            )
-        )
+    # The address comparison is stored in `listing_comparison` for a reviewer to read, but
+    # never becomes a finding (v0.12.0, run 1). In production it fired twice in 36
+    # businesses and was wrong both times ("Suite Suite 402", "Suite 204 AB"): a hand-written
+    # parser is the wrong tool for US address formats. A comparison built on a real address
+    # normalisation library is v0.12.1's; until then the audit makes no address claim.
 
     website = comparison.get("website") or {}
     if website.get("status") == MISMATCH:
@@ -802,12 +787,6 @@ def _listing_findings(checks: Checks) -> list[Finding]:
                 )
             )
     return findings
-
-
-def _and_list(items: list[str]) -> str:
-    if len(items) <= 1:
-        return "".join(items)
-    return ", ".join(items[:-1]) + " and " + items[-1]
 
 
 QUALITY_SCORES = (

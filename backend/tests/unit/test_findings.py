@@ -137,7 +137,6 @@ def test_the_catalogue_covers_every_code_the_spec_names() -> None:
         "placeholder_email",
         "placeholder_text",
         "nap_phone_mismatch",
-        "nap_address_mismatch",
         "listing_website_http",
         "listing_website_host_mismatch",
         "no_click_to_call",

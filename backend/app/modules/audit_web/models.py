@@ -44,7 +44,9 @@ from app.core.models import created_at_column, uuid_pk
 # (`bot_challenge`) with no findings; a unit is read only when it has a digit; footer
 # placeholders only in short footer text and the copyright line; a builder only from its
 # generator tag, script host or classes; `nap_phone_mismatch` is low and names call tracking.
-AUDIT_LOGIC_VERSION = 5
+# audit-6 (v0.12.0, after run 1): a unit is compared by its number only, and the address
+# comparison is stored but no longer emitted as `nap_address_mismatch`.
+AUDIT_LOGIC_VERSION = 6
 RULES_VERSION = f"audit-{AUDIT_LOGIC_VERSION}"
 
 
