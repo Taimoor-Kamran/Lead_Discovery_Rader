@@ -12,11 +12,11 @@ from typing import Any
 import dns.exception
 import dns.flags
 import dns.message
+import dns.query
 import dns.rcode
 import dns.rrset
 import pytest
 
-from app.core import dns as dns_module
 from app.core.dns import DnsAnswer, FixtureResolver, LiveResolver, Outcome, Rcode, outcome
 from app.modules.domain_intel import dns_lookup
 from app.modules.domain_intel.selection import DomainTarget
@@ -61,7 +61,13 @@ def test_every_failure_is_unknown(rcode: Rcode) -> None:
 # --- the live resolver, with its transport replaced --------------------------------------
 
 
-def _response(request: dns.message.Message, rcode: int, *rdata: str) -> dns.message.Message:
+def _timeout() -> Exception:
+    return dns.exception.Timeout()  # type: ignore[no-untyped-call]
+
+
+def _response(
+    request: dns.message.Message, rcode: dns.rcode.Rcode, *rdata: str
+) -> dns.message.Message:
     response = dns.message.make_response(request)
     response.set_rcode(rcode)
     question = request.question[0]
@@ -91,9 +97,9 @@ class _Transport:
 def transport(monkeypatch: pytest.MonkeyPatch) -> Any:
     def install(*script: Any, tcp: Any = None) -> _Transport:
         udp = _Transport(*script)
-        monkeypatch.setattr(dns_module.dns.query, "udp", udp)
+        monkeypatch.setattr(dns.query, "udp", udp)
         if tcp is not None:
-            monkeypatch.setattr(dns_module.dns.query, "tcp", tcp)
+            monkeypatch.setattr(dns.query, "tcp", tcp)
         return udp
 
     return install
@@ -124,7 +130,7 @@ def test_live_txt_strings_are_joined(transport: Any) -> None:
     ],
 )
 def test_live_failure_codes_are_kept_as_they_came(
-    transport: Any, code: int, expected: Rcode
+    transport: Any, code: dns.rcode.Rcode, expected: Rcode
 ) -> None:
     transport(lambda req: _response(req, code))
     answer = LiveResolver(timeout=5, nameservers=["192.0.2.53"]).query("acme.com", "A")
@@ -133,9 +139,7 @@ def test_live_failure_codes_are_kept_as_they_came(
 
 
 def test_a_timeout_is_retried_once_then_answers(transport: Any) -> None:
-    udp = transport(
-        dns.exception.Timeout(), lambda req: _response(req, dns.rcode.NOERROR, "192.0.2.1")
-    )
+    udp = transport(_timeout(), lambda req: _response(req, dns.rcode.NOERROR, "192.0.2.1"))
     answer = LiveResolver(timeout=5, nameservers=["192.0.2.53"]).query("acme.com", "A")
     assert answer.rcode is Rcode.noerror
     assert len(udp.calls) == 2
@@ -153,7 +157,7 @@ def test_servfail_twice_is_servfail_after_a_single_retry(transport: Any) -> None
 
 def test_the_retry_shares_the_one_time_budget(transport: Any) -> None:
     ticks = iter([0.0, 0.0, 3.5, 99.0])
-    udp = transport(dns.exception.Timeout(), dns.exception.Timeout())
+    udp = transport(_timeout(), _timeout())
     resolver = LiveResolver(timeout=5, nameservers=["192.0.2.53"], clock=lambda: next(ticks))
     answer = resolver.query("acme.com", "A")
     assert answer.rcode is Rcode.timeout
