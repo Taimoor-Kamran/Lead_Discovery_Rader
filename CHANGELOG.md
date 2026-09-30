@@ -3,6 +3,61 @@
 All notable changes, one section per merged spec. Newest first.
 Format: `## [vX.Y.Z] - YYYY-MM-DD` followed by Added / Changed / Fixed.
 
+## [v0.12.1] - unreleased
+
+**`AUDIT_LOGIC_VERSION` stays at 8.** The booking change is reached by a targeted re-audit
+of the 56 businesses whose booking matched by call-to-action text or path
+(`POST /api/v1/businesses/{id}/audit`, which re-classifies). Bumping the version would
+re-audit all 147 and spend 147 PageSpeed calls against the 200/day cap. Every other stored
+audit already reached its booking conclusion from a widget or no match at all, and this
+spec does not change those conclusions.
+
+**Migration `0014_opportunity_withdrawal`.** Adds `opportunities.withdrawn_at` and
+`withdrawn_reason`, and narrows the one-pending-row index to rows that are not withdrawn.
+The paused v0.13.0 branch's `0014_domain_intel` becomes `0015` when it resumes.
+
+### Fixed — findings that were stale or wrong
+
+- **Withdrawn opportunities.** When the latest audit stops supporting a pending
+  opportunity, the opportunity is withdrawn: its service is no longer produced, or none of
+  the findings it cites is still there. It records when and why, naming the audit. Withdrawal
+  is a system action, not a review decision: `review_status` stays `pending`.
+  - A withdrawn row is left out of the review queue, its scores, weak-row counts and paging,
+    `GET /opportunities`, and the CRM. It cannot be approved (409).
+  - A later audit that supports the service again clears the withdrawal and reuses the row.
+  - `approved` and `needs_enrichment` rows are never withdrawn; they are logged at warning.
+  - A row that cites no findings (`ads_social`) is never withdrawn by the findings test.
+  - An AI-only row is not withdrawn because the AI did not answer this time.
+- **Booking is no longer inferred from a link's text.**
+  - "Request a quote" and "request service", as text or as a `/request-service` path, are
+    no longer booking.
+  - A call to action ("Book Now", "Schedule Now") or a booking path is followed once
+    through `safe_fetch`, and its target decides. A date or time input, or a known booking
+    widget, there is booking (`verified_target`). Neither means `no_online_booking`, whose
+    evidence names the call to action and the target URL. A target that cannot be read
+    (robots, an error, a non-2xx, a bot challenge, a script-built page) is `unverified`,
+    and no finding is drawn from it.
+  - A link to a known booking provider (the widget list's hosts, plus Fresha) counts
+    without a fetch.
+  - The method is stored in `checks.booking.method`: `widget`, `booking_host`,
+    `verified_target`, `cta`, `path` or `unverified`.
+- `no_online_booking` now reads "Audit found no visible online booking flow on the
+  homepage."
+- **Queue freeze.** The database engine gets a connect timeout, `statement_timeout` and
+  `idle_in_transaction_session_timeout`. Redis gets socket connect and read timeouts, and
+  `pg_dump` a time limit. New settings: `DB_CONNECT_TIMEOUT_SECONDS`,
+  `DB_STATEMENT_TIMEOUT_MS`, `DB_IDLE_IN_TRANSACTION_TIMEOUT_MS`,
+  `REDIS_SOCKET_CONNECT_TIMEOUT_SECONDS`, `REDIS_SOCKET_TIMEOUT_SECONDS` and
+  `BACKUP_PG_DUMP_TIMEOUT_SECONDS`.
+- `AUDIT_SECONDS_PER_BUSINESS` defaults to 190 (was 150) to cover the booking-link fetch.
+
+### Added
+
+- `scripts/backfill_withdrawn.py`: lists the pending opportunities orphaned before
+  withdrawal existed. It is a dry run by default and writes only with `--apply`.
+- `scripts/record_booking_fixture.py`: records a homepage and its booking-link target as
+  test fixtures, through `safe_fetch`. Run by a human.
+
 ## [v0.12.0] - 2026-09-26
 
 **Bumps the audit logic version to 8** (4 during the build, then 5–8 as the production verification runs found false findings). Every stored audit counts as due, so the next audit
