@@ -43,8 +43,11 @@ SHARED_DOMAINS = BUILDER_DOMAINS | SOCIAL_DOMAINS | LINK_IN_BIO_DOMAINS | SHORTE
 
 # Statuses whose audit asks no domain question at all. `skipped` had no site to ask about;
 # on `robots_blocked` the owner said not to crawl, and no domain finding is emitted there
-# (task 5), so a lookup would spend an RDAP call on nothing.
-NO_DOMAIN_STATUSES = frozenset({AuditStatus.skipped, AuditStatus.robots_blocked})
+# (task 5), so a lookup would spend an RDAP call on nothing. `failed` is a fault on our
+# side — often our own network — so a DNS answer then would be about us, not the domain.
+NO_DOMAIN_STATUSES = frozenset(
+    {AuditStatus.skipped, AuditStatus.robots_blocked, AuditStatus.failed}
+)
 
 
 class SkipReason:

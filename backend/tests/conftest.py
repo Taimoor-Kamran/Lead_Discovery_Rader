@@ -218,7 +218,7 @@ def db(migrated_database: str) -> Iterator[Session]:
         text(
             "TRUNCATE alerts, crm_sync_attempts, crm_lead_opportunities, crm_leads, "
             "crm_fake_records, review_decisions, suppressions, opportunities, ai_classifications, "
-            "website_audits, api_calls, "
+            "website_audits, api_calls, domain_intel, "
             "match_candidates, business_field_values, businesses, record_sightings, "
             "discovered_records, audit_logs, job_runs, search_jobs, sources, users "
             "RESTART IDENTITY CASCADE"

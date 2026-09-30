@@ -42,7 +42,9 @@ def test_configured_website_is_used_when_there_is_no_final_url() -> None:
     assert chosen.target == DomainTarget(site_host="old-name.com", apex="old-name.com")
 
 
-@pytest.mark.parametrize("status", [AuditStatus.skipped, AuditStatus.robots_blocked])
+@pytest.mark.parametrize(
+    "status", [AuditStatus.skipped, AuditStatus.robots_blocked, AuditStatus.failed]
+)
 def test_statuses_without_a_domain_question(status: AuditStatus) -> None:
     chosen = select(status=status, final_url=None, website="https://acme.com")
     assert chosen.target is None

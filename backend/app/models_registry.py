@@ -13,6 +13,7 @@ from app.modules.businesses.models import Business, BusinessFieldValue
 from app.modules.compliance.models import Suppression
 from app.modules.crm.models import CrmLead, CrmLeadOpportunity, CrmSyncAttempt, FakeCrmRecord
 from app.modules.discovery.models import ApiCall, DiscoveredRecord, RecordSighting
+from app.modules.domain_intel.models import DomainIntel
 from app.modules.jobs.models import JobRun, SearchJob
 from app.modules.opportunities.models import Opportunity
 from app.modules.resolution.models import MatchCandidate
@@ -31,6 +32,7 @@ __all__ = [
     "CrmLeadOpportunity",
     "CrmSyncAttempt",
     "DiscoveredRecord",
+    "DomainIntel",
     "FakeCrmRecord",
     "JobRun",
     "MatchCandidate",
