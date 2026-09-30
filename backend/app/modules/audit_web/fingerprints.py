@@ -61,7 +61,9 @@ BOOKING_SIGNATURES: tuple[Signature, ...] = (
 )
 
 # A link to one of these hosts is a booking page whatever its label says (v0.12.1): the
-# widget signatures' own hosts, plus Fresha, seen on real salon homepages in production.
+# widget signatures' own hosts, plus Fresha, Phorest and Zenoti, each verified by hand on a
+# real salon's booking page in production (Urban Betty's scheduler is a Phorest iframe,
+# Bishops' per-location pages hand over to Zenoti).
 # `host/path` entries also need the path to start with that prefix. Nothing is added here
 # that has not been seen on a real audited page.
 BOOKING_HOSTS: tuple[tuple[str, str], ...] = (
@@ -83,6 +85,25 @@ BOOKING_HOSTS: tuple[tuple[str, str], ...] = (
     ("appointlet.com", "Appointlet"),
     ("youcanbook.me", "YouCanBook.me"),
     ("fresha.com", "Fresha"),
+    ("phorest.com", "Phorest"),
+    ("zenoti.com", "Zenoti"),
+)
+
+# Hosts that are never a booking signal, whatever else matches: reCAPTCHA, Maps, Tag
+# Manager, Ads and fonts sit on most pages and say nothing about booking (v0.12.1). Checked
+# before `BOOKING_HOSTS`, so no entry there can ever be satisfied by one of these.
+NEVER_BOOKING_HOSTS: tuple[str, ...] = (
+    "google.com",
+    "gstatic.com",
+    "googleapis.com",
+    "googletagmanager.com",
+    "google-analytics.com",
+    "googleadservices.com",
+    "googlesyndication.com",
+    "doubleclick.net",
+    "recaptcha.net",
+    "goo.gl",
+    "g.page",
 )
 
 # Link text (or a button label) that offers to book without naming a tool. Kept narrow on
@@ -549,7 +570,7 @@ def booking_host(url: str) -> str | None:
     """The booking provider a URL points at, by its host, or `None`."""
     parts = urlsplit(url.strip().lower())
     host = (parts.hostname or "").rstrip(".")
-    if not host:
+    if not host or is_never_booking_host(host):
         return None
     for entry, label in BOOKING_HOSTS:
         domain, _, prefix = entry.partition("/")
@@ -559,6 +580,26 @@ def booking_host(url: str) -> str | None:
             continue
         return label
     return None
+
+
+def _on_domain(host: str, domain: str) -> bool:
+    return host == domain or host.endswith(f".{domain}")
+
+
+def is_never_booking_host(host: str) -> bool:
+    """A Google (or similar) host: never evidence of booking, and not an onward hop."""
+    lowered = host.lower().rstrip(".")
+    return any(_on_domain(lowered, domain) for domain in NEVER_BOOKING_HOSTS)
+
+
+def is_social_host(host: str) -> bool:
+    """A social profile host (`SOCIAL_PLATFORMS`): a footer link, not a way to book."""
+    lowered = host.lower().rstrip(".")
+    return any(
+        _on_domain(lowered, pattern.split("/", 1)[0])
+        for signature in SOCIAL_PLATFORMS
+        for pattern in signature.patterns
+    )
 
 
 def booking_text_match(text: str) -> str | None:

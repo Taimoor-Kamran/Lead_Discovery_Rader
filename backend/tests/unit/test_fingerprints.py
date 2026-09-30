@@ -200,6 +200,13 @@ def test_a_request_is_not_booking(text: str) -> None:
         ("https://squareup.com/us/en", None),
         ("https://notfresha.com/", None),
         ("https://example.test/book", None),
+        ("https://www.phorest.com/salon/x/book", "Phorest"),
+        ("https://bishops.zenoti.com/webstoreNew/services", "Zenoti"),
+        ("https://www.google.com/recaptcha/api2/anchor", None),
+        ("https://maps.googleapis.com/maps/api/js", None),
+        ("https://www.googletagmanager.com/gtag/js", None),
+        ("https://googleads.g.doubleclick.net/pagead/x", None),
+        ("https://www.gstatic.com/recaptcha/x.js", None),
     ],
 )
 def test_a_booking_host_is_recognised_by_host_not_substring(url: str, expected: str | None) -> None:

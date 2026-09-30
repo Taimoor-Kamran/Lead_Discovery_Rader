@@ -267,10 +267,11 @@ def _follow_booking_link(
     A link's text is not evidence of what is behind it: ATX Electrical's "Schedule Now"
     goes to a contact form with no date or time on it. So the target is fetched once,
     through `safe_fetch` (robots, SSRF guard, per-host throttle), and only what is on it
-    decides: a booking flow there is `verified_target`; none is `False`, with the call to
-    action and the target named in the evidence; anything that stops us reading the
-    page is `unverified` with a null value, and no finding is drawn from it. One page,
-    never a crawl.
+    decides: a booking flow there is `verified_target`; a page that only leads further (a
+    booking link, a location picker, another host) is `unverified_multi_hop`; none of
+    these is `False`, with the call to action and the target named in the evidence; and
+    anything that stops us reading the page is `unverified`. Both unverified outcomes
+    carry a null value and draw no finding. One page, never a crawl.
     """
     seen = str(check.value).split(": ", 1)[-1]
     target = check.target_url
@@ -290,24 +291,24 @@ def _follow_booking_link(
     if target is None:
         return unverified("it has no link to a page")
 
-    if target.rstrip("/") == home.split("#", 1)[0].rstrip("/"):
-        page: FetchOutcome = homepage
-    else:
-        try:
-            robots = tools.fetcher.robots(target)
-            if not robots.allowed:
-                return unverified(robots.reason)
-            page = tools.fetcher.fetch(target)
-        except UnsafeUrlError as exc:
-            return unverified(f"the link was refused ({exc.reason})")
-        if not page.reachable or page.status_code is None:
-            return unverified(f"{target} did not answer ({page.error_kind or 'no response'})")
-        if not 200 <= page.status_code < 300:
-            return unverified(f"{target} answered HTTP {page.status_code}")
-        if page.text is None:
-            return unverified(f"{target} is not a page that can be read")
-        if checks_module.bot_challenge(page) is not None:
-            return unverified(f"{target} answered with a bot-protection challenge")
+    if checks_module.same_page(target, home):
+        # `_booking` already skips a link back to the page; never spend a fetch on one.
+        return unverified("it links back to the page being audited")
+    try:
+        robots = tools.fetcher.robots(target)
+        if not robots.allowed:
+            return unverified(robots.reason)
+        page = tools.fetcher.fetch(target)
+    except UnsafeUrlError as exc:
+        return unverified(f"the link was refused ({exc.reason})")
+    if not page.reachable or page.status_code is None:
+        return unverified(f"{target} did not answer ({page.error_kind or 'no response'})")
+    if not 200 <= page.status_code < 300:
+        return unverified(f"{target} answered HTTP {page.status_code}")
+    if page.text is None:
+        return unverified(f"{target} is not a page that can be read")
+    if checks_module.bot_challenge(page) is not None:
+        return unverified(f"{target} answered with a bot-protection challenge")
 
     flow = checks_module.booking_target_flow(page)
     if flow is not None:
@@ -318,13 +319,25 @@ def _follow_booking_link(
             method=checks_module.BOOKING_VERIFIED_TARGET,
             target_url=target,
         )
+    onward = checks_module.booking_onward_hop(page)
+    if onward is not None:
+        return checks_module.CheckResult(
+            None,
+            evidence_text=(
+                f"'{seen}' links to {target}, which shows no scheduler itself but leads "
+                f"further ({onward}); only one page is followed, so booking is not judged"
+            ),
+            evidence_url=check.evidence_url,
+            method=checks_module.BOOKING_UNVERIFIED_MULTI_HOP,
+            target_url=target,
+        )
     if checks_module.looks_script_built(page):
         return unverified(f"{target} is assembled by scripts this audit does not run")
     return checks_module.CheckResult(
         False,
         evidence_text=(
-            f"'{seen}' links to {target}, which shows no date or time input and no known "
-            "booking widget"
+            f"'{seen}' links to {target}, which shows no date or time input, no booking "
+            "vendor and no onward booking link"
         ),
         evidence_url=check.evidence_url,
         method=check.method,
