@@ -159,9 +159,15 @@ def prune_backups(settings: Settings | None = None) -> list[str]:
     return removed
 
 
-def _run(runner: Runner, argv: Sequence[str], *, what: str) -> "subprocess.CompletedProcess[str]":
+def _run(
+    runner: Runner, argv: Sequence[str], *, what: str, timeout: float | None = None
+) -> "subprocess.CompletedProcess[str]":
     try:
-        completed = runner(list(argv), capture_output=True, text=True, check=False)
+        completed = runner(list(argv), capture_output=True, text=True, check=False, timeout=timeout)
+    except subprocess.TimeoutExpired as exc:
+        raise BackupError(
+            f"{what} did not finish within {int(exc.timeout)} s and was stopped"
+        ) from exc
     except FileNotFoundError as exc:
         raise BackupError(
             f"{what}: '{argv[0]}' is not installed. The api and worker images ship the "
@@ -206,6 +212,7 @@ def create_backup(
             f"--dbname={libpq_url(config.database_url)}",
         ],
         what="pg_dump",
+        timeout=config.backup_pg_dump_timeout_seconds,
     )
     # Written to a dotfile first, so a dump that died half-way never counts as a backup.
     os.replace(partial, target)
