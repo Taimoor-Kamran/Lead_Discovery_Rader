@@ -229,6 +229,9 @@ def audit_business(
     checks.update(html)
     if html:
         checks["listing_comparison"] = listing_module.compare(checks, _listing(business))
+        booking = checks.get("booking")
+        if booking is not None and booking.method in checks_module.BOOKING_TO_FOLLOW:
+            checks["booking"] = _follow_booking_link(tools, booking, outcome, context)
     psi, psi_error = _measure(tools.psi, final_url)
     if psi_error is not None:
         checks["psi_error"] = checks_module.CheckResult(
@@ -250,6 +253,82 @@ def audit_business(
         html_sha256=outcome.html_sha256,
         started_at=started,
         settings=settings,
+    )
+
+
+def _follow_booking_link(
+    tools: AuditTools,
+    check: checks_module.CheckResult,
+    homepage: FetchOutcome,
+    context: findings_module.FindingContext,
+) -> checks_module.CheckResult:
+    """Fetch the one page a booking call to action or path points at, and read it (v0.12.1).
+
+    A link's text is not evidence of what is behind it: ATX Electrical's "Schedule Now"
+    goes to a contact form with no date or time on it. So the target is fetched once,
+    through `safe_fetch` (robots, SSRF guard, per-host throttle), and only what is on it
+    decides: a booking flow there is `verified_target`; none is `False`, with the call to
+    action and the target named in the evidence; anything that stops us reading the
+    page is `unverified` with a null value, and no finding is drawn from it. One page,
+    never a crawl.
+    """
+    seen = str(check.value).split(": ", 1)[-1]
+    target = check.target_url
+    home = homepage.final_url or homepage.url
+
+    def unverified(why: str) -> checks_module.CheckResult:
+        return checks_module.CheckResult(
+            None,
+            evidence_text=f"'{seen}' could not be checked: {why}. {check.evidence_text or ''}",
+            evidence_url=check.evidence_url,
+            method=checks_module.BOOKING_UNVERIFIED,
+            target_url=target,
+        )
+
+    if (context.industry or "").lower() not in context.booking_industries:
+        return unverified("not followed, online booking is not expected in this industry")
+    if target is None:
+        return unverified("it has no link to a page")
+
+    if target.rstrip("/") == home.split("#", 1)[0].rstrip("/"):
+        page: FetchOutcome = homepage
+    else:
+        try:
+            robots = tools.fetcher.robots(target)
+            if not robots.allowed:
+                return unverified(robots.reason)
+            page = tools.fetcher.fetch(target)
+        except UnsafeUrlError as exc:
+            return unverified(f"the link was refused ({exc.reason})")
+        if not page.reachable or page.status_code is None:
+            return unverified(f"{target} did not answer ({page.error_kind or 'no response'})")
+        if not 200 <= page.status_code < 300:
+            return unverified(f"{target} answered HTTP {page.status_code}")
+        if page.text is None:
+            return unverified(f"{target} is not a page that can be read")
+        if checks_module.bot_challenge(page) is not None:
+            return unverified(f"{target} answered with a bot-protection challenge")
+
+    flow = checks_module.booking_target_flow(page)
+    if flow is not None:
+        return checks_module.CheckResult(
+            check.value,
+            evidence_text=f"'{seen}' links to {target}; {flow}",
+            evidence_url=check.evidence_url,
+            method=checks_module.BOOKING_VERIFIED_TARGET,
+            target_url=target,
+        )
+    if checks_module.looks_script_built(page):
+        return unverified(f"{target} is assembled by scripts this audit does not run")
+    return checks_module.CheckResult(
+        False,
+        evidence_text=(
+            f"'{seen}' links to {target}, which shows no date or time input and no known "
+            "booking widget"
+        ),
+        evidence_url=check.evidence_url,
+        method=check.method,
+        target_url=target,
     )
 
 

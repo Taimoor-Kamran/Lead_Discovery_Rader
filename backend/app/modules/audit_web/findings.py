@@ -264,7 +264,7 @@ CATALOGUE: dict[str, FindingSpec] = {
             "no_online_booking",
             Severity.medium,
             Service.booking_setup,
-            "Audit found no online booking or scheduling link on the homepage.",
+            "Audit found no visible online booking flow on the homepage.",
         ),
         FindingSpec(
             "no_live_chat",
@@ -601,7 +601,15 @@ def _content_findings(checks: Checks, context: FindingContext) -> list[Finding]:
         findings.append(_from_check(checks, "placeholder_text", "placeholder_text", phrase=phrase))
 
     industry = (context.industry or "").lower()
-    if not value_of(checks, "booking") and industry in context.booking_industries:
+    # `False` is "looked, and there is none"; `null` is "could not tell" — a booking link
+    # whose target could not be read (v0.12.1) — and draws no finding. A call to action
+    # not yet followed (`cta` / `path`) is not a finding either: only its target decides.
+    # A page with no booking check at all keeps the pre-v0.12.1 behaviour.
+    booking = checks.get("booking")
+    booking_absent = booking is None or (
+        booking.value is False or (booking.value is None and booking.method is None)
+    )
+    if booking_absent and industry in context.booking_industries:
         findings.append(_from_check(checks, "booking", "no_online_booking"))
 
     if value_of(checks, "live_chat") is False:
