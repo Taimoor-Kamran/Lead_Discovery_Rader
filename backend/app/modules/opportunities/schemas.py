@@ -47,6 +47,10 @@ class OpportunitySummary(BaseModel):
     review_status: ReviewStatus
     # Echoed back with every decision; a stale value is a 409 (v0.6.0).
     lock_version: int
+    # v0.12.1: set when the latest audit stopped supporting a pending row. Not a review
+    # decision; a withdrawn row is out of the queue and cannot be approved.
+    withdrawn_at: datetime | None = None
+    withdrawn_reason: str | None = None
     top_evidence: dict[str, Any] | None
     created_at: datetime
     updated_at: datetime

@@ -145,6 +145,9 @@ def approved_opportunities(
         .where(
             Opportunity.business_id == business_id,
             Opportunity.review_status == ReviewStatus.approved,
+            # Never true of a row the system wrote (only `pending` is withdrawn), and the
+            # CRM refuses it anyway: a withdrawn claim is not one a lead may rest on.
+            Opportunity.withdrawn_at.is_(None),
         )
         .order_by(Opportunity.score.desc(), Opportunity.decided_at.asc(), Opportunity.id.asc())
     )
