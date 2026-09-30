@@ -80,7 +80,7 @@ def answer(
     )
 
 
-BOOKING_MESSAGE = "Audit found no online booking or scheduling link on the homepage."
+BOOKING_MESSAGE = "Audit found no visible online booking flow on the homepage."
 
 
 def make_tools(*answers: str | Exception, **settings_overrides: Any) -> ClassificationTools:

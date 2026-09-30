@@ -416,7 +416,7 @@ def audit_row(
                 "code": "no_online_booking",
                 "severity": "medium",
                 "service_category": "booking",
-                "message": "Audit found no online booking or scheduling link on the homepage.",
+                "message": "Audit found no visible online booking flow on the homepage.",
                 "evidence_text": "No known booking widget on the homepage",
                 "evidence_url": "https://example.invalid/",
             }
