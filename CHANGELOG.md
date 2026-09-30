@@ -37,10 +37,15 @@ The paused v0.13.0 branch's `0014_domain_intel` becomes `0015` when it resumes.
     evidence names the call to action and the target URL. A target that cannot be read
     (robots, an error, a non-2xx, a bot challenge, a script-built page) is `unverified`,
     and no finding is drawn from it.
-  - A link to a known booking provider (the widget list's hosts, plus Fresha) counts
-    without a fetch.
+  - A link to a known booking provider (the widget list's hosts, plus Fresha, Phorest and
+    Zenoti) counts without a fetch. On the followed target, such a host in an iframe, a
+    script or a link is booking too; a Google host (reCAPTCHA, Maps, Tag Manager, Ads)
+    never is.
+  - A target with no scheduler that leads further — a booking link, a location picker, a
+    link to another host — is `unverified_multi_hop` and draws no finding: only one page is
+    followed. A booking link back to the audited page is skipped without a fetch.
   - The method is stored in `checks.booking.method`: `widget`, `booking_host`,
-    `verified_target`, `cta`, `path` or `unverified`.
+    `verified_target`, `cta`, `path`, `unverified` or `unverified_multi_hop`.
 - `no_online_booking` now reads "Audit found no visible online booking flow on the
   homepage."
 - **Queue freeze.** The database engine gets a connect timeout, `statement_timeout` and
