@@ -49,14 +49,14 @@ review_status_enum = SAEnum(
 class Opportunity(Base):
     __tablename__ = "opportunities"
     __table_args__ = (
-        # One *pending* opportunity per business and service. Decided ones may pile up
-        # over time; the open one is always unique.
+        # One live *pending* opportunity per business and service. Decided ones may pile
+        # up over time, and so may withdrawn ones (v0.12.1); the live one is always unique.
         Index(
             "uq_opportunities_pending_business_service",
             "business_id",
             "service",
             unique=True,
-            postgresql_where=text("review_status = 'pending'"),
+            postgresql_where=text("review_status = 'pending' AND withdrawn_at IS NULL"),
         ),
         Index("ix_opportunities_review_status_score", "review_status", "score"),
         Index("ix_opportunities_business_id", "business_id"),
@@ -100,5 +100,10 @@ class Opportunity(Base):
     lock_version: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default="0"
     )
+    # v0.12.1: set by the system when the latest audit stopped supporting a pending row.
+    # Not a review decision: `review_status` stays `pending`, and a later audit that
+    # supports the service again clears both.
+    withdrawn_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    withdrawn_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = created_at_column()
     updated_at: Mapped[datetime] = updated_at_column()
