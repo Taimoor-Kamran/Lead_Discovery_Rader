@@ -12,7 +12,14 @@ import {
 } from "@/components/review/QueueFilters";
 import { QueueTable } from "@/components/review/QueueTable";
 import { Button, EmptyState, PageHeader, Pagination, Tabs, useToast } from "@/components/ui";
-import { ApiError, getReviewQueue, RECENCY_OPTIONS, reviewBatch, type QueueItem } from "@/lib/api";
+import {
+  ApiError,
+  getReviewQueue,
+  RECENCY_OPTIONS,
+  reviewBatch,
+  type QueueItem,
+  type QueueQuery,
+} from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { loadFailed } from "@/lib/errors";
 import { QUEUE_ORDER_KEY } from "@/lib/review";
@@ -59,10 +66,15 @@ export function ReviewQueue() {
           status: filters.status,
           service: filters.service || undefined,
           city: filters.city.trim() || undefined,
+          state: filters.state.trim() || undefined,
+          industry: filters.industry || undefined,
+          badge: (filters.badge || undefined) as QueueQuery["badge"],
           min_score: filters.min_score ? Number(filters.min_score) : undefined,
           q: filters.q.trim() || undefined,
           discovered_within_days: filters.within ? Number(filters.within) : undefined,
           include_weak: filters.include_weak,
+          sort: filters.sort,
+          sort_dir: filters.sort_dir,
           cursor,
         });
         setItems((current) => (cursor ? [...current, ...page.items] : page.items));
@@ -154,7 +166,7 @@ export function ReviewQueue() {
     <div className="flex flex-col gap-4">
       <PageHeader
         title="Review queue"
-        description="Businesses with open opportunities, strongest first. Weak signals are hidden until you ask for them."
+        description="Businesses with open opportunities, strongest first unless you sort by reviews. Weak signals are hidden until you ask for them."
         actions={
           decider ? (
             <div className="flex flex-wrap items-center gap-2" data-testid="batch-bar">
@@ -196,6 +208,16 @@ export function ReviewQueue() {
           canSelect={decider}
           showWeak={filters.include_weak}
           loading={loading}
+          sort={filters.sort}
+          sortDir={filters.sort_dir}
+          onSort={(key) =>
+            setFilters({
+              ...filters,
+              sort: key,
+              // A new column starts at its strongest end; the active one flips.
+              sort_dir: filters.sort === key && filters.sort_dir === "desc" ? "asc" : "desc",
+            })
+          }
           empty={
             isFiltered(filters) ? (
               <EmptyState

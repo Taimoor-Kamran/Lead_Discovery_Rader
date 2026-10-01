@@ -20,8 +20,9 @@ describe("ReviewQueue page", () => {
     });
     renderWithProviders(<ReviewQueue />, { user: me("reviewer") });
 
+    const queueCalls = () => calls.filter((call) => call.url.includes("/review-queue"));
     await waitFor(() => expect(screen.getByTestId("weak-hidden")).toBeTruthy());
-    expect(calls[0].url).toContain("include_weak=false");
+    expect(queueCalls()[0].url).toContain("include_weak=false");
     const chips = () => screen.getAllByTestId("service-chip").map((chip) => chip.textContent ?? "");
     expect(chips().some((text) => text.includes("Ads & social"))).toBe(false);
     // Selection boxes stay out of the way until the row is hovered…
@@ -30,10 +31,38 @@ describe("ReviewQueue page", () => {
     fireEvent.click(screen.getByLabelText("Show weak signals"));
 
     await waitFor(() => expect(chips().some((text) => text.includes("Ads & social"))).toBe(true));
-    expect(calls.at(-1)?.url).toContain("include_weak=true");
+    expect(queueCalls().at(-1)?.url).toContain("include_weak=true");
     expect(screen.queryByTestId("weak-hidden")).toBeNull();
     // …and are always shown once weak signals are on, because that is batch-triage mode.
     expect(screen.getByLabelText("Select Ads & social for Barton Creek Plumbing").className).not.toContain("opacity-0");
+  });
+
+  it("sends the sort, direction, state, industry and listing filters to the API", async () => {
+    const { calls } = routeFetch({
+      "GET /review-queue": { status: 200, body: { items: [queueItem()], next_cursor: null } },
+      "GET /search-jobs/industries": { status: 200, body: [{ key: "plumbing", label: "Plumbing", query: "plumber" }] },
+    });
+    renderWithProviders(<ReviewQueue />, { user: me("reviewer") });
+    const queueCalls = () => calls.filter((call) => call.url.includes("/review-queue"));
+    await waitFor(() => expect(queueCalls().length).toBe(1));
+    expect(queueCalls()[0].url).toContain("sort=score");
+    expect(queueCalls()[0].url).toContain("sort_dir=desc");
+    await screen.findByRole("option", { name: "Plumbing" });
+
+    fireEvent.click(screen.getByRole("button", { name: /Reviews/ }));
+    await waitFor(() => expect(queueCalls().at(-1)?.url).toContain("sort=reviews"));
+    expect(queueCalls().at(-1)?.url).toContain("sort_dir=desc");
+    fireEvent.click(screen.getByRole("button", { name: /Reviews/ }));
+    await waitFor(() => expect(queueCalls().at(-1)?.url).toContain("sort_dir=asc"));
+
+    fireEvent.change(screen.getByLabelText("State"), { target: { value: "tx" } });
+    fireEvent.change(screen.getByLabelText("Industry"), { target: { value: "plumbing" } });
+    fireEvent.change(screen.getByLabelText("Listing"), { target: { value: "no_website" } });
+    await waitFor(() => expect(queueCalls().at(-1)?.url).toContain("badge=no_website"));
+    const last = queueCalls().at(-1)?.url ?? "";
+    expect(last).toContain("state=tx");
+    expect(last).toContain("industry=plumbing");
+    expect(last).toContain("sort=reviews");
   });
 
   it("offers batch reject and not-a-fit only, and only with a selection", async () => {

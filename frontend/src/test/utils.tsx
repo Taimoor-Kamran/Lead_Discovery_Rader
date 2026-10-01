@@ -111,7 +111,16 @@ export function queueItem(overrides: Partial<QueueItem> = {}): QueueItem {
     industry: "plumbing",
     website: "https://bartoncreekplumbing.invalid/",
     top_score: 0.72,
-    latest_audit: { status: "done", audited_at: "2026-09-20T10:00:00Z", top_findings: ["no_https", "no_h1"] },
+    latest_audit: {
+      status: "done",
+      audited_at: "2026-09-20T10:00:00Z",
+      top_findings: ["no_https", "no_h1"],
+      finding_count: 4,
+      pagespeed_score: 62,
+    },
+    website_kind: "own_site",
+    business_status: "operational",
+    badges: [],
     opportunities: [
       {
         id: "opp-1",

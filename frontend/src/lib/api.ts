@@ -331,6 +331,11 @@ export type QueueQuery = {
   q?: string;
   /** "First found within N days", measured on the earliest discovered_at of the business. */
   discovered_within_days?: number;
+  /** An F9 badge to narrow to (v0.14.0). */
+  badge?: "no_website" | "closed_permanently";
+  /** `score` (default) or `reviews`; listings without a review count sort last either way. */
+  sort?: "score" | "reviews";
+  sort_dir?: "asc" | "desc";
   limit?: number;
   cursor?: string;
 };
