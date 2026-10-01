@@ -30,6 +30,7 @@ from app.modules.domain_intel.models import DomainIntel
 from app.modules.domain_intel.service import DomainTools
 from app.modules.normalization.schemas import WebsiteKind
 from tests.conftest import FakeClock, load_fixture
+from tests.integration.test_audit_network_outage import FlakyBackend, ScriptedProbe
 from tests.integration.test_website_audits_api import make_business
 from tests.unit.test_rdap import CONTACT_VALUES
 
@@ -331,3 +332,40 @@ def test_shared_domains_ask_nothing(
     assert resolver.queries == [] and rdap.calls == []
     assert audit.checks["domain_intel"]["value"] is None
     assert audit.checks["domain_intel"]["evidence_text"] is not None
+
+
+@pytest.mark.parametrize("failing", ["/", "/robots.txt"])
+def test_a_failed_audit_asks_nothing_and_has_no_domain_findings(
+    db: Session, business: Business, rdap: CountingRdap, failing: str
+) -> None:
+    """`failed` is a fault on our side — here our own network was down — so a DNS answer
+    then would describe us, not the domain: no question, no call, no domain finding."""
+    settings = settings_for()
+    clock = FakeClock()
+    resolver = FixtureResolver(recorded_dns())
+    tools = service.AuditTools(
+        fetcher=SafeFetcher(
+            redis=fakeredis.FakeStrictRedis(),
+            backends=[FlakyBackend(failures={failing: 1})],
+            settings=settings,
+            clock=clock,
+            sleeper=clock.sleep,
+            resolver=lambda host, port: ["93.184.216.34"],
+        ),
+        psi=NoPsi(),
+        settings=settings,
+        connectivity=ScriptedProbe(False),
+        domain=DomainTools(resolver=resolver, rdap=rdap),
+    )
+
+    audit = _audit(db, business, tools)
+
+    assert audit.status is AuditStatus.failed
+    assert resolver.queries == [] and rdap.calls == []
+    assert audit.checks["domain_intel"] == {
+        "value": None,
+        "evidence_text": "audit status failed: no domain lookup",
+        "evidence_url": None,
+    }
+    assert audit.finding_codes == []
+    assert db.scalar(select(DomainIntel)) is None
