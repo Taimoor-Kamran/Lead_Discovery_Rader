@@ -14,13 +14,15 @@ called directly — never a third-party redirector (decision C14). A TLD the sna
 list, an error, or an answer with no expiry date is `null`, and `null` produces nothing.
 
 Calls go through `ApiHttpClient`, so the `rdap` token bucket and daily cap apply exactly as
-they do to PageSpeed. One attempt, ten-second read: the whole DNS + RDAP step has fifteen
-seconds per business (decision C15).
+they do to PageSpeed, and every call is metered in `api_calls` under the `rdap` source row.
+One attempt, ten-second read: the whole DNS + RDAP step has fifteen seconds per business
+(decision C15).
 """
 
 import json
 import os
 import time
+import uuid
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -31,7 +33,7 @@ import httpx
 from redis import Redis
 
 from app.core.config import Settings, get_settings
-from app.core.http import ApiHttpClient
+from app.core.http import ApiHttpClient, MeteringHook
 from app.core.logging import get_logger
 from app.core.ratelimit import build_limiter
 from app.modules.adapters.errors import AdapterError
@@ -228,18 +230,27 @@ class OfflineRdapClient:
 
 def build_rdap_client(
     *,
+    job_run_id: uuid.UUID | None = None,
     settings: Settings | None = None,
     redis_client: Redis | None = None,
     clock: Callable[[], float] = time.time,
     sleeper: Callable[[float], None] = time.sleep,
+    meter: MeteringHook | None = None,
 ) -> RdapClient:
-    """The production wiring: rate limited and daily capped under the `rdap` source key."""
+    """The production wiring: metered in `api_calls`, rate limited and daily capped under
+    the `rdap` source key, exactly like PageSpeed."""
     config = settings or get_settings()
     if config.fixtures_allowed:
         return OfflineRdapClient()
     from app.core.redis import get_redis
 
-    return network_rdap_client(config, redis_client or get_redis(), clock=clock, sleeper=sleeper)
+    if meter is None:
+        from app.modules.discovery.service import api_call_meter
+
+        meter = api_call_meter(job_run_id)
+    return network_rdap_client(
+        config, redis_client or get_redis(), clock=clock, sleeper=sleeper, meter=meter
+    )
 
 
 def network_rdap_client(
@@ -248,9 +259,11 @@ def network_rdap_client(
     *,
     clock: Callable[[], float] = time.time,
     sleeper: Callable[[float], None] = time.sleep,
+    meter: MeteringHook | None = None,
 ) -> NetworkRdapClient:
     http = ApiHttpClient(
         source=RDAP_SOURCE_NAME,
+        meter=meter,
         limiter=build_limiter(
             redis_client,
             source=RDAP_SOURCE_NAME,
@@ -265,3 +278,37 @@ def network_rdap_client(
         timeout=RDAP_TIMEOUT,
     )
     return NetworkRdapClient(http, user_agent=config.user_agent)
+
+
+def rdap_source_config(settings: Settings | None = None) -> dict[str, Any]:
+    """The `sources` row config: the same shape PageSpeed's has, and the same role."""
+    from app.modules.audit_web.psi import AUDIT_SERVICE_ROLE
+
+    config = settings or get_settings()
+    return {
+        "role": AUDIT_SERVICE_ROLE,
+        "display_name": "RDAP (domain registry)",
+        "terms_url": "https://www.iana.org/domains/rdap",
+        "commercial_use_note": (
+            "Public registry lookups, called directly at each registry. Only the registrar's "
+            "name, creation date, expiry date and status codes are kept; every contact is "
+            "dropped at the parse boundary."
+        ),
+        # Registry facts about a domain, not licensed provider content.
+        "content_ttl_days": 0,
+        "exclude_from_crm_export": False,
+        "rate_limit": {
+            "requests_per_second": config.rdap_rps,
+            "burst": max(int(config.rdap_rps), 1),
+            "daily_call_cap": config.rdap_daily_call_cap,
+        },
+    }
+
+
+def rdap_service_source() -> Any:
+    from app.modules.audit_web.psi import ServiceSourceSpec
+    from app.modules.sources.models import SourceKind
+
+    return ServiceSourceSpec(
+        name=RDAP_SOURCE_NAME, kind=SourceKind.api, config=rdap_source_config()
+    )

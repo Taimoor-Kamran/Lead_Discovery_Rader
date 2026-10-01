@@ -101,7 +101,7 @@ class AuditTools:
             psi=build_psi_client(job_run_id=job_run_id, settings=settings),
             settings=settings,
             connectivity=build_probe(settings),
-            domain=domain_service.build_tools(settings),
+            domain=domain_service.build_tools(settings, job_run_id=job_run_id),
         )
 
 

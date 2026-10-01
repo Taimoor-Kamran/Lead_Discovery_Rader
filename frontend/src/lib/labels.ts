@@ -75,6 +75,7 @@ export const SOURCE_LABELS: Record<string, string> = {
 export const SOURCE_NAME_LABELS: Record<string, string> = {
   google_places: "Google Places",
   pagespeed_insights: "PageSpeed Insights",
+  rdap: "RDAP (domain registry)",
   openai: "OpenAI",
   airtable: "Airtable",
   demo_fixture: "Demo fixture",

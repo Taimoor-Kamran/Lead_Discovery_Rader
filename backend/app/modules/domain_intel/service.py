@@ -11,6 +11,7 @@ audit row alone reproduces its domain findings.
 """
 
 import os
+import uuid
 from concurrent.futures import Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -49,12 +50,14 @@ class DomainTools:
     rdap: RdapClient
 
 
-def build_tools(settings: Settings) -> DomainTools:
+def build_tools(settings: Settings, *, job_run_id: uuid.UUID | None = None) -> DomainTools:
     if settings.fixtures_allowed:
         resolver: Resolver = FixtureResolver.from_directory(DNS_FIXTURE_DIR)
     else:
         resolver = LiveResolver(timeout=settings.dns_resolver_timeout_seconds)
-    return DomainTools(resolver=resolver, rdap=build_rdap_client(settings=settings))
+    return DomainTools(
+        resolver=resolver, rdap=build_rdap_client(job_run_id=job_run_id, settings=settings)
+    )
 
 
 def enabled(settings: Settings) -> bool:

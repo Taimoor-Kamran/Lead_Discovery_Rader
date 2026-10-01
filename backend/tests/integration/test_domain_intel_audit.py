@@ -369,3 +369,42 @@ def test_a_failed_audit_asks_nothing_and_has_no_domain_findings(
     }
     assert audit.finding_codes == []
     assert db.scalar(select(DomainIntel)) is None
+
+
+def test_every_rdap_call_is_metered_in_api_calls(
+    db: Session, business: Business, mock_http: respx.MockRouter
+) -> None:
+    """Without this there is no way to see RDAP spend (the PSI overrun was only visible
+    because PSI is logged)."""
+    from app.core.rdap import RDAP_SOURCE_NAME
+    from app.modules.adapters import registry
+    from app.modules.discovery.models import ApiCall
+    from app.modules.discovery.service import api_call_meter
+    from app.modules.sources.models import Source
+
+    registry.sync_sources(db)
+    db.commit()
+    mock_http.get(RDAP_URL).mock(
+        return_value=httpx.Response(
+            200, json=load_fixture("rdap", "synthetic_registrant_contacts.json")
+        )
+    )
+    clock = FakeClock()
+    client = network_rdap_client(
+        settings_for(),
+        fakeredis.FakeStrictRedis(),
+        clock=clock,
+        sleeper=clock.sleep,
+        meter=api_call_meter(None),
+    )
+
+    assert client.lookup(DOMAIN).facts is not None
+
+    db.expire_all()
+    rdap_source = db.scalar(select(Source).where(Source.name == RDAP_SOURCE_NAME))
+    assert rdap_source is not None
+    [call] = db.scalars(select(ApiCall)).all()
+    assert call.source_id == rdap_source.id
+    assert call.status_code == 200
+    for value in CONTACT_VALUES:
+        assert value not in f"{call.endpoint} {call.error_class}"
