@@ -4,8 +4,9 @@ The wording rule is the point of this file. A finding is what a salesperson read
 a business owner, so it must be something the audit *saw*, never a verdict on the
 business. "Audit found no online booking link on the homepage" is a fact anybody can
 check; "needs a new website" is an opinion the data does not support. Every template
-therefore starts with `Audit found`, `Audit could not`, `PageSpeed` or `Listing shows`,
-and a test walks the whole catalogue to prove no banned word ever creeps in.
+therefore starts with `Audit found`, `Audit could not`, `PageSpeed`, `Listing shows`,
+`Registry records show` or `DNS records show`, and a test walks the whole catalogue to
+prove no banned word ever creeps in.
 
 Each finding carries the same evidence triple the checks do, so nothing in the pipeline
 downstream (scoring in v0.5.0, the review queue in v0.6.0, the CRM in v0.7.0) ever has to
@@ -56,8 +57,9 @@ class Method(enum.StrEnum):
 
     `deterministic` — our own code reading the homepage or the business record;
     `api` — a number an outside service measured (PageSpeed) or reported (the listing's
-    review count); `ai` — a model's reading. No finding in this catalogue is `ai` today;
-    the value exists so the queue can show one differently when there is.
+    review count, a DNS answer, a registry record); `ai` — a model's reading. No finding in
+    this catalogue is `ai` today; the value exists so the queue can show one differently
+    when there is.
     """
 
     deterministic = "deterministic"
@@ -71,7 +73,15 @@ class Method(enum.StrEnum):
 # A message never quotes the page or a contact detail: messages go to the AI step as they
 # are, and only evidence is scrubbed of phones, emails and addresses (v0.12.0). So a title,
 # a phone number or an email address is the *evidence* of a finding, never its wording.
-ALLOWED_OPENINGS = ("Audit found", "Audit could not", "PageSpeed", "Listing shows")
+ALLOWED_OPENINGS = (
+    "Audit found",
+    "Audit could not",
+    "PageSpeed",
+    "Listing shows",
+    # v0.13.0 (decision C2): a domain finding reports what the registry or DNS said.
+    "Registry records show",
+    "DNS records show",
+)
 BANNED_WORDS = ("needs", "should", "bad", "terrible", "outdated website")
 
 
@@ -381,6 +391,73 @@ CATALOGUE: dict[str, FindingSpec] = {
             None,
             "Audit could not read the homepage because robots.txt asks automated "
             "visitors to stay away.",
+        ),
+        # v0.13.0: the domain, from DNS and RDAP — never from the page. Only the first
+        # three are something FlexTBS sells; the six email ones are context for the rep,
+        # with no service, so they open no opportunity and never reach the CRM.
+        FindingSpec(
+            "domain_expired",
+            Severity.high,
+            _DESIGN,
+            "Registry records show the domain registration for {domain} expired on {date}.",
+            Method.api,
+        ),
+        FindingSpec(
+            "domain_no_a_record",
+            Severity.high,
+            _DESIGN,
+            "DNS records show no address record (A, AAAA or CNAME) for {host}.",
+            Method.api,
+        ),
+        FindingSpec(
+            "domain_expiring_soon",
+            Severity.medium,
+            _DESIGN,
+            "Registry records show the domain registration for {domain} expires on {date}, "
+            "in {days} days.",
+            Method.api,
+        ),
+        FindingSpec(
+            "multiple_spf_records",
+            Severity.medium,
+            None,
+            "DNS records show {count} SPF records for {domain}.",
+            Method.api,
+        ),
+        FindingSpec(
+            "spf_allows_all",
+            Severity.medium,
+            None,
+            "DNS records show an SPF record for {domain} containing `{mechanism}`.",
+            Method.api,
+        ),
+        FindingSpec(
+            "no_spf",
+            Severity.low,
+            None,
+            "DNS records show no SPF record for {domain}.",
+            Method.api,
+        ),
+        FindingSpec(
+            "no_dmarc",
+            Severity.low,
+            None,
+            "DNS records show no DMARC record for {domain}.",
+            Method.api,
+        ),
+        FindingSpec(
+            "dmarc_policy_none",
+            Severity.low,
+            None,
+            "DNS records show a DMARC policy of `none` for {domain}.",
+            Method.api,
+        ),
+        FindingSpec(
+            "no_domain_mx",
+            Severity.low,
+            None,
+            "DNS records show no mail server (MX) record for {domain}.",
+            Method.api,
         ),
     )
 }

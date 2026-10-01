@@ -1,0 +1,71 @@
+{
+  "_comment": "Hand-built (synthetic) from the shape of a real recorded answer: no domain among the 147 has been recorded yet (spec v0.13.0, acceptance 7, third preference). Addresses are from TEST-NET (RFC 5737).",
+  "finding_code": "multiple_spf_records",
+  "answers": {
+    "www.synthetic-multiple-spf-records.com": {
+      "A": {
+        "rcode": "NOERROR",
+        "values": [
+          "192.0.2.10"
+        ],
+        "resolver": "192.0.2.53"
+      },
+      "AAAA": {
+        "rcode": "NOERROR",
+        "values": [],
+        "resolver": "192.0.2.53"
+      },
+      "CNAME": {
+        "rcode": "NOERROR",
+        "values": [],
+        "resolver": "192.0.2.53"
+      }
+    },
+    "synthetic-multiple-spf-records.com": {
+      "A": {
+        "rcode": "NOERROR",
+        "values": [
+          "192.0.2.10"
+        ],
+        "resolver": "192.0.2.53"
+      },
+      "AAAA": {
+        "rcode": "NOERROR",
+        "values": [],
+        "resolver": "192.0.2.53"
+      },
+      "NS": {
+        "rcode": "NOERROR",
+        "values": [
+          "ns1.domaincontrol.com.",
+          "ns2.domaincontrol.com."
+        ],
+        "resolver": "192.0.2.53"
+      },
+      "MX": {
+        "rcode": "NOERROR",
+        "values": [
+          "10 mail.synthetic-multiple-spf-records.com."
+        ],
+        "resolver": "192.0.2.53"
+      },
+      "TXT": {
+        "rcode": "NOERROR",
+        "values": [
+          "v=spf1 include:_spf.google.com -all",
+          "v=spf1 include:secureserver.net ~all"
+        ],
+        "resolver": "192.0.2.53"
+      }
+    },
+    "_dmarc.synthetic-multiple-spf-records.com": {
+      "TXT": {
+        "rcode": "NOERROR",
+        "values": [
+          "v=DMARC1; p=reject"
+        ],
+        "resolver": "192.0.2.53"
+      }
+    }
+  }
+}

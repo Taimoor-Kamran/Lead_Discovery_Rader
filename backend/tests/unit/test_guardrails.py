@@ -270,3 +270,16 @@ def test_the_original_output_is_never_mutated() -> None:
 
     assert original.needs_human_review is False
     assert original.industry == "nope"
+
+
+def test_an_ai_only_opportunity_cannot_cite_a_finding_filed_under_no_service() -> None:
+    """v0.13.0, decision C4: even if the model cites one, and even if it were in the input."""
+    cited = "DNS records show no SPF record for oakhill.example."
+    result = apply(
+        output(opportunities=[opportunity("website_design", items=[evidence(cited, "no_spf")])]),
+        context(corpus=[PAGE, FINDING_TEXT, cited], finding_codes=["no_spf", "no_h1"]),
+    )
+
+    assert result.output.opportunities == []
+    rules = [claim["rule"] for claim in result.rejected_claims]
+    assert rules == ["finding_has_no_service", "no_valid_evidence"]

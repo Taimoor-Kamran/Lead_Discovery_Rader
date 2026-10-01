@@ -1,0 +1,361 @@
+{
+  "_comment": "SYNTHETIC. Shape copied from a real Verisign RDAP answer (verisign_example.com.json). Every contact value below is fabricated: example.com addresses, 555 phone numbers, invented names and streets. No real person's data is in this file.",
+  "objectClassName": "domain",
+  "handle": "0000000_DOMAIN_COM-SYNTHETIC",
+  "ldhName": "SYNTHETIC-CONTACTS.COM",
+  "links": [
+    {
+      "value": "https://rdap.verisign.com/com/v1/domain/synthetic-contacts.com",
+      "rel": "self",
+      "href": "https://rdap.verisign.com/com/v1/domain/synthetic-contacts.com",
+      "type": "application/rdap+json"
+    }
+  ],
+  "status": [
+    "client delete prohibited",
+    "client transfer prohibited",
+    "client update prohibited"
+  ],
+  "entities": [
+    {
+      "objectClassName": "entity",
+      "handle": "376",
+      "roles": [
+        "registrar"
+      ],
+      "publicIds": [
+        {
+          "type": "IANA Registrar ID",
+          "identifier": "376"
+        }
+      ],
+      "vcardArray": [
+        "vcard",
+        [
+          [
+            "version",
+            {},
+            "text",
+            "4.0"
+          ],
+          [
+            "fn",
+            {},
+            "text",
+            "Synthetic Registrar, LLC"
+          ],
+          [
+            "adr",
+            {},
+            "text",
+            [
+              "",
+              "",
+              "99 Registrar Fabricated Way",
+              "Tempe",
+              "AZ",
+              "85281",
+              "US"
+            ]
+          ],
+          [
+            "tel",
+            {
+              "type": "voice"
+            },
+            "uri",
+            "tel:+1.5555550199"
+          ]
+        ]
+      ],
+      "entities": [
+        {
+          "objectClassName": "entity",
+          "roles": [
+            "abuse"
+          ],
+          "vcardArray": [
+            "vcard",
+            [
+              [
+                "version",
+                {},
+                "text",
+                "4.0"
+              ],
+              [
+                "fn",
+                {},
+                "text",
+                "Abuse Desk Fabricated"
+              ],
+              [
+                "adr",
+                {},
+                "text",
+                [
+                  "",
+                  "",
+                  "1 Abuse Fabricated Road",
+                  "Springfield",
+                  "IL",
+                  "62704",
+                  "US"
+                ]
+              ],
+              [
+                "tel",
+                {
+                  "type": "voice"
+                },
+                "uri",
+                "tel:+1.5555550100"
+              ],
+              [
+                "email",
+                {},
+                "text",
+                "abuse-fabricated@example.com"
+              ]
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "objectClassName": "entity",
+      "handle": "REG-SYNTH-1",
+      "roles": [
+        "registrant"
+      ],
+      "vcardArray": [
+        "vcard",
+        [
+          [
+            "version",
+            {},
+            "text",
+            "4.0"
+          ],
+          [
+            "fn",
+            {},
+            "text",
+            "Pat Fabricated-Owner"
+          ],
+          [
+            "org",
+            {},
+            "text",
+            "Fabricated Plumbing Co"
+          ],
+          [
+            "adr",
+            {},
+            "text",
+            [
+              "",
+              "",
+              "123 Fabricated Street",
+              "Springfield",
+              "IL",
+              "62704",
+              "US"
+            ]
+          ],
+          [
+            "tel",
+            {
+              "type": "voice"
+            },
+            "uri",
+            "tel:+1.5555550123"
+          ],
+          [
+            "email",
+            {},
+            "text",
+            "pat.fabricated@example.com"
+          ]
+        ]
+      ]
+    },
+    {
+      "objectClassName": "entity",
+      "handle": "ADM-SYNTH-1",
+      "roles": [
+        "administrative"
+      ],
+      "vcardArray": [
+        "vcard",
+        [
+          [
+            "version",
+            {},
+            "text",
+            "4.0"
+          ],
+          [
+            "fn",
+            {},
+            "text",
+            "Sam Fabricated-Admin"
+          ],
+          [
+            "adr",
+            {},
+            "text",
+            [
+              "",
+              "",
+              "456 Invented Avenue",
+              "Springfield",
+              "IL",
+              "62704",
+              "US"
+            ]
+          ],
+          [
+            "tel",
+            {
+              "type": "voice"
+            },
+            "uri",
+            "tel:+1.5555550145"
+          ],
+          [
+            "email",
+            {},
+            "text",
+            "sam.fabricated@example.com"
+          ]
+        ]
+      ]
+    },
+    {
+      "objectClassName": "entity",
+      "handle": "TEC-SYNTH-1",
+      "roles": [
+        "technical"
+      ],
+      "vcardArray": [
+        "vcard",
+        [
+          [
+            "version",
+            {},
+            "text",
+            "4.0"
+          ],
+          [
+            "fn",
+            {},
+            "text",
+            "Lee Fabricated-Tech"
+          ],
+          [
+            "adr",
+            {},
+            "text",
+            [
+              "",
+              "",
+              "789 Madeup Lane",
+              "Springfield",
+              "IL",
+              "62704",
+              "US"
+            ]
+          ],
+          [
+            "tel",
+            {
+              "type": "voice"
+            },
+            "uri",
+            "tel:+1.5555550167"
+          ],
+          [
+            "email",
+            {},
+            "text",
+            "lee.fabricated@example.com"
+          ]
+        ]
+      ]
+    }
+  ],
+  "events": [
+    {
+      "eventAction": "registration",
+      "eventDate": "2012-03-02T17:11:09Z"
+    },
+    {
+      "eventAction": "expiration",
+      "eventDate": "2027-03-02T17:11:09Z"
+    },
+    {
+      "eventAction": "last update of RDAP database",
+      "eventDate": "2026-09-30T20:55:43Z"
+    }
+  ],
+  "nameservers": [
+    {
+      "objectClassName": "nameserver",
+      "ldhName": "ELLIOTT.NS.CLOUDFLARE.COM"
+    },
+    {
+      "objectClassName": "nameserver",
+      "ldhName": "HERA.NS.CLOUDFLARE.COM"
+    }
+  ],
+  "rdapConformance": [
+    "rdap_level_0",
+    "icann_rdap_technical_implementation_guide_1",
+    "icann_rdap_response_profile_1"
+  ],
+  "notices": [
+    {
+      "title": "Terms of Service",
+      "description": [
+        "Service subject to Terms of Use."
+      ],
+      "links": [
+        {
+          "href": "https://www.verisign.com/domain-names/registration-data-access-protocol/terms-service/index.xhtml",
+          "type": "text/html",
+          "value": "https://rdap.verisign.com/com/v1/domain/example.com",
+          "rel": "terms-of-service"
+        }
+      ]
+    },
+    {
+      "title": "Status Codes",
+      "description": [
+        "For more information on domain status codes, please visit https://icann.org/epp"
+      ],
+      "links": [
+        {
+          "href": "https://icann.org/epp",
+          "type": "text/html",
+          "value": "https://rdap.verisign.com/com/v1/domain/example.com",
+          "rel": "glossary"
+        }
+      ]
+    },
+    {
+      "title": "RDDS Inaccuracy Complaint Form",
+      "description": [
+        "URL of the ICANN RDDS Inaccuracy Complaint Form: https://icann.org/wicf"
+      ],
+      "links": [
+        {
+          "href": "https://icann.org/wicf",
+          "type": "text/html",
+          "value": "https://rdap.verisign.com/com/v1/domain/example.com",
+          "rel": "help"
+        }
+      ]
+    }
+  ]
+}

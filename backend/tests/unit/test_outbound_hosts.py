@@ -42,6 +42,7 @@ BACKEND_HOSTS = frozenset(
         "airtable.com",
         "www.airtable.com",
         "www.google.com",
+        "www.iana.org",  # RDAP's terms page on the `rdap` source row, v0.13.0
     }
 )
 

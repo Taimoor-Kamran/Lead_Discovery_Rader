@@ -29,8 +29,11 @@ EXPECTED_TABLES = {
     "crm_sync_attempts",
     "crm_fake_records",
     "alerts",
+    "domain_intel",
 }
 HARDENING_TABLES = {"alerts"}
+# Tables from specs after v0.12.0: every downgrade below those revisions takes them too.
+DOMAIN_INTEL_TABLES = {"domain_intel"}
 HARDENING_USER_COLUMNS = {
     "must_change_password",
     "failed_login_count",
@@ -105,7 +108,7 @@ def test_down_to_v0_8_removes_only_the_v0_11_columns_and_comes_back(database_url
 
     command.downgrade(config, "0008_hardening")
     engine = create_engine(url)
-    assert set(inspect(engine).get_table_names()) == tables_at_head
+    assert set(inspect(engine).get_table_names()) == tables_at_head - DOMAIN_INTEL_TABLES
     for table, columns in DEEPER_AUDIT_COLUMNS.items():
         assert columns & _columns(engine, table) == set(), table
     assert "must_change_password" in _columns(engine, "users"), "only v0.11.0 comes off"
@@ -139,7 +142,7 @@ def test_down_to_v0_7_and_back_up_leaves_the_schema_as_it_was(database_url: str)
     job_columns = {c["name"] for c in inspect(engine).get_columns("search_jobs")}
     engine.dispose()
 
-    assert at_head - after_downgrade == HARDENING_TABLES
+    assert at_head - after_downgrade == HARDENING_TABLES | DOMAIN_INTEL_TABLES
     assert HARDENING_USER_COLUMNS & user_columns == set()
     assert "max_results" not in job_columns
     assert after_downgrade >= CRM_TABLES, "only v0.8.0 comes off"
@@ -168,7 +171,7 @@ def test_down_to_v0_6_takes_the_crm_with_it(database_url: str) -> None:
     enums_after = _enums(engine)
     engine.dispose()
 
-    assert at_head - after_downgrade == CRM_TABLES | HARDENING_TABLES
+    assert at_head - after_downgrade == CRM_TABLES | HARDENING_TABLES | DOMAIN_INTEL_TABLES
     assert CRM_ENUMS & enums_after == set()
     assert {"review_decisions", "suppressions"} <= after_downgrade, "only v0.7.0+ comes off"
     assert {"review_decision", "suppression_source", "review_status"} <= enums_after
@@ -197,7 +200,7 @@ def test_down_to_v0_5_takes_review_with_it(database_url: str) -> None:
     opportunity_columns = {c["name"] for c in inspect(engine).get_columns("opportunities")}
     engine.dispose()
 
-    assert at_head - after_downgrade == CRM_TABLES | HARDENING_TABLES | {
+    assert at_head - after_downgrade == CRM_TABLES | HARDENING_TABLES | DOMAIN_INTEL_TABLES | {
         "review_decisions",
         "suppressions",
     }
@@ -232,7 +235,7 @@ def test_down_to_v0_2_takes_entity_resolution_with_it(database_url: str) -> None
     user_columns = {c["name"] for c in inspect(engine).get_columns("users")}
     engine.dispose()
 
-    assert at_head - after_downgrade == CRM_TABLES | HARDENING_TABLES | {
+    assert at_head - after_downgrade == CRM_TABLES | HARDENING_TABLES | DOMAIN_INTEL_TABLES | {
         "review_decisions",
         "suppressions",
         "opportunities",
@@ -418,6 +421,41 @@ def test_the_not_readable_status_comes_off_as_failed(database_url: str) -> None:
     command.upgrade(config, "head")
 
 
+def test_the_domain_intel_table_comes_off_alone_and_back(database_url: str) -> None:
+    """v0.13.0 adds one table and nothing else; down to 0014 takes exactly that table."""
+    url = _fresh_database(database_url)
+    config = alembic_config(url)
+    command.upgrade(config, "head")
+    engine = create_engine(url)
+    tables_at_head = set(inspect(engine).get_table_names())
+    columns_at_head = {table: _columns(engine, table) for table in tables_at_head}
+    assert columns_at_head["domain_intel"] == {
+        "domain",
+        "dns",
+        "rdap",
+        "dns_checked_at",
+        "rdap_checked_at",
+        "created_at",
+        "updated_at",
+    }
+    enums_at_head = _enums(engine)
+    engine.dispose()
+
+    command.downgrade(config, "0014_opportunity_withdrawal")
+    engine = create_engine(url)
+    assert set(inspect(engine).get_table_names()) == tables_at_head - {"domain_intel"}
+    assert {"withdrawn_at", "withdrawn_reason"} <= _columns(engine, "opportunities")
+    for table in tables_at_head - {"domain_intel"}:
+        assert _columns(engine, table) == columns_at_head[table], table
+    assert _enums(engine) == enums_at_head
+    engine.dispose()
+
+    command.upgrade(config, "head")
+    engine = create_engine(url)
+    assert "domain_intel" in inspect(engine).get_table_names()
+    engine.dispose()
+
+
 def _insert_opportunity(connection: object, business_id: uuid.UUID, *, withdrawn: bool) -> None:
     connection.execute(  # type: ignore[attr-defined]
         text(
@@ -431,11 +469,16 @@ def _insert_opportunity(connection: object, business_id: uuid.UUID, *, withdrawn
 
 
 def test_withdrawal_columns_let_a_live_row_sit_beside_a_withdrawn_one(database_url: str) -> None:
-    """0014: the pending index ignores withdrawn rows; downgrade keeps only the live one."""
+    """0014: the pending index ignores withdrawn rows; downgrade keeps only the live one.
+
+    Down to 0013 also takes 0015 (domain_intel) off on the way, so the table set is checked
+    against that too.
+    """
     url = _fresh_database(database_url)
     config = alembic_config(url)
     command.upgrade(config, "head")
     engine = create_engine(url)
+    tables_at_head = set(inspect(engine).get_table_names())
     assert {"withdrawn_at", "withdrawn_reason"} <= _columns(engine, "opportunities")
     business_id = uuid.uuid4()
     with engine.begin() as connection:
@@ -452,6 +495,7 @@ def test_withdrawal_columns_let_a_live_row_sit_beside_a_withdrawn_one(database_u
 
     command.downgrade(config, "0013_not_readable_status")
     engine = create_engine(url)
+    assert set(inspect(engine).get_table_names()) == tables_at_head - DOMAIN_INTEL_TABLES
     assert {"withdrawn_at", "withdrawn_reason"} & _columns(engine, "opportunities") == set()
     with engine.connect() as connection:
         count = connection.execute(text("SELECT count(*) FROM opportunities")).scalar_one()
@@ -461,4 +505,5 @@ def test_withdrawal_columns_let_a_live_row_sit_beside_a_withdrawn_one(database_u
     command.upgrade(config, "head")
     engine = create_engine(url)
     assert {"withdrawn_at", "withdrawn_reason"} <= _columns(engine, "opportunities")
+    assert "domain_intel" in inspect(engine).get_table_names()
     engine.dispose()

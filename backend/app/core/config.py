@@ -128,6 +128,19 @@ class Settings(BaseSettings):
     audit_page_text_max_chars: int = 20_000
     psi_rps: float = 1.0
     psi_daily_call_cap: int = 200
+    # Domain intelligence (v0.13.0): DNS and RDAP facts about the site's registrable
+    # domain, which answer even when the homepage is a bot challenge or does not load.
+    # Both off means the audit runs exactly as it did before v0.13.0.
+    dns_enabled: bool = True
+    # One budget per query, shared by the query and its single retry.
+    dns_resolver_timeout_seconds: float = Field(default=5.0, gt=0)
+    dns_intel_ttl_days: int = Field(default=7, ge=0)
+    rdap_enabled: bool = True
+    rdap_ttl_days: int = Field(default=30, ge=0)
+    rdap_rps: float = 1.0
+    rdap_daily_call_cap: int = 200
+    # A registration expiring within this many days is reported as `domain_expiring_soon`.
+    audit_domain_expiry_warn_days: int = Field(default=60, ge=1)
     # Industries where booking or scheduling online is normal, so its absence is a
     # finding. Everywhere else `no_online_booking` would be noise, not an observation.
     audit_booking_industries: Annotated[list[str], NoDecode] = Field(
@@ -294,8 +307,9 @@ class Settings(BaseSettings):
     job_timeout_seconds: int = Field(default=1800, ge=60)
     # An audit run's limit is this per business, or `job_timeout_seconds` if that is more:
     # fetches with the per-host throttle (~15 s) plus PageSpeed at worst (2 x 65 s), plus
-    # since v0.12.1 one booking-link target (its robots.txt and the page, 2 x 20 s).
-    audit_seconds_per_business: int = Field(default=190, ge=10)
+    # since v0.12.1 one booking-link target (its robots.txt and the page, 2 x 20 s), plus
+    # since v0.13.0 the domain lookup (DNS and RDAP together, 15 s).
+    audit_seconds_per_business: int = Field(default=210, ge=10)
     # JSON logs also go to `LOG_DIR/LOG_FILE` with daily rotation when LOG_DIR is set.
     log_dir: str = ""
     log_file: str = "app.log"

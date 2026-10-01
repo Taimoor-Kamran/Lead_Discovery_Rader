@@ -50,7 +50,22 @@ PRE_V012_SERVICES = {
 }
 
 # The findings whose facts an outside service measured or reported.
-API_FINDINGS = {"slow_mobile", "low_accessibility_score", "low_best_practices_score", "few_reviews"}
+API_FINDINGS = {
+    "slow_mobile",
+    "low_accessibility_score",
+    "low_best_practices_score",
+    "few_reviews",
+    # v0.13.0: what DNS answered or the registry reported.
+    "domain_expired",
+    "domain_no_a_record",
+    "domain_expiring_soon",
+    "multiple_spf_records",
+    "spf_allows_all",
+    "no_spf",
+    "no_dmarc",
+    "dmarc_policy_none",
+    "no_domain_mx",
+}
 
 # The only values a wording template may be filled with. Messages reach the AI step
 # unscrubbed, so none of these may ever carry page text, a phone, an email or an address.
@@ -72,7 +87,11 @@ SAFE_WORDING_FIELDS = {
     "parts",  # "unit", "ZIP code"…
     "listing",  # the listing's website URL
     "site",  # the homepage's own URL
-    "domain",  # a placeholder email *domain*, never the address
+    "domain",  # a placeholder email *domain*, never the address; or a registrable domain
+    "host",  # the host the site was served from (v0.13.0)
+    "date",  # a registry expiry date (v0.13.0)
+    "days",  # days until that date (v0.13.0)
+    "mechanism",  # an SPF `all` mechanism: `+all` or `all` (v0.13.0)
     "phrase",  # a phrase from FOOTER_/PAGE_PLACEHOLDER_PHRASES
 }
 

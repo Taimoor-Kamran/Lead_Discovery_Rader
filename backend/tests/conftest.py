@@ -218,7 +218,7 @@ def db(migrated_database: str) -> Iterator[Session]:
         text(
             "TRUNCATE alerts, crm_sync_attempts, crm_lead_opportunities, crm_leads, "
             "crm_fake_records, review_decisions, suppressions, opportunities, ai_classifications, "
-            "website_audits, api_calls, "
+            "website_audits, api_calls, domain_intel, "
             "match_candidates, business_field_values, businesses, record_sightings, "
             "discovered_records, audit_logs, job_runs, search_jobs, sources, users "
             "RESTART IDENTITY CASCADE"
@@ -265,6 +265,33 @@ def mock_http() -> Iterator[respx.MockRouter]:
     """
     with respx.mock(assert_all_called=False) as router:
         yield router
+
+
+@pytest.fixture(autouse=True)
+def no_live_dns(monkeypatch: pytest.MonkeyPatch) -> Iterator[list[str]]:
+    """Refuse every live DNS query, the way `mock_http` refuses live HTTP (v0.13.0).
+
+    The resolver turns a transport error into `unknown`, and runs inside a thread pool, so
+    an exception alone could pass unnoticed; each attempt is recorded and fails the test at
+    teardown instead. A test that scripts the transport (`test_dns_resolver.py`) patches
+    over this with its own stand-in.
+    """
+    import dns.query
+
+    attempts: list[str] = []
+
+    def refuse(kind: str) -> Any:
+        def call(query: Any, where: str, *args: Any, **kwargs: Any) -> Any:
+            attempts.append(f"{kind} to {where}")
+            raise OSError(f"live DNS ({kind}) is not allowed in tests")
+
+        return call
+
+    for kind in ("udp", "tcp", "tls", "https", "quic"):
+        if hasattr(dns.query, kind):
+            monkeypatch.setattr(dns.query, kind, refuse(kind))
+    yield attempts
+    assert not attempts, f"a test tried live DNS: {attempts}"
 
 
 @pytest.fixture(autouse=True)

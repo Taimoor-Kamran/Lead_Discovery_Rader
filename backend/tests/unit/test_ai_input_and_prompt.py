@@ -238,3 +238,26 @@ def test_rendering_delimits_the_page_text_and_neutralises_a_fake_end_marker() ->
     assert "seo_gbp" in user
     assert "{{" not in user
     assert "{{" not in system
+
+
+def test_findings_filed_under_no_service_never_reach_the_model() -> None:
+    """v0.13.0, decision C4: the six email findings are context for a rep, not for the AI."""
+    business = make_business()
+    email = ["no_spf", "no_dmarc", "dmarc_policy_none", "no_domain_mx", "spf_allows_all"]
+    audit = make_audit(
+        business,
+        findings=[
+            finding("domain_expired"),
+            *[finding(code) for code in email],
+            finding("multiple_spf_records"),
+            finding("no_online_booking"),
+        ],
+    )
+
+    built = build_input(business, audit, settings=Settings(ai_page_text_max_chars=8000))
+    rendered = built.normalised() + "\n".join(render(built))
+
+    assert built.finding_codes == ["domain_expired", "no_online_booking"]
+    for code in [*email, "multiple_spf_records"]:
+        assert code not in rendered
+    assert "SPF" not in rendered and "DMARC" not in rendered

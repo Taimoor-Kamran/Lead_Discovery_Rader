@@ -7,7 +7,7 @@ from app.modules.audit_web.models import AuditStatus
 from app.modules.normalization.schemas import BusinessStatus
 from app.modules.opportunities import catalogue
 from app.modules.opportunities.rules import ADS_SOCIAL_REASON, rule_opportunities
-from tests.factories import check, finding, make_audit, make_business
+from tests.factories import DOMAIN_WORDING, check, finding, make_audit, make_business
 
 EXPECTED_SERVICE = {
     "no_website": "website_design",
@@ -36,6 +36,16 @@ EXPECTED_SERVICE = {
     "no_online_booking": "booking_setup",
     "no_live_chat": "ai_chat_setup",
     "robots_blocked": None,
+    # v0.13.0 (spec table "Finding codes")
+    "domain_expired": "website_design",
+    "domain_no_a_record": "website_design",
+    "domain_expiring_soon": "website_design",
+    "multiple_spf_records": None,
+    "spf_allows_all": None,
+    "no_spf": None,
+    "no_dmarc": None,
+    "dmarc_policy_none": None,
+    "no_domain_mx": None,
 }
 
 
@@ -58,7 +68,16 @@ def test_every_audit_finding_maps_to_its_service(code: str, service: str | None)
 def test_no_catalogue_finding_is_left_unmapped_by_accident() -> None:
     unmapped = {code for code in CATALOGUE if catalogue.service_for_finding(code) is None}
 
-    assert unmapped == {"robots_blocked"}
+    # v0.13.0: the six email findings are context for the rep, never something sold.
+    assert unmapped == {
+        "robots_blocked",
+        "multiple_spf_records",
+        "spf_allows_all",
+        "no_spf",
+        "no_dmarc",
+        "dmarc_policy_none",
+        "no_domain_mx",
+    }
 
 
 @pytest.mark.parametrize(
@@ -109,6 +128,7 @@ def test_one_finding_yields_one_opportunity_with_verbatim_evidence(code: str) ->
         noun={"unlabelled_form_fields": "form fields", "few_reviews": "reviews"}.get(code, "words"),
         higher="h1",
         lower="h3",
+        **({} if code not in DOMAIN_WORDING else {**DOMAIN_WORDING[code]}),
     )
     [evidence] = opportunity.evidence
     assert evidence.finding_code == code

@@ -170,7 +170,14 @@ def test_a_business_with_no_site_of_its_own_is_skipped_without_a_fetch(
         assert audit.http_status is None
         assert audit.final_url is None
         assert audit.page_text is None, "nothing was fetched, so there is nothing to store"
-        assert audit.checks == {}
+        assert audit.checks == {
+            # v0.13.0: no domain lookup either, and the audit says why.
+            "domain_intel": {
+                "value": None,
+                "evidence_text": f"audit status {audit.status.value}: no domain lookup",
+                "evidence_url": None,
+            }
+        }
 
 
 def test_pagespeed_numbers_are_stored_for_every_site_that_was_read(
@@ -208,7 +215,14 @@ def test_a_robots_blocked_site_says_nothing_about_its_content(
         audit = audit_for_domain(db, domain)
 
         assert audit.finding_codes == ["robots_blocked"], domain
-        assert audit.checks == {}, "no page was read, so there is nothing to report about one"
+        assert audit.checks == {
+            # v0.13.0: no domain lookup either, and the audit says why.
+            "domain_intel": {
+                "value": None,
+                "evidence_text": f"audit status {audit.status.value}: no domain lookup",
+                "evidence_url": None,
+            }
+        }, "no page was read, so there is nothing to report about one"
         assert audit.page_text is None
         assert audit.html_sha256 is None
         assert audit.findings[0]["evidence_url"].endswith("/robots.txt")

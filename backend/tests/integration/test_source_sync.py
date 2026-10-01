@@ -106,3 +106,25 @@ def test_the_openai_row_is_a_metered_service_and_not_searchable(db: Session) -> 
     with pytest.raises(ValidationFailedError) as info:
         validate_source_ids(db, [openai_row.id])
     assert info.value.details["service_sources"] == ["openai"]
+
+
+def test_the_rdap_row_is_a_metered_service_and_not_searchable(db: Session) -> None:
+    """v0.13.0: RDAP gets a source row so its spend shows in `api_calls`, like PageSpeed."""
+    from app.core.errors import ValidationFailedError
+    from app.core.rdap import RDAP_SOURCE_NAME
+    from app.modules.sources.service import validate_source_ids
+
+    sources = {s.name: s for s in registry.sync_sources(db)}
+    db.commit()
+
+    rdap = sources[RDAP_SOURCE_NAME]
+    assert rdap.kind is SourceKind.api
+    assert rdap.config["role"] == "audit_service"
+    assert rdap.config["rate_limit"] == {
+        "requests_per_second": 1.0,
+        "burst": 1,
+        "daily_call_cap": 200,
+    }
+    with pytest.raises(ValidationFailedError) as info:
+        validate_source_ids(db, [rdap.id])
+    assert info.value.details["service_sources"] == [RDAP_SOURCE_NAME]

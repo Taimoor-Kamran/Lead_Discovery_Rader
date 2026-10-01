@@ -57,6 +57,9 @@ from app.modules.audit_web.psi import (
 from app.modules.audit_web.schemas import WebsiteAuditDetail, WebsiteAuditSummary
 from app.modules.businesses.models import Business, BusinessFieldValue
 from app.modules.discovery.models import DiscoveredRecord
+from app.modules.domain_intel import findings as domain_findings
+from app.modules.domain_intel import service as domain_service
+from app.modules.domain_intel.service import DomainTools
 from app.modules.jobs.models import JobRun as JobRunType
 from app.modules.normalization.schemas import BusinessStatus, WebsiteKind
 
@@ -82,6 +85,14 @@ class AuditTools:
     psi: PageSpeedClient
     settings: Settings = field(default_factory=get_settings)
     connectivity: ConnectivityProbe | None = None
+    # DNS and RDAP (v0.13.0). Built from `settings` on first use when not given, which in
+    # development and CI means the fixture resolver and no live registry.
+    domain: DomainTools | None = None
+
+    def domain_tools(self) -> DomainTools:
+        if self.domain is None:
+            self.domain = domain_service.build_tools(self.settings)
+        return self.domain
 
     @classmethod
     def build(cls, *, job_run_id: uuid.UUID | None = None) -> "AuditTools":
@@ -91,6 +102,7 @@ class AuditTools:
             psi=build_psi_client(job_run_id=job_run_id, settings=settings),
             settings=settings,
             connectivity=build_probe(settings),
+            domain=domain_service.build_tools(settings, job_run_id=job_run_id),
         )
 
 
@@ -106,8 +118,90 @@ def audit_business(
     now: datetime | None = None,
 ) -> WebsiteAudit:
     """Audit one business's homepage and store the result. Never raises for a bad site."""
-    settings = tools.settings
     started = now or datetime.now(UTC)
+    seen = _Seen()
+    audit = _audit_homepage(
+        session, business, tools=tools, job_run_id=job_run_id, started=started, seen=seen
+    )
+    _attach_domain_intel(session, audit, tools=tools, seen=seen, now=started)
+    return audit
+
+
+@dataclass
+class _Seen:
+    """What the homepage audit saw that the domain step needs and the stored row does not keep."""
+
+    # robots.txt's own HTTP status, when asked in this audit: any status line proves the
+    # host resolved (decision C10). A decision served from the robots cache proves nothing.
+    robots_status: int | None = None
+
+
+def _attach_domain_intel(
+    session: Session, audit: WebsiteAudit, *, tools: AuditTools, seen: _Seen, now: datetime
+) -> None:
+    """Add `checks.domain_intel` to a stored audit (spec v0.13.0), whatever its status was.
+
+    One place for every status path, rather than six. With DNS and RDAP both off the audit
+    is left exactly as it was before v0.13.0.
+    """
+    settings = tools.settings
+    if not domain_service.enabled(settings):
+        return
+    result = domain_service.check(
+        session,
+        status=audit.status,
+        final_url=audit.final_url,
+        website=audit.url_audited or None,
+        tools=tools.domain_tools(),
+        settings=settings,
+        now=now,
+    )
+    audit.checks = {**(audit.checks or {}), domain_service.CHECK_KEY: result.as_dict()}
+    found = domain_findings.for_domain(
+        result.value,
+        status=audit.status,
+        site_answered=_site_answered(audit, seen),
+        now=now,
+        expiry_warn_days=settings.audit_domain_expiry_warn_days,
+    )
+    if found:
+        audit.findings = [*(audit.findings or []), *findings_module.as_payload(found)]
+        logger.info(
+            "domain findings",
+            extra={
+                "business_id": str(audit.business_id),
+                "website_audit_id": str(audit.id),
+                "findings": [finding.code for finding in found],
+            },
+        )
+    audit.finished_at = datetime.now(UTC)
+    session.flush()
+
+
+def _site_answered(audit: WebsiteAudit, seen: _Seen) -> bool:
+    """Whether this audit proved the site host resolves (decision C10).
+
+    Any HTTP status line from the homepage or from robots.txt; or a TLS certificate that
+    failed verification, since a handshake needs a connection, and a connection needs an
+    address. Stricter than the spec's "a 2xx page" on purpose: each of these contradicts
+    "no address record".
+    """
+    if audit.http_status is not None or seen.robots_status is not None:
+        return True
+    tls = (audit.checks or {}).get("tls_valid")
+    return isinstance(tls, dict) and tls.get("value") is False
+
+
+def _audit_homepage(
+    session: Session,
+    business: Business,
+    *,
+    tools: AuditTools,
+    job_run_id: uuid.UUID | None,
+    started: datetime,
+    seen: _Seen,
+) -> WebsiteAudit:
+    settings = tools.settings
     context = findings_module.FindingContext(
         industry=business.industry,
         website_kind=business.website_kind,
@@ -143,6 +237,8 @@ def audit_business(
         return _refused(session, business, job_run_id, url, exc, started, settings)
     if outage is not None:
         return _our_outage(session, business, job_run_id, url, outage, started, settings)
+    if not robots.from_cache:
+        seen.robots_status = robots.status_code
 
     # A certificate that does not verify, or a host that never answers, shows up on the
     # robots request — before the homepage is asked for. Neither is a robots decision, so

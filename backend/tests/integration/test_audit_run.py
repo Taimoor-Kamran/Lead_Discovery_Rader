@@ -184,7 +184,14 @@ def test_a_robots_disallowed_site_is_never_asked_for_its_homepage(
     # robots.txt was read; the homepage never was.
     assert audit_tools.fetcher.backends[0].calls == ["https://wellington.invalid/robots.txt"]
     assert audit_tools.fetcher.requested == []
-    assert audit.checks == {}
+    assert audit.checks == {
+        # v0.13.0: no domain lookup either, and the audit says why.
+        "domain_intel": {
+            "value": None,
+            "evidence_text": f"audit status {audit.status.value}: no domain lookup",
+            "evidence_url": None,
+        }
+    }
     assert audit.page_text is None
 
 

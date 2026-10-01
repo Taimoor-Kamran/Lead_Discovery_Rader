@@ -140,6 +140,16 @@ def test_the_catalogue_covers_every_code_the_spec_names() -> None:
         "listing_website_http",
         "listing_website_host_mismatch",
         "no_click_to_call",
+        # v0.13.0
+        "domain_expired",
+        "domain_no_a_record",
+        "domain_expiring_soon",
+        "multiple_spf_records",
+        "spf_allows_all",
+        "no_spf",
+        "no_dmarc",
+        "dmarc_policy_none",
+        "no_domain_mx",
     }
 
 

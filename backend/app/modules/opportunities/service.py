@@ -52,6 +52,7 @@ from app.modules.audit_web.models import AuditStatus, WebsiteAudit
 from app.modules.audit_web.service import latest_audit
 from app.modules.businesses.models import Business
 from app.modules.compliance.service import is_suppressed
+from app.modules.domain_intel import evidence as domain_evidence
 from app.modules.jobs.models import JobRun as JobRunType
 from app.modules.normalization.schemas import BusinessStatus
 from app.modules.opportunities.catalogue import (
@@ -60,7 +61,11 @@ from app.modules.opportunities.catalogue import (
     service_keys,
 )
 from app.modules.opportunities.models import Opportunity, OpportunitySource, ReviewStatus
-from app.modules.opportunities.rules import RuleOpportunity, rule_opportunities
+from app.modules.opportunities.rules import (
+    BOT_CHALLENGE_FINDINGS,
+    RuleOpportunity,
+    rule_opportunities,
+)
 from app.modules.opportunities.schemas import (
     AIProvenanceRead,
     OpportunityDetail,
@@ -220,11 +225,17 @@ def classify(
     outcome = ClassificationOutcome(business_id=business.id, website_audit_id=audit.id)
     if _no_opportunities(business, audit):
         # A closed business is gone, so nothing it was offered still stands. A site that
-        # refused us was never read, and that is no evidence of anything (v0.12.1, H).
-        if business.business_status is BusinessStatus.closed_permanently:
-            outcome.withdrawn = withdraw_unsupported(
-                session, business, audit, [], merged_complete=True, now=now
-            )
+        # refused us was never read, and that is no evidence of anything (v0.12.1, H) —
+        # but a domain lookup that worked still is, for a row resting on domain findings
+        # alone (v0.13.0, W).
+        outcome.withdrawn = withdraw_unsupported(
+            session,
+            business,
+            audit,
+            [],
+            merged_complete=business.business_status is BusinessStatus.closed_permanently,
+            now=now,
+        )
         return outcome
 
     ai_run = _run_ai(session, business, audit, tools=tools, job_run_id=job_run_id, now=now)
@@ -272,11 +283,15 @@ def classify(
 
 def _no_opportunities(business: Business, audit: WebsiteAudit) -> bool:
     """Businesses the spec says get nothing: closed for good, or a site that refused us —
-    by robots.txt, or with a bot-protection challenge (v0.12.0)."""
+    by robots.txt, or with a bot-protection challenge (v0.12.0) that carries no domain
+    finding allowed to stand on that status (v0.13.0, decision C1)."""
     return (
         business.business_status is BusinessStatus.closed_permanently
         or audit.status is AuditStatus.robots_blocked
-        or audit.status is AuditStatus.bot_challenge
+        or (
+            audit.status is AuditStatus.bot_challenge
+            and not set(audit.finding_codes) & BOT_CHALLENGE_FINDINGS
+        )
         or "robots_blocked" in audit.finding_codes
     )
 
@@ -949,14 +964,33 @@ def upsert_opportunities(
 SERVICE_ABSENT = "service_absent"
 FINDINGS_ABSENT = "findings_absent"
 
-# The only audits that looked at the site and can show a finding is gone. `failed`,
+# The only audits that looked at the site and can show a page finding is gone. `failed`,
 # `unreachable`, `bot_challenge`, `not_readable` and `robots_blocked` read nothing, so
-# they have no findings because they could not look (v0.12.1, correction H).
+# they have no page findings because they could not look (v0.12.1, correction H).
 WITHDRAWAL_AUDIT_STATUSES = frozenset({AuditStatus.done, AuditStatus.skipped})
 
 
 def can_withdraw_on(audit: WebsiteAudit) -> bool:
+    """Whether the audit read the page, so can judge a row resting on page evidence."""
     return audit.status in WITHDRAWAL_AUDIT_STATUSES
+
+
+def can_judge(row: Opportunity, audit: WebsiteAudit) -> bool:
+    """Whether `audit` actually looked at every kind of evidence `row` rests on.
+
+    One audit carries two kinds of evidence, each judged on whether its own lookup worked
+    (v0.13.0, amendment W). Page evidence — any page finding, or no cited finding at all —
+    needs an audit that read the page. Domain evidence needs the DNS or RDAP question
+    behind each cited domain finding to have been answered in this audit, whatever the
+    homepage status. So a `bot_challenge` audit with a working lookup can judge a row that
+    cites only domain findings, and still cannot judge one that cites anything from the page.
+    """
+    cited = cited_findings(row)
+    domain = cited & domain_evidence.DOMAIN_FINDINGS
+    rests_on_page = domain != cited or not cited
+    if rests_on_page and not can_withdraw_on(audit):
+        return False
+    return all(domain_evidence.lookup_worked(audit.checks, code) for code in domain)
 
 
 def cited_findings(row: Opportunity) -> set[str]:
@@ -1014,21 +1048,14 @@ def withdraw_unsupported(
     same situation is logged at warning level and left exactly as it is. Returns how many
     rows were withdrawn.
 
-    An audit that could not look withdraws nothing, unless the business is permanently
-    closed: then the business itself is gone, whatever its audit says.
+    A row is judged only when the audit looked at every kind of evidence it rests on
+    (`can_judge`); otherwise it is left alone. A permanently closed business is the
+    exception: the business itself is gone, whatever its audit says. When the page was not
+    read, a row resting on domain findings alone is judged by its cited findings only,
+    because the merged result then says nothing about the page's services.
     """
-    if not can_withdraw_on(audit) and business.business_status is not (
-        BusinessStatus.closed_permanently
-    ):
-        logger.info(
-            "audit could not look; nothing withdrawn",
-            extra={
-                "business_id": str(business.id),
-                "website_audit_id": str(audit.id),
-                "audit_status": audit.status.value,
-            },
-        )
-        return 0
+    closed = business.business_status is BusinessStatus.closed_permanently
+    page_read = can_withdraw_on(audit) or closed
     moment = now or datetime.now(UTC)
     services = {item.service for item in merged}
     rows = session.scalars(
@@ -1040,8 +1067,22 @@ def withdraw_unsupported(
     )
     withdrawn = 0
     for row in rows:
+        if not closed and not can_judge(row, audit):
+            logger.info(
+                "audit could not look at this row's evidence; not withdrawn",
+                extra={
+                    "business_id": str(business.id),
+                    "website_audit_id": str(audit.id),
+                    "opportunity_id": str(row.id),
+                    "audit_status": audit.status.value,
+                },
+            )
+            continue
         reasons = withdrawal_reasons(
-            row, audit=audit, merged_services=services, merged_complete=merged_complete
+            row,
+            audit=audit,
+            merged_services=services if page_read else None,
+            merged_complete=merged_complete,
         )
         if not reasons:
             continue
