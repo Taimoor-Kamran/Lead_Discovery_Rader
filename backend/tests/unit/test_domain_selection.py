@@ -100,3 +100,26 @@ def test_the_deny_list_reuses_the_normalization_lists() -> None:
     assert SOCIAL_DOMAINS <= SHARED_DOMAINS
     assert LINK_IN_BIO_DOMAINS <= SHARED_DOMAINS
     assert SHORTENER_DOMAINS <= SHARED_DOMAINS
+
+
+@pytest.mark.parametrize(
+    "url", ["https://bücher.de/", "https://xn--bcher-kva.de/", "https://BÜCHER.de/"]
+)
+def test_one_internationalised_domain_gives_one_key(url: str) -> None:
+    """IDNA: the Unicode, punycode and upper-case spellings are one `domain_intel` row."""
+    chosen = select(status=AuditStatus.done, final_url=url, website=None)
+    assert chosen.target == DomainTarget(site_host="xn--bcher-kva.de", apex="xn--bcher-kva.de")
+
+
+def test_an_internationalised_www_host_keeps_its_www_and_shares_the_apex() -> None:
+    chosen = select(status=AuditStatus.done, final_url="https://www.Bücher.de/", website=None)
+    assert chosen.target == DomainTarget(site_host="www.xn--bcher-kva.de", apex="xn--bcher-kva.de")
+
+
+def test_a_host_no_idna_codec_accepts_is_skipped_with_a_reason() -> None:
+    """A zero-width joiner is not allowed in that position: there is no name to ask about."""
+    chosen = select(
+        status=AuditStatus.done, final_url="https://b\u00fccher\u200d.de/", website=None
+    )
+    assert chosen.target is None
+    assert chosen.skip_reason == "b\u00fccher\u200d.de is not a valid domain name"

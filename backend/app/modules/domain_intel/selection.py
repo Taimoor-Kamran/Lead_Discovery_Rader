@@ -10,6 +10,9 @@ by many businesses — a site builder, a social platform, a link-in-bio page, a 
 from dataclasses import dataclass
 from urllib.parse import urlsplit
 
+import dns.exception
+import dns.name
+
 from app.modules.audit_web.models import AuditStatus
 from app.modules.normalization.web import (
     BUILDER_DOMAINS,
@@ -56,6 +59,7 @@ class SkipReason:
     audit_status = "audit status {status}: no domain lookup"
     no_website = "no website"
     no_registrable_domain = "no registrable domain for {host}"
+    not_a_domain_name = "{host} is not a valid domain name"
     shared_domain = "{domain} is shared by many businesses"
 
 
@@ -78,9 +82,12 @@ def select(*, status: AuditStatus, final_url: str | None, website: str | None) -
     if status in NO_DOMAIN_STATUSES:
         return Selection(None, SkipReason.audit_status.format(status=status.value))
     url = final_url or website
-    host = _host(url)
-    if host is None:
+    raw_host = _host(url)
+    if raw_host is None:
         return Selection(None, SkipReason.no_website)
+    host = ascii_host(raw_host)
+    if host is None:
+        return Selection(None, SkipReason.not_a_domain_name.format(host=raw_host))
     apex = registered_domain(host)
     if apex is None:
         return Selection(None, SkipReason.no_registrable_domain.format(host=host))
@@ -100,3 +107,17 @@ def _host(url: str | None) -> str | None:
     if not host or "." not in host:
         return None
     return host.lower().rstrip(".") or None
+
+
+def ascii_host(host: str) -> str | None:
+    """`host` in its one ASCII (punycode) spelling, so a domain keys one cache row.
+
+    `bücher.de`, `BÜCHER.de` and `xn--bcher-kva.de` are one domain and must not become
+    three `domain_intel` rows. IDNA 2008 with UTS #46 mapping, the same codec the resolver
+    sends on the wire. `None` for a name no IDNA codec accepts: it cannot be asked about.
+    """
+    try:
+        name = dns.name.from_text(host, idna_codec=dns.name.IDNA_2008_UTS_46)
+    except (dns.exception.DNSException, UnicodeError, ValueError):
+        return None
+    return name.to_text(omit_final_dot=True).lower() or None
