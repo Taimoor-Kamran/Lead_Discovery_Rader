@@ -28,6 +28,12 @@ The paused v0.13.0 branch's `0014_domain_intel` becomes `0015` when it resumes.
   - `approved` and `needs_enrichment` rows are never withdrawn; they are logged at warning.
   - A row that cites no findings (`ads_social`) is never withdrawn by the findings test.
   - An AI-only row is not withdrawn because the AI did not answer this time.
+  - **Only an audit that looked can withdraw** (correction H). A `failed`, `unreachable`,
+    `bot_challenge`, `not_readable` or `robots_blocked` audit withdraws nothing, by either
+    test. Only a permanently closed business is withdrawn whatever its audit says. The
+    backfill skips (and counts) rows whose business's latest audit is not `done` or
+    `skipped`. `scripts/repair_wrongly_withdrawn.py` (dry run by default) restores rows
+    already withdrawn against an audit that could not look.
 - **Booking is no longer inferred from a link's text.**
   - "Request a quote" and "request service", as text or as a `/request-service` path, are
     no longer booking.

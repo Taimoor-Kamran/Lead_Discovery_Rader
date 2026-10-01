@@ -11,9 +11,11 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.errors import InvalidStateTransitionError
+from app.modules.audit_web.models import AuditStatus
 from app.modules.auth.models import Role
 from app.modules.businesses.models import Business
 from app.modules.crm.payload import approved_opportunities
+from app.modules.normalization.schemas import BusinessStatus
 from app.modules.opportunities import service
 from app.modules.opportunities.models import Opportunity, OpportunitySource, ReviewStatus
 from app.modules.review import service as review
@@ -75,6 +77,53 @@ def test_an_audit_that_stops_supporting_a_service_withdraws_it_with_a_reason(
     assert "service_absent" in reason and "findings_absent" in reason
     assert "no_online_booking" in reason
     assert str(later.id) in reason
+
+
+# An audit that could not look is not evidence that anything is gone (v0.12.1, correction H).
+# Production, 2026-10-01 11:56: a `failed` audit (our own DNS outage) withdrew all four of
+# ATX Electrical's pending rows as `findings_absent`.
+@pytest.mark.parametrize(
+    "status",
+    [
+        AuditStatus.failed,
+        AuditStatus.unreachable,
+        AuditStatus.bot_challenge,
+        AuditStatus.not_readable,
+        AuditStatus.robots_blocked,
+    ],
+)
+def test_an_audit_that_could_not_look_withdraws_nothing(db: Session, status: AuditStatus) -> None:
+    business = make_business(db)
+    make_audit(db, business)
+    classify(db, business)
+    [booking] = opportunities_of(db, business).values()
+
+    make_audit(db, business, findings=[], page_text=None, status=status, created_at=LATER)
+    outcome = service.classify(db, business, tools=make_tools("not json"), now=LATER)
+
+    assert outcome.withdrawn == 0
+    assert booking.withdrawn_at is None and booking.withdrawn_reason is None
+    assert booking.review_status is ReviewStatus.pending
+
+
+def test_a_closed_business_still_has_its_rows_withdrawn_whatever_its_audit_says(
+    db: Session,
+) -> None:
+    """The business itself is gone, so nothing it was offered still stands."""
+    business = make_business(db)
+    make_audit(db, business)
+    classify(db, business)
+    [booking] = opportunities_of(db, business).values()
+
+    business.business_status = BusinessStatus.closed_permanently
+    make_audit(
+        db, business, findings=[], page_text=None, status=AuditStatus.failed, created_at=LATER
+    )
+    outcome = service.classify(db, business, tools=make_tools("not json"), now=LATER)
+
+    assert outcome.withdrawn == 1
+    assert booking.withdrawn_at == LATER
+    assert "service_absent" in (booking.withdrawn_reason or "")
 
 
 def test_a_row_that_cites_no_findings_is_never_withdrawn_by_the_findings_test(

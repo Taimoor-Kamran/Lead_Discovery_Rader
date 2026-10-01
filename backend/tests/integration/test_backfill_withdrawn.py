@@ -8,6 +8,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from app.modules.audit_web.models import AuditStatus
 from app.modules.opportunities.backfill import find_orphans
 from app.modules.opportunities.models import Opportunity, OpportunitySource, ReviewStatus
 from tests.factories import finding
@@ -44,10 +45,10 @@ def opportunity(
     )
 
 
-def seed(db: Session) -> dict[str, Opportunity]:
+def seed(db: Session, status: AuditStatus = AuditStatus.done) -> dict[str, Opportunity]:
     business = make_business(db)
     # The latest audit has only `no_https`; `no_online_booking` is gone.
-    make_audit(db, business, findings=[finding("no_https", url=URL)], created_at=NOW)
+    make_audit(db, business, findings=[finding("no_https", url=URL)], status=status, created_at=NOW)
     rows = {
         "orphan": opportunity(
             business.id, "booking_setup", [{"finding_code": "no_online_booking", "text": "x"}]
@@ -98,3 +99,22 @@ def test_apply_withdraws_only_the_pending_orphan(db: Session) -> None:
     assert load_script().render(found, apply=True)[-1].startswith("1 pending withdrawn")
     # Idempotent: a second run finds the pending orphan already withdrawn.
     assert [o.review_status for o in find_orphans(db, apply=True, now=NOW)] == ["approved"]
+
+
+def test_a_business_whose_latest_audit_could_not_look_is_skipped_and_counted(
+    db: Session,
+) -> None:
+    """Correction H: only a `done` or `skipped` latest audit can show a finding is gone."""
+    rows = seed(db, status=AuditStatus.failed)
+
+    found = find_orphans(db, apply=True, now=NOW)
+
+    assert all(row.withdrawn_at is None for row in rows.values())
+    assert {o.opportunity_id for o in found} == {str(rows["orphan"].id), str(rows["approved"].id)}
+    assert all(o.skipped_audit_status == "failed" and not o.withdrawn for o in found)
+    lines = load_script().render(found, apply=False)
+    assert any(line.startswith("skipped (audit failed)\t") for line in lines)
+    assert lines[-1] == (
+        "0 pending to withdraw (dry run; pass --apply to write); 0 not pending, kept and "
+        "logged; 2 skipped: latest audit is not done or skipped"
+    )

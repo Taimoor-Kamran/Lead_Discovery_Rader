@@ -219,11 +219,12 @@ def classify(
     rules = rule_opportunities(business, audit)
     outcome = ClassificationOutcome(business_id=business.id, website_audit_id=audit.id)
     if _no_opportunities(business, audit):
-        # Nothing is offered for this business now, so nothing it was offered before
-        # still stands on this audit (v0.12.1).
-        outcome.withdrawn = withdraw_unsupported(
-            session, business, audit, [], merged_complete=True, now=now
-        )
+        # A closed business is gone, so nothing it was offered still stands. A site that
+        # refused us was never read, and that is no evidence of anything (v0.12.1, H).
+        if business.business_status is BusinessStatus.closed_permanently:
+            outcome.withdrawn = withdraw_unsupported(
+                session, business, audit, [], merged_complete=True, now=now
+            )
         return outcome
 
     ai_run = _run_ai(session, business, audit, tools=tools, job_run_id=job_run_id, now=now)
@@ -948,6 +949,15 @@ def upsert_opportunities(
 SERVICE_ABSENT = "service_absent"
 FINDINGS_ABSENT = "findings_absent"
 
+# The only audits that looked at the site and can show a finding is gone. `failed`,
+# `unreachable`, `bot_challenge`, `not_readable` and `robots_blocked` read nothing, so
+# they have no findings because they could not look (v0.12.1, correction H).
+WITHDRAWAL_AUDIT_STATUSES = frozenset({AuditStatus.done, AuditStatus.skipped})
+
+
+def can_withdraw_on(audit: WebsiteAudit) -> bool:
+    return audit.status in WITHDRAWAL_AUDIT_STATUSES
+
 
 def cited_findings(row: Opportunity) -> set[str]:
     """The finding codes a row's evidence cites. Empty for a row that rests on none."""
@@ -1003,7 +1013,22 @@ def withdraw_unsupported(
     CRM and a `needs_enrichment` row carries a reviewer's decision, so either one in the
     same situation is logged at warning level and left exactly as it is. Returns how many
     rows were withdrawn.
+
+    An audit that could not look withdraws nothing, unless the business is permanently
+    closed: then the business itself is gone, whatever its audit says.
     """
+    if not can_withdraw_on(audit) and business.business_status is not (
+        BusinessStatus.closed_permanently
+    ):
+        logger.info(
+            "audit could not look; nothing withdrawn",
+            extra={
+                "business_id": str(business.id),
+                "website_audit_id": str(audit.id),
+                "audit_status": audit.status.value,
+            },
+        )
+        return 0
     moment = now or datetime.now(UTC)
     services = {item.service for item in merged}
     rows = session.scalars(
