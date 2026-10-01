@@ -2812,6 +2812,11 @@ export interface components {
             audited_at: string;
             /** Finding Count */
             finding_count?: number | null;
+            /**
+             * Findings
+             * @default []
+             */
+            findings: components["schemas"]["QueueFinding"][];
             /** Pagespeed Score */
             pagespeed_score?: number | null;
             status: components["schemas"]["AuditStatus"];
@@ -2824,6 +2829,24 @@ export interface components {
          * @enum {string}
          */
         QueueBadge: "no_website" | "closed_permanently";
+        /**
+         * QueueFinding
+         * @description One finding of the latest audit, as the queue's findings column shows it (v0.14.0).
+         */
+        QueueFinding: {
+            /** Businesses With Code */
+            businesses_with_code: number;
+            /** Code */
+            code: string;
+            /** Context */
+            context: boolean;
+            /** Evidence Text */
+            evidence_text: string | null;
+            /** Method */
+            method: string | null;
+            /** Severity */
+            severity: string | null;
+        };
         /**
          * QueueItem
          * @description One business in the queue with its open opportunities, best score first.
@@ -2997,6 +3020,7 @@ export interface components {
             linked_profiles: components["schemas"]["LinkedProfilesRead"];
             /** Opportunities */
             opportunities: components["schemas"]["ReviewOpportunity"][];
+            scoring_weights: components["schemas"]["ScoringWeightsRead"];
             /** Sources */
             sources: components["schemas"]["SourceRecordRead"][];
             /** Suppressed */
@@ -3134,6 +3158,20 @@ export interface components {
         /** ScoreComponentsRead */
         ScoreComponentsRead: {
             /** Contactability */
+            contactability: number | null;
+            /** Facts */
+            facts: number | null;
+            /** Inference */
+            inference: number | null;
+            /** Intent */
+            intent: number | null;
+        };
+        /**
+         * ScoringWeightsRead
+         * @description The weights the current scoring version multiplies each component by (v0.14.0).
+         */
+        ScoringWeightsRead: {
+            /** Contactability */
             contactability: number;
             /** Facts */
             facts: number;
@@ -3141,6 +3179,8 @@ export interface components {
             inference: number;
             /** Intent */
             intent: number;
+            /** Scoring Version */
+            scoring_version: string;
         };
         /** SearchJobCreate */
         SearchJobCreate: {

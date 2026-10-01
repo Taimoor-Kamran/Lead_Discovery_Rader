@@ -251,3 +251,143 @@ def test_the_closed_badge_never_appears_on_a_row_carrying_an_opportunity(db: Ses
             assert all(QueueBadge.closed_permanently not in i.badges for i in items)
             assert items == []
     assert review.review_queue(db, badge=QueueBadge.closed_permanently).items == []
+
+
+# --- findings column: severity, then rarity (F3) ------------------------------------------
+
+
+@pytest.fixture
+def rarity_set(db: Session) -> dict[str, Business]:
+    """Three businesses whose findings make one order unambiguous.
+
+    Across the set: `no_online_booking` and `no_dmarc` are on all three; `no_https`,
+    `no_live_chat`, `images_without_alt` and `missing_meta_description` on one each.
+    P lists `no_online_booking` before `no_live_chat`, so a severity-only sort, which is
+    stable, would keep it first: only rarity puts `no_live_chat` ahead.
+    """
+    codes = {
+        "P": [
+            "no_dmarc",
+            "images_without_alt",
+            "no_online_booking",
+            "no_live_chat",
+            "no_https",
+        ],
+        "Q": ["no_dmarc", "no_online_booking", "missing_meta_description"],
+        "R": ["no_dmarc", "no_online_booking"],
+    }
+    rows: dict[str, Business] = {}
+    for name, found in codes.items():
+        business = make_business(db, name=name)
+        make_audit(db, business, findings=[finding(code, url=URL) for code in found])
+        make_opportunity(db, business)
+        rows[name] = business
+    rows["R"].state = "OK"
+    db.commit()
+    return rows
+
+
+def test_findings_rank_by_severity_then_rarity_in_the_filtered_set(
+    db: Session, rarity_set: dict[str, Business]
+) -> None:
+    rows = {i.display_name: i.latest_audit for i in review.review_queue(db).items}
+    order = {name: [f.code for f in audit.findings] for name, audit in rows.items() if audit}
+    assert order == {
+        "P": [
+            "no_https",  # high
+            "no_live_chat",  # medium, on 1 business
+            "no_online_booking",  # medium, on 3
+            "images_without_alt",  # low, on 1
+            "no_dmarc",  # low, on 3
+        ],
+        "Q": ["missing_meta_description", "no_online_booking", "no_dmarc"],
+        "R": ["no_online_booking", "no_dmarc"],
+    }
+    tops = {name: audit.top_findings for name, audit in rows.items() if audit}
+    assert tops == {
+        "P": ["no_https", "no_live_chat"],
+        "Q": ["missing_meta_description", "no_online_booking"],
+        "R": ["no_online_booking", "no_dmarc"],
+    }
+    assert len({tuple(top) for top in tops.values()}) == 3, "not the same two on every row"
+    p = rows["P"]
+    assert p is not None
+    shared = {f.code: f.businesses_with_code for f in p.findings}
+    assert shared == {
+        "no_https": 1,
+        "no_live_chat": 1,
+        "no_online_booking": 3,
+        "images_without_alt": 1,
+        "no_dmarc": 3,
+    }
+    context = {f.code for f in p.findings if f.context}
+    assert context == {"no_dmarc"}, "filed under no service: context, not sellable"
+    assert all(f.evidence_text == f"evidence for {f.code}" for f in p.findings)
+
+
+def test_rarity_follows_the_filter_and_not_the_page_or_the_sort(
+    db: Session, rarity_set: dict[str, Business]
+) -> None:
+    texas = {i.display_name: i.latest_audit for i in review.review_queue(db, state="TX").items}
+    assert set(texas) == {"P", "Q"}
+    p = texas["P"]
+    assert p is not None
+    assert {f.code: f.businesses_with_code for f in p.findings}["no_online_booking"] == 2
+
+    everywhere = {
+        "no_https": 1,
+        "no_live_chat": 1,
+        "images_without_alt": 1,
+        "missing_meta_description": 1,
+        "no_online_booking": 3,
+        "no_dmarc": 3,
+    }
+    for sort in QueueSort:
+        for sort_dir in SortDir:
+            for page in page_through(db, limit=1, sort=sort, sort_dir=sort_dir):
+                for item in page:
+                    assert item.latest_audit is not None
+                    for f in item.latest_audit.findings:
+                        assert f.businesses_with_code == everywhere[f.code]
+
+
+def test_an_older_audit_without_a_service_key_falls_back_to_the_catalogue(db: Session) -> None:
+    old = make_business(db, name="Old")
+    stored = [finding("no_dmarc", url=URL), finding("no_https", url=URL)]
+    for stored_item in stored:
+        stored_item.pop("service", None)
+    stored.append({"code": "retired_code", "severity": "low"})
+    make_audit(db, old, findings=stored)
+    make_opportunity(db, old)
+    db.commit()
+    [item] = review.review_queue(db).items
+    assert item.latest_audit is not None
+    assert {f.code: f.context for f in item.latest_audit.findings} == {
+        "no_https": False,
+        "no_dmarc": True,
+        "retired_code": False,  # unknown to the catalogue: not called context
+    }
+
+
+# --- why this score -----------------------------------------------------------------------
+
+
+def test_detail_carries_the_weights_and_a_missing_component_is_null(
+    db: Session, reviewer: User
+) -> None:
+    business = make_business(db, name="Scored")
+    row = make_opportunity(db, business)
+    row.score_components = {"facts": 0.5, "inference": 0.8, "intent": 0}
+    db.commit()
+    detail = review.review_detail(db, business.id, actor=reviewer)
+    weights = detail.scoring_weights
+    assert weights.scoring_version == "scoring-1"
+    assert (weights.facts, weights.inference, weights.intent, weights.contactability) == (
+        0.25,
+        0.45,
+        0.10,
+        0.20,
+    )
+    components = detail.opportunities[0].score_components
+    assert (components.facts, components.inference, components.intent) == (0.5, 0.8, 0.0)
+    assert components.contactability is None, "not stored is unknown, never 0"

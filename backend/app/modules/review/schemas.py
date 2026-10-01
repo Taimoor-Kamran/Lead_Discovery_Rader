@@ -15,7 +15,7 @@ from app.modules.crm.schemas import CrmLeadStatusRead, CrmSyncAttemptRead
 from app.modules.discovery.schemas import DataProviderRead
 from app.modules.normalization.schemas import BusinessStatus, WebsiteKind
 from app.modules.opportunities.models import OpportunitySource, ReviewStatus
-from app.modules.opportunities.schemas import OpportunityDetail
+from app.modules.opportunities.schemas import OpportunityDetail, ScoringWeightsRead
 from app.modules.review.models import Decision
 
 # The reasons a reviewer may give. Free text goes in `note`; `other` requires one.
@@ -146,10 +146,29 @@ class QueueOpportunity(BaseModel):
     weak: bool
 
 
+class QueueFinding(BaseModel):
+    """One finding of the latest audit, as the queue's findings column shows it (v0.14.0)."""
+
+    code: str
+    severity: str | None
+    evidence_text: str | None
+    method: str | None
+    # Filed under no service (the email findings, `robots_blocked`): context for a
+    # reviewer, nothing FlexTBS would sell.
+    context: bool
+    # How many businesses in the current filtered queue have this code on their latest
+    # audit. The ordering's tie-break, shown so the order can be checked.
+    businesses_with_code: int
+
+
 class QueueAudit(BaseModel):
     status: AuditStatus
     audited_at: datetime
+    # The first `QUEUE_TOP_FINDINGS` of `findings` (v0.14.0: at most two).
     top_findings: list[str]
+    # Every finding, worst first, then rarest in the current filtered queue first, so a
+    # code every row carries sinks below one that sets this business apart (v0.14.0, F3).
+    findings: list[QueueFinding] = []
     # How many findings the audit filed (v0.14.0). Null where the audit read nothing and
     # found nothing: that is "not measured", never "nothing wrong".
     finding_count: int | None = None
@@ -260,6 +279,9 @@ class ReviewDetail(BaseModel):
     suppressions: list[SuppressionRead]
     undo_window_minutes: int
     weak_confidence: float
+    # The current scoring version's weights (v0.14.0), for "why this score". A row scored
+    # under another version shows its components without them.
+    scoring_weights: ScoringWeightsRead
     # Where this came from: one entry per contributing discovered record, and what the
     # business's own homepage links to.
     sources: list[SourceRecordRead]

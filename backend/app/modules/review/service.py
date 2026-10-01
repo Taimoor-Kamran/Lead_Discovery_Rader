@@ -50,6 +50,8 @@ from app.modules.normalization.schemas import BusinessStatus, WebsiteKind
 from app.modules.opportunities import service as opportunities
 from app.modules.opportunities.catalogue import SERVICES
 from app.modules.opportunities.models import Opportunity, OpportunitySource, ReviewStatus
+from app.modules.opportunities.schemas import ScoringWeightsRead
+from app.modules.opportunities.scoring import SCORING_VERSION, Weights
 from app.modules.review import provenance
 from app.modules.review.models import Decision, ReviewDecision
 from app.modules.review.schemas import (
@@ -65,6 +67,7 @@ from app.modules.review.schemas import (
     LeadRead,
     QueueAudit,
     QueueBadge,
+    QueueFinding,
     QueueItem,
     QueueOpportunity,
     QueueSort,
@@ -94,6 +97,8 @@ REASON_CODES: dict[Decision, tuple[str, ...]] = {
 QUEUE_STATUSES = frozenset({ReviewStatus.pending, ReviewStatus.needs_enrichment})
 SEVERITY_ORDER = {"high": 0, "medium": 1, "low": 2, "info": 3}
 TOP_FINDINGS = 3
+# The queue's findings column shows two codes and a count of the rest (v0.14.0, F3).
+QUEUE_TOP_FINDINGS = 2
 STALE_LOCK_MESSAGE = "Another reviewer already decided this"
 
 
@@ -762,6 +767,9 @@ def review_queue(
             )
         )
     stmt = provenance.discovered_within(stmt, discovered_within_days, now=now)
+    # Rarity is over the whole filtered set, before the cursor and the limit, so a code's
+    # rank does not change from one page to the next or between the two sorts.
+    rarity = audits.finding_code_counts(session, stmt.with_only_columns(Business.id))
     key: Any = agg.c.top_score if sort is QueueSort.score else Business.user_rating_count
     descending = sort_dir is SortDir.desc
     if cursor:
@@ -797,6 +805,7 @@ def review_queue(
             weak=weak,
             include_weak=include_weak,
             data_providers=providers.get(business.id, []),
+            rarity=rarity,
         )
         for business, score, weak_hidden in rows
     ]
@@ -833,8 +842,10 @@ def _queue_item(
     weak: Decimal,
     include_weak: bool,
     data_providers: list[DataProviderRead] | None = None,
+    rarity: dict[str, int] | None = None,
 ) -> QueueItem:
     shown = [row for row in rows if include_weak or row.confidence >= weak]
+    ranked = queue_findings(latest, rarity or {}) if latest is not None else []
     return QueueItem(
         business_id=business.id,
         display_name=business.display_name,
@@ -847,7 +858,8 @@ def _queue_item(
             QueueAudit(
                 status=latest.status,
                 audited_at=latest.created_at,
-                top_findings=top_findings(latest),
+                top_findings=[item.code for item in ranked[:QUEUE_TOP_FINDINGS]],
+                findings=ranked,
                 finding_count=finding_count(latest),
                 pagespeed_score=pagespeed_score(latest),
             )
@@ -926,6 +938,47 @@ def top_findings(audit: WebsiteAudit, *, sellable_only: bool = False) -> list[st
         key=lambda item: SEVERITY_ORDER.get(str(item.get("severity")), len(SEVERITY_ORDER)),
     )
     return [str(item["code"]) for item in ranked[:TOP_FINDINGS]]
+
+
+def queue_findings(audit: WebsiteAudit, rarity: dict[str, int]) -> list[QueueFinding]:
+    """Every finding of the audit, worst first, then rarest in `rarity` first (v0.14.0, F3).
+
+    `rarity` counts, per code, the businesses in the current filtered queue whose latest
+    audit has it. Among findings of one severity the one fewer businesses share comes
+    first, so a code every row carries sinks. Ties fall back to the code, so the order is
+    the same on every load.
+    """
+    items = [item for item in (audit.findings or []) if item.get("code")]
+    items.sort(
+        key=lambda item: (
+            SEVERITY_ORDER.get(str(item.get("severity")), len(SEVERITY_ORDER)),
+            rarity.get(str(item["code"]), 0),
+            str(item["code"]),
+        )
+    )
+    return [
+        QueueFinding(
+            code=str(item["code"]),
+            severity=_str_or_none(item.get("severity")),
+            evidence_text=_str_or_none(item.get("evidence_text")),
+            method=_str_or_none(item.get("method")),
+            context=_is_context(item),
+            businesses_with_code=rarity.get(str(item["code"]), 0),
+        )
+        for item in items
+    ]
+
+
+def _str_or_none(value: Any) -> str | None:
+    return str(value) if value is not None else None
+
+
+def _is_context(item: dict[str, Any]) -> bool:
+    """Filed under no service. An older audit without the key falls back to the catalogue;
+    a code the catalogue does not know is not called context."""
+    if "service" in item:
+        return item["service"] is None
+    return _unserviced(str(item["code"]))
 
 
 def _unserviced(code: str) -> bool:
@@ -1042,9 +1095,21 @@ def review_detail(
         suppressions=[compliance.read(item, business.display_name) for item in active],
         undo_window_minutes=config.review_undo_window_minutes,
         weak_confidence=float(weak),
+        scoring_weights=scoring_weights(config),
         sources=provenance.source_records(session, business.id),
         linked_profiles=provenance.linked_profiles(latest),
         ai_enabled=config.ai_enabled,
+    )
+
+
+def scoring_weights(settings: Settings) -> ScoringWeightsRead:
+    weights = Weights.from_settings(settings)
+    return ScoringWeightsRead(
+        scoring_version=SCORING_VERSION,
+        facts=weights.facts,
+        inference=weights.inference,
+        intent=weights.intent,
+        contactability=weights.contactability,
     )
 
 
