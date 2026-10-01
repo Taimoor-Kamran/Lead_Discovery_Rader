@@ -14,7 +14,7 @@
             "confidence": 0.75,
             "rationale": "Audit found no online booking link; the owner can be reached at owner@wixwaterworks.com to set one up.",
             "evidence": [
-              {"finding_code": "no_online_booking", "quote": "Audit found no online booking or scheduling link on the homepage.", "source_url": "https://wixwaterworks.wixsite.com/home"}
+              {"finding_code": "no_online_booking", "quote": "Audit found no visible online booking flow on the homepage.", "source_url": "https://wixwaterworks.wixsite.com/home"}
             ]
           }
         ],

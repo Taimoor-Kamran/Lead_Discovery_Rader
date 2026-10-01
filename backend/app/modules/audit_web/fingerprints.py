@@ -13,6 +13,7 @@ never a window cut blind through the middle of one.
 import re
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
+from urllib.parse import urlsplit
 
 # How much of the page around a hit is kept as evidence.
 EVIDENCE_WINDOW = 120
@@ -59,12 +60,60 @@ BOOKING_SIGNATURES: tuple[Signature, ...] = (
     Signature("youcanbookme", "YouCanBook.me", ("youcanbook.me",)),
 )
 
+# A link to one of these hosts is a booking page whatever its label says (v0.12.1): the
+# widget signatures' own hosts, plus Fresha, Phorest and Zenoti, each verified by hand on a
+# real salon's booking page in production (Urban Betty's scheduler is a Phorest iframe,
+# Bishops' per-location pages hand over to Zenoti).
+# `host/path` entries also need the path to start with that prefix. Nothing is added here
+# that has not been seen on a real audited page.
+BOOKING_HOSTS: tuple[tuple[str, str], ...] = (
+    ("calendly.com", "Calendly"),
+    ("acuityscheduling.com", "Acuity Scheduling"),
+    ("squarespacescheduling.com", "Acuity Scheduling"),
+    ("squareup.com/appointments", "Square Appointments"),
+    ("setmore.com", "Setmore"),
+    ("housecallpro.com", "Housecall Pro"),
+    ("getjobber.com", "Jobber"),
+    ("servicetitan.com", "ServiceTitan"),
+    ("booksy.com", "Booksy"),
+    ("vagaro.com", "Vagaro"),
+    ("opentable.com", "OpenTable"),
+    ("opentable.co.uk", "OpenTable"),
+    ("mindbodyonline.com", "Mindbody"),
+    ("schedulicity.com", "Schedulicity"),
+    ("simplybook.me", "SimplyBook.me"),
+    ("appointlet.com", "Appointlet"),
+    ("youcanbook.me", "YouCanBook.me"),
+    ("fresha.com", "Fresha"),
+    ("phorest.com", "Phorest"),
+    ("zenoti.com", "Zenoti"),
+)
+
+# Hosts that are never a booking signal, whatever else matches: reCAPTCHA, Maps, Tag
+# Manager, Ads and fonts sit on most pages and say nothing about booking (v0.12.1). Checked
+# before `BOOKING_HOSTS`, so no entry there can ever be satisfied by one of these.
+NEVER_BOOKING_HOSTS: tuple[str, ...] = (
+    "google.com",
+    "gstatic.com",
+    "googleapis.com",
+    "googletagmanager.com",
+    "google-analytics.com",
+    "googleadservices.com",
+    "googlesyndication.com",
+    "doubleclick.net",
+    "recaptcha.net",
+    "goo.gl",
+    "g.page",
+)
+
 # Link text (or a button label) that offers to book without naming a tool. Kept narrow on
-# purpose: "contact us" is not booking, and guessing would invent a fact.
+# purpose: "contact us" is not booking, and guessing would invent a fact. Since v0.12.1 a
+# match is only a lead to follow: the link's target is fetched once and checked for a real
+# booking flow. "Request a quote" / "request service" are gone entirely — a quote request
+# is not scheduling under any reading.
 BOOKING_TEXT_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"\bbook\s+(now|online|an?\s+appointment|a\s+service|service)\b"),
     re.compile(r"\bschedule\s+(online|now|a\s+service|service|an?\s+appointment|a\s+visit)\b"),
-    re.compile(r"\brequest\s+(a\s+)?(quote|service|an?\s+appointment)\b"),
     re.compile(r"\bbook\s+a\s+(consultation|call)\b"),
 )
 
@@ -89,7 +138,6 @@ BOOKING_HREF_SEGMENTS = frozenset(
         "schedule-an-appointment",
         "appointment",
         "appointments",
-        "request-service",
     }
 )
 
@@ -516,6 +564,42 @@ def snippet_forward(text: str, position: int, limit: int) -> str:
     as the line a copyright notice is printed on.
     """
     return trim_to_words(text, position, min(position + limit, len(text)), trim_start=False)
+
+
+def booking_host(url: str) -> str | None:
+    """The booking provider a URL points at, by its host, or `None`."""
+    parts = urlsplit(url.strip().lower())
+    host = (parts.hostname or "").rstrip(".")
+    if not host or is_never_booking_host(host):
+        return None
+    for entry, label in BOOKING_HOSTS:
+        domain, _, prefix = entry.partition("/")
+        if host != domain and not host.endswith(f".{domain}"):
+            continue
+        if prefix and not parts.path.lstrip("/").startswith(prefix):
+            continue
+        return label
+    return None
+
+
+def _on_domain(host: str, domain: str) -> bool:
+    return host == domain or host.endswith(f".{domain}")
+
+
+def is_never_booking_host(host: str) -> bool:
+    """A Google (or similar) host: never evidence of booking, and not an onward hop."""
+    lowered = host.lower().rstrip(".")
+    return any(_on_domain(lowered, domain) for domain in NEVER_BOOKING_HOSTS)
+
+
+def is_social_host(host: str) -> bool:
+    """A social profile host (`SOCIAL_PLATFORMS`): a footer link, not a way to book."""
+    lowered = host.lower().rstrip(".")
+    return any(
+        _on_domain(lowered, pattern.split("/", 1)[0])
+        for signature in SOCIAL_PLATFORMS
+        for pattern in signature.patterns
+    )
 
 
 def booking_text_match(text: str) -> str | None:

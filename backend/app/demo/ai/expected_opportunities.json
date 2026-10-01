@@ -14,7 +14,7 @@
     "ai_skipped_budget": 0,
     "businesses": 31,
     "est_cost_usd": 0.0,
-    "opportunities_created": 102,
+    "opportunities_created": 105,
     "opportunities_updated": 0
   },
   "businesses": {
@@ -187,7 +187,7 @@
       "rejected_rules": []
     },
     "copperlineelectric.invalid": {
-      "case": "The Copperhead shape: booking recognised from the call to action, so no booking_setup; no chat, so ai_chat_setup. No scripted AI answer.",
+      "case": "The Copperhead shape: since v0.12.1 the 'BOOK A SERVICE' target is followed and has no booking flow, so booking_setup; no chat, so ai_chat_setup. No scripted AI answer.",
       "services": {
         "ads_social": {
           "source": "rules",
@@ -198,6 +198,14 @@
           "ai_agrees": false
         },
         "ai_chat_setup": {
+          "source": "rules",
+          "confidence": [
+            0.6,
+            0.6
+          ],
+          "ai_agrees": false
+        },
+        "booking_setup": {
           "source": "rules",
           "confidence": [
             0.6,
@@ -385,6 +393,14 @@
           ],
           "ai_agrees": false
         },
+        "booking_setup": {
+          "source": "rules",
+          "confidence": [
+            0.6,
+            0.6
+          ],
+          "ai_agrees": false
+        },
         "website_design": {
           "source": "rules",
           "confidence": [
@@ -412,6 +428,14 @@
           "ai_agrees": false
         },
         "ai_chat_setup": {
+          "source": "rules",
+          "confidence": [
+            0.6,
+            0.6
+          ],
+          "ai_agrees": false
+        },
+        "booking_setup": {
           "source": "rules",
           "confidence": [
             0.6,

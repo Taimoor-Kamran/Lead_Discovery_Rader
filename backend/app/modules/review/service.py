@@ -113,6 +113,7 @@ def decide(
     # on a row that is simply not open any more.
     _check_lock(opportunity, payload.lock_version)
     _check_decidable(opportunity)
+    _check_not_withdrawn(opportunity, payload.decision)
     fields = _validate(session, opportunity, payload)
 
     if payload.decision is Decision.do_not_contact:
@@ -148,6 +149,24 @@ def _check_decidable(opportunity: Opportunity) -> None:
             details={
                 "opportunity_id": str(opportunity.id),
                 "review_status": opportunity.review_status.value,
+                "lock_version": opportunity.lock_version,
+            },
+        )
+
+
+def _check_not_withdrawn(opportunity: Opportunity, decision: Decision) -> None:
+    """A withdrawn row rests on findings the latest audit no longer has: never approved.
+
+    Every other decision stays open. Turning a withdrawn claim down, or marking the
+    business do-not-contact, is still a person's call to make (v0.12.1).
+    """
+    if decision is Decision.approve and opportunity.withdrawn_at is not None:
+        raise InvalidStateTransitionError(
+            "This opportunity was withdrawn: the latest audit no longer supports it",
+            details={
+                "opportunity_id": str(opportunity.id),
+                "withdrawn_at": opportunity.withdrawn_at.isoformat(),
+                "withdrawn_reason": opportunity.withdrawn_reason,
                 "lock_version": opportunity.lock_version,
             },
         )
@@ -696,7 +715,7 @@ def review_queue(
             top_score.label("top_score"),
             hidden.label("weak_hidden"),
         )
-        .where(Opportunity.review_status == status)
+        .where(Opportunity.review_status == status, Opportunity.withdrawn_at.is_(None))
         .group_by(Opportunity.business_id)
     )
     if service:
@@ -769,7 +788,11 @@ def _open_opportunities(
     grouped: dict[uuid.UUID, list[Opportunity]] = defaultdict(list)
     for row in session.scalars(
         select(Opportunity)
-        .where(Opportunity.business_id.in_(business_ids), Opportunity.review_status == status)
+        .where(
+            Opportunity.business_id.in_(business_ids),
+            Opportunity.review_status == status,
+            Opportunity.withdrawn_at.is_(None),
+        )
         .order_by(Opportunity.score.desc(), Opportunity.id.desc())
     ):
         grouped[row.business_id].append(row)

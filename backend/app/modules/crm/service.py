@@ -828,7 +828,8 @@ def _unscheduled_eligible(session: Session, *, destination: str) -> list[CrmLead
         .where(
             Business.id.in_(
                 select(Opportunity.business_id).where(
-                    Opportunity.review_status == ReviewStatus.approved
+                    Opportunity.review_status == ReviewStatus.approved,
+                    Opportunity.withdrawn_at.is_(None),
                 )
             ),
             Business.id.not_in(scheduled),
@@ -899,6 +900,7 @@ def read_lead(session: Session, lead: CrmLead, business: Business | None = None)
                 .where(
                     Opportunity.business_id == lead.business_id,
                     Opportunity.review_status == ReviewStatus.approved,
+                    Opportunity.withdrawn_at.is_(None),
                 )
                 .order_by(Opportunity.score.desc())
             )

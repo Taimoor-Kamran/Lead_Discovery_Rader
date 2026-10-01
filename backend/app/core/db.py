@@ -61,9 +61,28 @@ def connect_args_for(url: str) -> dict[str, Any]:
     return {}
 
 
+def timeout_connect_args(url: str) -> dict[str, Any]:
+    """Connect, statement and idle-in-transaction limits for every connection (v0.12.1).
+
+    A statement over `DB_STATEMENT_TIMEOUT_MS` is cancelled by the server and raises; a
+    session left idle inside a transaction for `DB_IDLE_IN_TRANSACTION_TIMEOUT_MS` is
+    closed by it. Only PostgreSQL drivers take them.
+    """
+    if make_url(url).get_backend_name() != "postgresql":
+        return {}
+    config = get_settings()
+    return {
+        "connect_timeout": config.db_connect_timeout_seconds,
+        "options": (
+            f"-c statement_timeout={config.db_statement_timeout_ms} "
+            f"-c idle_in_transaction_session_timeout={config.db_idle_in_transaction_timeout_ms}"
+        ),
+    }
+
+
 def _build_engine(url: str, **engine_kwargs: Any) -> Engine:
     kwargs: dict[str, Any] = {"pool_pre_ping": True, "future": True}
-    connect_args = connect_args_for(url)
+    connect_args = {**connect_args_for(url), **timeout_connect_args(url)}
     if connect_args:
         kwargs["connect_args"] = connect_args
     kwargs.update(engine_kwargs)

@@ -14,7 +14,13 @@ _queue: Queue | None = None
 def get_redis() -> Redis:
     global _redis
     if _redis is None:
-        _redis = Redis.from_url(get_settings().redis_url)
+        config = get_settings()
+        # v0.12.1: a Redis that stops answering is an error, not a hang.
+        _redis = Redis.from_url(
+            config.redis_url,
+            socket_connect_timeout=config.redis_socket_connect_timeout_seconds,
+            socket_timeout=config.redis_socket_timeout_seconds,
+        )
     return _redis
 
 
