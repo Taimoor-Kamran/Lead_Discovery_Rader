@@ -17,9 +17,12 @@ from app.modules.review.schemas import (
     DecidedOpportunity,
     LeadDetail,
     LeadRead,
+    QueueBadge,
     QueueItem,
+    QueueSort,
     ReviewDetail,
     ReviewRequest,
+    SortDir,
     UndoResult,
 )
 
@@ -54,6 +57,9 @@ def review_queue(
     include_weak: Annotated[bool, Query()] = False,
     q: Annotated[str | None, Query(max_length=200)] = None,
     discovered_within_days: Annotated[int | None, Query(ge=1, le=MAX_RECENCY_DAYS)] = None,
+    badge: Annotated[QueueBadge | None, Query()] = None,
+    sort: Annotated[QueueSort, Query()] = QueueSort.score,
+    sort_dir: Annotated[SortDir, Query()] = SortDir.desc,
     limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
     cursor: Annotated[str | None, Query()] = None,
 ) -> Page[QueueItem]:
@@ -63,6 +69,10 @@ def review_queue(
     earliest `discovered_at` of the records behind the business, not the last time a source
     handed the same record over again. It composes with every other filter with AND, and is
     re-applied on each page, so a cursor never widens the window.
+
+    `sort` is `score` (default) or `reviews`, `sort_dir` is `desc` (default) or `asc`.
+    Businesses with no review count sort last in both directions. A cursor only continues
+    the sort and direction it came from.
     """
     return service.review_queue(
         session,
@@ -75,6 +85,9 @@ def review_queue(
         include_weak=include_weak,
         q=q,
         discovered_within_days=discovered_within_days,
+        badge=badge,
+        sort=sort,
+        sort_dir=sort_dir,
         limit=limit,
         cursor=cursor,
     )

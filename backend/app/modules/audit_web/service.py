@@ -25,7 +25,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import Select, func, select, update
+from sqlalchemy import Select, func, select, true, update
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
@@ -1062,6 +1062,25 @@ def latest_audits(session: Session, business_ids: list[uuid.UUID]) -> dict[uuid.
         .where(WebsiteAudit.business_id.in_(business_ids))
     )
     return {row.business_id: row for row in rows}
+
+
+def finding_code_counts(session: Session, business_ids: Any) -> dict[str, int]:
+    """How many of these businesses' **newest** audits filed each finding code.
+
+    `business_ids` is a selectable of business ids (the queue passes its filtered set), so
+    the count is over the whole set, not one page of it.
+    """
+    latest = _latest_audit_subquery()
+    item = func.jsonb_array_elements(latest.c.findings).table_valued("value").lateral("item")
+    code = item.c.value.op("->>")("code")
+    rows = session.execute(
+        select(code, func.count(func.distinct(latest.c.business_id)))
+        .select_from(latest)
+        .join(item, true())
+        .where(latest.c.business_id.in_(business_ids), code.is_not(None))
+        .group_by(code)
+    )
+    return {str(row[0]): int(row[1]) for row in rows}
 
 
 def _latest_audit_subquery() -> Any:

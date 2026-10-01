@@ -10,6 +10,18 @@ from app.modules.opportunities.models import OpportunitySource, ReviewStatus
 
 
 class ScoreComponentsRead(BaseModel):
+    # Null where the stored row has no such component (v0.14.0): a missing component is
+    # unknown, not zero.
+    facts: float | None
+    inference: float | None
+    intent: float | None
+    contactability: float | None
+
+
+class ScoringWeightsRead(BaseModel):
+    """The weights the current scoring version multiplies each component by (v0.14.0)."""
+
+    scoring_version: str
     facts: float
     inference: float
     intent: float

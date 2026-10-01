@@ -1,6 +1,6 @@
 import { SafeLink } from "@/components/SafeLink";
-import { SeverityDot } from "@/components/ui";
-import { findingLabel, severityLabel } from "@/lib/labels";
+import { Badge, cx, SeverityDot } from "@/components/ui";
+import { findingLabel, METHOD_LABELS, severityLabel } from "@/lib/labels";
 
 export type Finding = {
   code?: string;
@@ -8,7 +8,16 @@ export type Finding = {
   message?: string;
   evidence_text?: string | null;
   evidence_url?: string | null;
+  /** "deterministic", "api" or "ai" (v0.12.0). Older audits may not carry it. */
+  method?: string | null;
+  /** The service it is filed under; `null` means none — context, not a sale (v0.12.0). */
+  service?: string | null;
 };
+
+/** Filed under no service. An older audit without the key says nothing either way. */
+export function isContext(finding: Finding): boolean {
+  return "service" in finding && finding.service === null;
+}
 
 const ORDER: Record<string, number> = { high: 0, medium: 1, low: 2, info: 3 };
 
@@ -25,7 +34,12 @@ export function FindingList({ findings }: { findings: Finding[] }) {
   return (
     <ul className="divide-y divide-line">
       {ranked.map((finding, index) => (
-        <li key={`${finding.code}-${index}`} className="flex gap-3 py-3 first:pt-0 last:pb-0" data-testid="finding">
+        <li
+          key={`${finding.code}-${index}`}
+          className={cx("flex gap-3 py-3 first:pt-0 last:pb-0", isContext(finding) && "opacity-80")}
+          data-testid="finding"
+          data-context={isContext(finding) ? "true" : undefined}
+        >
           <SeverityDot severity={finding.severity} />
           <div className="min-w-0 flex-1">
             <p className="flex flex-wrap items-baseline gap-x-2">
@@ -33,6 +47,21 @@ export function FindingList({ findings }: { findings: Finding[] }) {
                 {findingLabel(finding.code)}
               </span>
               <span className="text-sm text-ink-soft">{severityLabel(finding.severity)}</span>
+              {isContext(finding) ? (
+                <Badge tone="neutral" title="Filed under no service: background for a reviewer, nothing we would sell" data-testid="finding-context">
+                  Context
+                </Badge>
+              ) : null}
+              {/* No method on an older audit: say nothing rather than guess one. */}
+              {finding.method ? (
+                <span
+                  className="text-xs text-ink-soft"
+                  title={METHOD_LABELS[finding.method]?.title ?? finding.method}
+                  data-testid="finding-method"
+                >
+                  {METHOD_LABELS[finding.method]?.label ?? finding.method}
+                </span>
+              ) : null}
             </p>
             {finding.message ? (
               <p className="print-terse mt-0.5 max-w-measure text-base text-ink-soft">{finding.message}</p>

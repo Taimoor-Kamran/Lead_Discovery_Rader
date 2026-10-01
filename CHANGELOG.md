@@ -3,6 +3,68 @@
 All notable changes, one section per merged spec. Newest first.
 Format: `## [vX.Y.Z] - YYYY-MM-DD` followed by Added / Changed / Fixed.
 
+## [v0.14.0] - unreleased
+
+No migration, no new environment variable. Scoring, the audit and opportunity generation
+are unchanged, so `AUDIT_LOGIC_VERSION` stays at 8.
+
+### Added — queue sorting and decision columns
+
+- `GET /review-queue` takes `sort` (`score`, the default, or `reviews`) and `sort_dir`
+  (`desc`, the default, or `asc`); anything else is a 422. Listings with no review count
+  sort last in both directions and are never dropped. Both sorts break ties on the business
+  id, so paging returns every row exactly once.
+- The queue cursor now records the sort and direction it was made under. A cursor from
+  before this release, or one replayed under another sort, is a 422; the page reloads from
+  the top.
+- Queue rows carry the latest audit's PageSpeed mobile score and finding count, the
+  listing's website kind and business status, and `badges`. A PageSpeed score that was not
+  measured, and the finding count of an audit that never read the page, are `null` and
+  render as "—" with the reason in a tooltip, never as 0.
+- The queue table gains Findings, PageSpeed, Website and Reviews (count and star rating)
+  columns. Reviews and Score headers sort.
+- State, industry and listing (no website / permanently closed) filters in the UI; `badge`
+  on the API.
+
+### Added — trust affordances (F8) and data-quality badges (F9)
+
+- Each finding on the detail page and the lead page says how it was established: "Our
+  check" (deterministic) or "Outside service" (api). Older audits without a method show
+  none.
+- The opportunity card shows its confidence on a meter with the weak line
+  (`REVIEW_WEAK_CONFIDENCE`, 0.4 by default) marked.
+- "No website" and "Permanently closed" badges, read off the stored listing only. A
+  permanently closed business gets no opportunity and has its open ones withdrawn, so the
+  closed badge is not expected in the queue.
+
+### Added — findings column (F3) and why this score
+
+- Queue rows carry `latest_audit.findings`: every finding of the latest audit, ordered by
+  severity, then by how many businesses in the current filtered queue share the code
+  (fewer first), then by code. The count is over the whole filtered set, not the page, so
+  the order is the same on every page and under both sorts. Each item carries its
+  evidence text, method, `businesses_with_code` and `context`. `top_findings` in the queue
+  is now the first two of that order (it was three, by severity only); the CRM payload's
+  `top_findings` is unchanged.
+- The findings column shows those two and "+N more"; expanding lists every finding with
+  the evidence it quotes. The header says "Worst first, then rarest in this list".
+- A finding filed under no service (the email findings, `robots_blocked`) is marked
+  context: a dashed chip in the queue, a "Context" badge in the finding list.
+- The opportunity card's components are headed "Why this score" and show each weight,
+  but only where the current weights reproduce the stored total under the same scoring
+  version; otherwise it says the weights are not shown. `GET /review-queue/{id}` carries
+  `scoring_weights`.
+
+### Changed
+
+- `score_components` fields are `null`, not `0.0`, when the stored row lacks that
+  component, and render as "—".
+
+### Not in this release
+
+- No service-area badge: Places' `pureServiceAreaBusiness` is not in the field mask, and
+  the mask is not widened while our Places billing tier is unverified.
+
 ## [v0.13.0] - unreleased
 
 **`AUDIT_LOGIC_VERSION` stays at 8** (acceptance 10), although this spec adds findings —

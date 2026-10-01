@@ -811,6 +811,10 @@ export interface paths {
          *     earliest `discovered_at` of the records behind the business, not the last time a source
          *     handed the same record over again. It composes with every other filter with AND, and is
          *     re-applied on each page, so a cursor never widens the window.
+         *
+         *     `sort` is `score` (default) or `reviews`, `sort_dir` is `desc` (default) or `asc`.
+         *     Businesses with no review count sort last in both directions. A cursor only continues
+         *     the sort and direction it came from.
          */
         get: operations["review_queue_api_v1_review_queue_get"];
         put?: never;
@@ -2806,9 +2810,42 @@ export interface components {
              * Format: date-time
              */
             audited_at: string;
+            /** Finding Count */
+            finding_count?: number | null;
+            /**
+             * Findings
+             * @default []
+             */
+            findings: components["schemas"]["QueueFinding"][];
+            /** Pagespeed Score */
+            pagespeed_score?: number | null;
             status: components["schemas"]["AuditStatus"];
             /** Top Findings */
             top_findings: string[];
+        };
+        /**
+         * QueueBadge
+         * @description Data-quality flags read straight off the stored listing (v0.14.0, F9).
+         * @enum {string}
+         */
+        QueueBadge: "no_website" | "closed_permanently";
+        /**
+         * QueueFinding
+         * @description One finding of the latest audit, as the queue's findings column shows it (v0.14.0).
+         */
+        QueueFinding: {
+            /** Businesses With Code */
+            businesses_with_code: number;
+            /** Code */
+            code: string;
+            /** Context */
+            context: boolean;
+            /** Evidence Text */
+            evidence_text: string | null;
+            /** Method */
+            method: string | null;
+            /** Severity */
+            severity: string | null;
         };
         /**
          * QueueItem
@@ -2816,10 +2853,17 @@ export interface components {
          */
         QueueItem: {
             /**
+             * Badges
+             * @default []
+             */
+            badges: components["schemas"]["QueueBadge"][];
+            /**
              * Business Id
              * Format: uuid
              */
             business_id: string;
+            /** @default unknown */
+            business_status: components["schemas"]["BusinessStatus"];
             /** City */
             city: string | null;
             /**
@@ -2848,6 +2892,8 @@ export interface components {
             weak_hidden: number;
             /** Website */
             website: string | null;
+            /** @default none */
+            website_kind: components["schemas"]["WebsiteKind"];
         };
         /** QueueOpportunity */
         QueueOpportunity: {
@@ -2873,6 +2919,11 @@ export interface components {
             /** Weak */
             weak: boolean;
         };
+        /**
+         * QueueSort
+         * @enum {string}
+         */
+        QueueSort: "score" | "reviews";
         /** QueueStatus */
         QueueStatus: {
             /** Length */
@@ -2969,6 +3020,7 @@ export interface components {
             linked_profiles: components["schemas"]["LinkedProfilesRead"];
             /** Opportunities */
             opportunities: components["schemas"]["ReviewOpportunity"][];
+            scoring_weights: components["schemas"]["ScoringWeightsRead"];
             /** Sources */
             sources: components["schemas"]["SourceRecordRead"][];
             /** Suppressed */
@@ -3106,6 +3158,20 @@ export interface components {
         /** ScoreComponentsRead */
         ScoreComponentsRead: {
             /** Contactability */
+            contactability: number | null;
+            /** Facts */
+            facts: number | null;
+            /** Inference */
+            inference: number | null;
+            /** Intent */
+            intent: number | null;
+        };
+        /**
+         * ScoringWeightsRead
+         * @description The weights the current scoring version multiplies each component by (v0.14.0).
+         */
+        ScoringWeightsRead: {
+            /** Contactability */
             contactability: number;
             /** Facts */
             facts: number;
@@ -3113,6 +3179,8 @@ export interface components {
             inference: number;
             /** Intent */
             intent: number;
+            /** Scoring Version */
+            scoring_version: string;
         };
         /** SearchJobCreate */
         SearchJobCreate: {
@@ -3222,6 +3290,11 @@ export interface components {
             source_ids?: string[] | null;
             status?: components["schemas"]["SearchJobStatus"] | null;
         };
+        /**
+         * SortDir
+         * @enum {string}
+         */
+        SortDir: "asc" | "desc";
         /** SourceErrorRate */
         SourceErrorRate: {
             /** Calls */
@@ -4890,6 +4963,9 @@ export interface operations {
                 include_weak?: boolean;
                 q?: string | null;
                 discovered_within_days?: number | null;
+                badge?: components["schemas"]["QueueBadge"] | null;
+                sort?: components["schemas"]["QueueSort"];
+                sort_dir?: components["schemas"]["SortDir"];
                 limit?: number;
                 cursor?: string | null;
             };

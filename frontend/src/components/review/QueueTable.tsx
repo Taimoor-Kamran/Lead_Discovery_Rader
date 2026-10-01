@@ -7,6 +7,7 @@ import {
   Badge,
   Chip,
   cx,
+  Disclosure,
   SkeletonTableRows,
   Table,
   TableWrap,
@@ -15,11 +16,22 @@ import {
   Th,
   THead,
   Tr,
+  type SortDirection,
 } from "@/components/ui";
 import { SourceCell } from "@/components/review/SourceProvenance";
-import type { QueueItem } from "@/lib/api";
+import type { QueueFinding, QueueItem } from "@/lib/api";
 import { formatDateTime, percent, place, reviewCount, score } from "@/lib/format";
-import { auditStatusLabel, findingLabel, industryLabel, serviceLabel } from "@/lib/labels";
+import {
+  auditStatusLabel,
+  findingLabel,
+  industryLabel,
+  serviceLabel,
+  severityLabel,
+  websiteKindLabel,
+} from "@/lib/labels";
+
+export type QueueSortKey = "score" | "reviews";
+export type QueueSortDir = "asc" | "desc";
 
 type Props = {
   items: QueueItem[];
@@ -33,7 +45,97 @@ type Props = {
   loading?: boolean;
   /** What to say when there is nothing — always with the reviewer's next action. */
   empty?: React.ReactNode;
+  /** The server-side order. Without `onSort` the headers are plain, not buttons. */
+  sort?: QueueSortKey;
+  sortDir?: QueueSortDir;
+  onSort?: (key: QueueSortKey) => void;
 };
+
+/** The F9 badges: words read straight off the listing, never inferred. */
+const BADGES: Record<string, { label: string; tone: "neutral" | "warn" | "risk"; title: string }> = {
+  no_website: { label: "No website", tone: "warn", title: "The listing gives no website" },
+  closed_permanently: { label: "Permanently closed", tone: "risk", title: "The listing says permanently closed" },
+};
+
+/** "—" for a value nobody measured, with the reason in the tooltip; never a 0. */
+function Unmeasured({ why, testId }: { why: string; testId?: string }) {
+  return (
+    <span className="text-ink-soft" title={why} aria-label={`Not measured: ${why}`} data-testid={testId}>
+      —
+    </span>
+  );
+}
+
+/** How many finding chips a row shows before "+N more" (v0.14.0, F3). */
+const SHOWN_FINDINGS = 2;
+
+const CONTEXT_TITLE = "Context: filed under no service, so nothing we would sell";
+
+function sharedBy(finding: QueueFinding): string {
+  const n = finding.businesses_with_code;
+  return `${finding.code}, on ${n} business${n === 1 ? "" : "es"} in this list`;
+}
+
+function FindingChip({ finding }: { finding: QueueFinding }) {
+  return (
+    <Chip
+      className={cx("text-sm", finding.context && "border-dashed text-ink-soft")}
+      title={finding.context ? `${sharedBy(finding)}. ${CONTEXT_TITLE}` : sharedBy(finding)}
+      data-testid="finding-chip"
+      data-context={finding.context ? "true" : undefined}
+    >
+      {findingLabel(finding.code)}
+      {finding.context ? <span className="text-xs italic">context</span> : null}
+    </Chip>
+  );
+}
+
+/**
+ * The two findings that set this business apart — already ordered by the server, worst
+ * first and then rarest in the filtered list — and a count of the rest. Expanding lists
+ * every finding with the evidence it quotes.
+ */
+function TopFindings({ findings }: { findings: QueueFinding[] }) {
+  if (!findings.length) return null;
+  const rest = findings.length - SHOWN_FINDINGS;
+  return (
+    <div className="flex flex-col gap-1">
+      <ul className="flex flex-wrap gap-1">
+        {findings.slice(0, SHOWN_FINDINGS).map((finding) => (
+          <li key={finding.code}>
+            <FindingChip finding={finding} />
+          </li>
+        ))}
+      </ul>
+      <Disclosure
+        summary={(open) => (open ? "Hide" : rest > 0 ? `+${rest} more` : "Evidence")}
+        testId="findings-more"
+      >
+        <ul className="flex max-w-xs flex-col gap-2" data-testid="findings-all">
+          {findings.map((finding) => (
+            <li key={finding.code} className={cx("text-sm", finding.context && "text-ink-soft")}>
+              <span className="font-medium" title={sharedBy(finding)}>
+                {findingLabel(finding.code)}
+              </span>{" "}
+              <span className="text-ink-soft">{severityLabel(finding.severity)}</span>
+              {finding.context ? (
+                <span className="text-xs italic text-ink-soft" title={CONTEXT_TITLE}>
+                  {" "}
+                  context
+                </span>
+              ) : null}
+              {finding.evidence_text ? (
+                <blockquote className="mt-0.5 border-l-2 border-line pl-2 font-mono text-xs text-ink">
+                  {finding.evidence_text}
+                </blockquote>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      </Disclosure>
+    </div>
+  );
+}
 
 /** An audit outcome is a status, so it gets a badge tone rather than a bare colour. */
 const AUDIT_TONE: Record<string, "neutral" | "ok" | "warn" | "risk"> = {
@@ -60,12 +162,17 @@ export function QueueTable({
   showWeak = false,
   loading = false,
   empty,
+  sort = "score",
+  sortDir = "desc",
+  onSort,
 }: Props) {
   const checkboxClass = showWeak ? "" : HOVER_ONLY;
-  const columns = canSelect ? 8 : 7;
+  const columns = canSelect ? 12 : 11;
+  const direction: SortDirection = sortDir === "asc" ? "ascending" : "descending";
+  const sortOf = (key: QueueSortKey) => (onSort ? (sort === key ? direction : "none") : undefined);
   return (
     <TableWrap>
-      <Table minWidth="68rem">
+      <Table minWidth="86rem">
         <THead>
           <tr>
             {canSelect ? <Th className="w-8" aria-label="Select" /> : null}
@@ -74,8 +181,28 @@ export function QueueTable({
             <Th>Source</Th>
             <Th>Opportunities</Th>
             <Th>Audit</Th>
-            <Th>Top findings</Th>
-            <Th numeric className="w-20">
+            <Th title="Worst first; among equals, the code fewer businesses in this filtered list share comes first">
+              Top findings
+              <span className="block text-xs font-normal text-ink-soft" data-testid="findings-order">
+                Worst first, then rarest in this list
+              </span>
+            </Th>
+            <Th numeric title="How many findings the latest audit filed">
+              Findings
+            </Th>
+            <Th numeric title="PageSpeed mobile performance, 0–100">
+              PageSpeed
+            </Th>
+            <Th>Website</Th>
+            <Th
+              numeric
+              sort={sortOf("reviews")}
+              onSort={onSort ? () => onSort("reviews") : undefined}
+              title="Review count on the listing; listings without one sort last"
+            >
+              Reviews
+            </Th>
+            <Th numeric className="w-20" sort={sortOf("score")} onSort={onSort ? () => onSort("score") : undefined}>
               Score
             </Th>
           </tr>
@@ -114,18 +241,16 @@ export function QueueTable({
                   <div className="text-sm text-ink-soft" data-testid="queue-place">
                     {place(item.city, item.state)}
                   </div>
-                  {reviewCount(item.user_rating_count) ? (
-                    <Chip
-                      className="mt-1 text-xs"
-                      title={
-                        item.rating === null || item.rating === undefined
-                          ? "Reviews on the business listing"
-                          : `Rated ${item.rating.toFixed(1)} on the business listing`
-                      }
-                      data-testid="review-chip"
-                    >
-                      {reviewCount(item.user_rating_count)}
-                    </Chip>
+                  {item.badges.length ? (
+                    <ul className="mt-1 flex flex-wrap gap-1">
+                      {item.badges.map((badge) => (
+                        <li key={badge}>
+                          <Badge tone={BADGES[badge]?.tone ?? "neutral"} title={BADGES[badge]?.title} data-testid="data-badge">
+                            {BADGES[badge]?.label ?? badge}
+                          </Badge>
+                        </li>
+                      ))}
+                    </ul>
                   ) : null}
                   {item.website ? (
                     <div className="text-sm">
@@ -187,16 +312,48 @@ export function QueueTable({
                     <span className="text-ink-soft">not audited</span>
                   )}
                 </Td>
-                <Td>
-                  <ul className="flex flex-wrap gap-1">
-                    {item.latest_audit?.top_findings.map((code) => (
-                      <li key={code}>
-                        <Chip className="text-sm" title={code}>
-                          {findingLabel(code)}
-                        </Chip>
-                      </li>
-                    ))}
-                  </ul>
+                <Td data-testid="top-findings">
+                  <TopFindings findings={item.latest_audit?.findings ?? []} />
+                </Td>
+                <Td numeric data-testid="finding-count">
+                  {!item.latest_audit ? (
+                    <Unmeasured why="Not audited yet" />
+                  ) : item.latest_audit.finding_count === null || item.latest_audit.finding_count === undefined ? (
+                    <Unmeasured why="The audit did not read the page" />
+                  ) : (
+                    item.latest_audit.finding_count
+                  )}
+                </Td>
+                <Td numeric data-testid="pagespeed">
+                  {item.latest_audit?.pagespeed_score === null || item.latest_audit?.pagespeed_score === undefined ? (
+                    <Unmeasured why="PageSpeed was not measured for this site" />
+                  ) : (
+                    <span title="PageSpeed mobile performance, 0–100">{item.latest_audit.pagespeed_score}</span>
+                  )}
+                </Td>
+                <Td className="text-sm text-ink-soft" data-testid="website-kind">
+                  {websiteKindLabel(item.website_kind)}
+                </Td>
+                <Td numeric data-testid="reviews">
+                  {reviewCount(item.user_rating_count) ? (
+                    <>
+                      <span
+                        title={
+                          item.rating === null || item.rating === undefined
+                            ? "Reviews on the business listing"
+                            : `Rated ${item.rating.toFixed(1)} on the business listing`
+                        }
+                        data-testid="review-chip"
+                      >
+                        {item.user_rating_count}
+                      </span>
+                      {item.rating === null || item.rating === undefined ? null : (
+                        <div className="text-xs text-ink-soft">★ {item.rating.toFixed(1)}</div>
+                      )}
+                    </>
+                  ) : (
+                    <Unmeasured why="The listing gives no review count" />
+                  )}
                 </Td>
                 <Td numeric title={`raw ${item.top_score}`}>
                   {score(item.top_score)}

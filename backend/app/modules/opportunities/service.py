@@ -1291,6 +1291,13 @@ def _apply_score_cursor(stmt: Any, cursor: str | None) -> Any:
     )
 
 
+def _component(components: dict[str, Any], key: str) -> float | None:
+    value = components.get(key)
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return None
+    return float(value)
+
+
 def summarize(opportunity: Opportunity, business: Business) -> OpportunitySummary:
     components = opportunity.score_components or {}
     return OpportunitySummary(
@@ -1306,10 +1313,10 @@ def summarize(opportunity: Opportunity, business: Business) -> OpportunitySummar
         ai_agrees=opportunity.ai_agrees,
         score=float(opportunity.score),
         score_components=ScoreComponentsRead(
-            facts=float(components.get("facts", 0.0)),
-            inference=float(components.get("inference", 0.0)),
-            intent=float(components.get("intent", 0.0)),
-            contactability=float(components.get("contactability", 0.0)),
+            facts=_component(components, "facts"),
+            inference=_component(components, "inference"),
+            intent=_component(components, "intent"),
+            contactability=_component(components, "contactability"),
         ),
         scoring_version=opportunity.scoring_version,
         review_status=opportunity.review_status,

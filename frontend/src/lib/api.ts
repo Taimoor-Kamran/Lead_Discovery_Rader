@@ -22,6 +22,8 @@ export type Role = Schemas["Role"];
 export type TokenResponse = Schemas["TokenResponse"];
 export type Health = { status: "ok" | "degraded"; db: boolean; redis: boolean };
 export type QueueItem = Schemas["QueueItem"];
+export type QueueFinding = Schemas["QueueFinding"];
+export type ScoringWeights = Schemas["ScoringWeightsRead"];
 export type QueueOpportunity = Schemas["QueueOpportunity"];
 export type QueuePage = Schemas["Page_QueueItem_"];
 export type ReviewDetail = Schemas["ReviewDetail"];
@@ -331,6 +333,11 @@ export type QueueQuery = {
   q?: string;
   /** "First found within N days", measured on the earliest discovered_at of the business. */
   discovered_within_days?: number;
+  /** An F9 badge to narrow to (v0.14.0). */
+  badge?: "no_website" | "closed_permanently";
+  /** `score` (default) or `reviews`; listings without a review count sort last either way. */
+  sort?: "score" | "reviews";
+  sort_dir?: "asc" | "desc";
   limit?: number;
   cursor?: string;
 };
