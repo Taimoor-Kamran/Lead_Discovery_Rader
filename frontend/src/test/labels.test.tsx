@@ -32,6 +32,7 @@ import {
   leadDetail,
   leadRead,
   me,
+  queueFinding,
   queueItem,
   renderWithProviders,
   reviewDetail,
@@ -236,6 +237,7 @@ describe("no raw code reaches the screen", () => {
             status: "robots_blocked",
             audited_at: "2026-09-20T10:00:00Z",
             top_findings: ["no_https", "stale_copyright"],
+            findings: [queueFinding({ code: "no_https" }), queueFinding({ code: "stale_copyright", severity: "low" })],
           },
           opportunities: [
             {

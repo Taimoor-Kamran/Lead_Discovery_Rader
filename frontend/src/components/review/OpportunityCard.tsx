@@ -3,7 +3,7 @@
 import { EvidenceList, type Evidence } from "@/components/review/EvidenceList";
 import { ReasonLines } from "@/components/review/ReasonLines";
 import { Badge, type BadgeTone, Button, Card, cx, Disclosure, Tooltip } from "@/components/ui";
-import type { Decision, ReviewDecisionRead, ReviewOpportunity } from "@/lib/api";
+import type { Decision, ReviewDecisionRead, ReviewOpportunity, ScoringWeights } from "@/lib/api";
 import { DECISION_LABELS, formatDateTime, percent, REASON_LABELS, score, STATUS_LABELS } from "@/lib/format";
 import { aiStatusLabel, serviceLabel, sourceLabel } from "@/lib/labels";
 
@@ -23,12 +23,30 @@ const STATUS_TONE: Record<string, BadgeTone> = {
   do_not_contact: "risk",
 };
 
-const COMPONENTS: [keyof ReviewOpportunity["score_components"], string][] = [
-  ["facts", "Facts"],
-  ["inference", "Inference"],
-  ["intent", "Intent"],
-  ["contactability", "Contactability"],
+type ComponentKey = keyof ReviewOpportunity["score_components"];
+
+const COMPONENTS: [ComponentKey, string, string][] = [
+  ["facts", "Facts", "What is known for sure about the business: trading status, website, industry, location"],
+  ["inference", "Confidence", "The `inference` component: how sure the pipeline is of this claim, its confidence"],
+  ["intent", "Intent", "Whether the business said it wants this itself"],
+  ["contactability", "Contactability", "A public phone, and a contact form or email link on the homepage"],
 ];
+
+/**
+ * The weights, but only where they demonstrably produced this score: the same scoring
+ * version, every component stored, and the weighted sum equal to the stored total. A
+ * score made under other weights shows its components without any.
+ */
+function weightsFor(opportunity: ReviewOpportunity, weights?: ScoringWeights): ScoringWeights | null {
+  if (!weights || weights.scoring_version !== opportunity.scoring_version) return null;
+  let total = 0;
+  for (const [key] of COMPONENTS) {
+    const value = opportunity.score_components[key];
+    if (value === null || value === undefined) return null;
+    total += weights[key] * value;
+  }
+  return Math.abs(total - opportunity.score) <= 0.0015 ? weights : null;
+}
 
 export const OPEN_STATUSES = new Set(["pending", "needs_enrichment"]);
 
@@ -42,6 +60,8 @@ type Props = {
   aiEnabled?: boolean;
   /** Below this confidence an opportunity is a weak signal (`REVIEW_WEAK_CONFIDENCE`). */
   weakThreshold?: number;
+  /** The current scoring version's weights, for "why this score" (v0.14.0). */
+  scoringWeights?: ScoringWeights;
   focused: boolean;
   canDecide: boolean;
   busy: boolean;
@@ -58,6 +78,7 @@ export function OpportunityCard({
   opportunity,
   aiEnabled = true,
   weakThreshold,
+  scoringWeights,
   focused,
   canDecide,
   busy,
@@ -68,6 +89,7 @@ export function OpportunityCard({
   const open = OPEN_STATUSES.has(opportunity.review_status);
   const evidence = (opportunity.evidence as Evidence[]) ?? [];
   const showDecisions = canDecide && open;
+  const weights = weightsFor(opportunity, scoringWeights);
 
   return (
     <Card
@@ -152,29 +174,51 @@ export function OpportunityCard({
           <EvidenceList items={evidence} />
         </div>
 
-        <div className="grid grid-cols-[7rem_1fr_2.5rem] items-center gap-x-2 gap-y-1 text-sm" aria-label="Score components">
-          {COMPONENTS.map(([key, label]) => {
-            const value = opportunity.score_components[key];
-            return (
-              <div key={key} className="contents">
-                <span className="text-ink-soft">{label}</span>
-                <div className="h-1.5 rounded-full bg-surface-sunken">
-                  <div
-                    className="h-1.5 rounded-full bg-accent"
-                    style={{ width: `${Math.max(0, Math.min(1, value)) * 100}%` }}
-                    role="img"
-                    aria-label={`${label} ${percent(value)}`}
-                  />
+        <div data-testid="why-score">
+          <h4 className="mb-1 text-sm font-semibold text-ink">Why this score</h4>
+          <div
+            className="grid grid-cols-[7rem_1fr_2.5rem_3rem] items-center gap-x-2 gap-y-1 text-sm"
+            aria-label="Score components"
+          >
+            {COMPONENTS.map(([key, label, title]) => {
+              const value = opportunity.score_components[key];
+              const known = value !== null && value !== undefined;
+              return (
+                <div key={key} className="contents" data-testid="score-component">
+                  <span className="text-ink-soft" title={title}>
+                    {label}
+                  </span>
+                  <div className="h-1.5 rounded-full bg-surface-sunken">
+                    {known ? (
+                      <div
+                        className="h-1.5 rounded-full bg-accent"
+                        style={{ width: `${Math.max(0, Math.min(1, value)) * 100}%` }}
+                        role="img"
+                        aria-label={`${label} ${percent(value)}`}
+                      />
+                    ) : null}
+                  </div>
+                  <span className="text-right font-mono tabular-nums" title={known ? undefined : "Not recorded with this score"}>
+                    {score(value)}
+                  </span>
+                  <span className="text-right font-mono text-xs tabular-nums text-ink-soft" data-testid="score-weight">
+                    {weights ? `× ${weights[key].toFixed(2)}` : ""}
+                  </span>
                 </div>
-                <span className="text-right font-mono tabular-nums">{score(value)}</span>
-              </div>
-            );
-          })}
-          <span className="font-medium text-ink">Total</span>
-          <div className="h-1.5 rounded-full bg-surface-sunken">
-            <div className="h-1.5 rounded-full bg-ink" style={{ width: `${opportunity.score * 100}%` }} />
+              );
+            })}
+            <span className="font-medium text-ink">Total</span>
+            <div className="h-1.5 rounded-full bg-surface-sunken">
+              <div className="h-1.5 rounded-full bg-ink" style={{ width: `${opportunity.score * 100}%` }} />
+            </div>
+            <span className="text-right font-mono font-medium tabular-nums">{score(opportunity.score)}</span>
+            <span />
           </div>
-          <span className="text-right font-mono font-medium tabular-nums">{score(opportunity.score)}</span>
+          <p className="mt-1 text-xs text-ink-soft" data-testid="weights-note">
+            {weights
+              ? `Total = each component × its weight (${opportunity.scoring_version}).`
+              : `Weights not shown: they are not known to have produced this score (${opportunity.scoring_version}).`}
+          </p>
         </div>
 
         {aiEnabled && opportunity.ai ? (

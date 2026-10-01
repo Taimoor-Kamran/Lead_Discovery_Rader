@@ -10,6 +10,7 @@ import type {
   LeadDetail,
   LeadRead,
   Me,
+  QueueFinding,
   QueueItem,
   ReviewDetail,
   ReviewOpportunity,
@@ -101,6 +102,19 @@ export function renderWithProviders(
   );
 }
 
+export function queueFinding(overrides: Partial<QueueFinding> = {}): QueueFinding {
+  const code = overrides.code ?? "no_https";
+  return {
+    code,
+    severity: "high",
+    evidence_text: `evidence for ${code}`,
+    method: "deterministic",
+    context: false,
+    businesses_with_code: 1,
+    ...overrides,
+  };
+}
+
 export function queueItem(overrides: Partial<QueueItem> = {}): QueueItem {
   return {
     business_id: "biz-1",
@@ -115,6 +129,12 @@ export function queueItem(overrides: Partial<QueueItem> = {}): QueueItem {
       status: "done",
       audited_at: "2026-09-20T10:00:00Z",
       top_findings: ["no_https", "no_h1"],
+      findings: [
+        queueFinding({ code: "no_https", severity: "high", businesses_with_code: 2 }),
+        queueFinding({ code: "no_h1", severity: "low", businesses_with_code: 1 }),
+        queueFinding({ code: "images_without_alt", severity: "low", businesses_with_code: 5 }),
+        queueFinding({ code: "no_dmarc", severity: "low", businesses_with_code: 9, context: true }),
+      ],
       finding_count: 4,
       pagespeed_score: 62,
     },
@@ -227,6 +247,7 @@ export function reviewDetail(overrides: Partial<ReviewDetail> = {}): ReviewDetai
     suppressions: [],
     undo_window_minutes: 30,
     weak_confidence: 0.4,
+    scoring_weights: { scoring_version: "scoring-1", facts: 0.25, inference: 0.45, intent: 0.1, contactability: 0.2 },
     sources: [sourceRecord()],
     linked_profiles: { page_url: null, profiles: [] },
     ai_enabled: true,

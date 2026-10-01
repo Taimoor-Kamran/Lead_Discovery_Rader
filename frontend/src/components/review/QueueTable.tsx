@@ -7,6 +7,7 @@ import {
   Badge,
   Chip,
   cx,
+  Disclosure,
   SkeletonTableRows,
   Table,
   TableWrap,
@@ -18,13 +19,14 @@ import {
   type SortDirection,
 } from "@/components/ui";
 import { SourceCell } from "@/components/review/SourceProvenance";
-import type { QueueItem } from "@/lib/api";
+import type { QueueFinding, QueueItem } from "@/lib/api";
 import { formatDateTime, percent, place, reviewCount, score } from "@/lib/format";
 import {
   auditStatusLabel,
   findingLabel,
   industryLabel,
   serviceLabel,
+  severityLabel,
   websiteKindLabel,
 } from "@/lib/labels";
 
@@ -61,6 +63,77 @@ function Unmeasured({ why, testId }: { why: string; testId?: string }) {
     <span className="text-ink-soft" title={why} aria-label={`Not measured: ${why}`} data-testid={testId}>
       —
     </span>
+  );
+}
+
+/** How many finding chips a row shows before "+N more" (v0.14.0, F3). */
+const SHOWN_FINDINGS = 2;
+
+const CONTEXT_TITLE = "Context: filed under no service, so nothing we would sell";
+
+function sharedBy(finding: QueueFinding): string {
+  const n = finding.businesses_with_code;
+  return `${finding.code}, on ${n} business${n === 1 ? "" : "es"} in this list`;
+}
+
+function FindingChip({ finding }: { finding: QueueFinding }) {
+  return (
+    <Chip
+      className={cx("text-sm", finding.context && "border-dashed text-ink-soft")}
+      title={finding.context ? `${sharedBy(finding)}. ${CONTEXT_TITLE}` : sharedBy(finding)}
+      data-testid="finding-chip"
+      data-context={finding.context ? "true" : undefined}
+    >
+      {findingLabel(finding.code)}
+      {finding.context ? <span className="text-xs italic">context</span> : null}
+    </Chip>
+  );
+}
+
+/**
+ * The two findings that set this business apart — already ordered by the server, worst
+ * first and then rarest in the filtered list — and a count of the rest. Expanding lists
+ * every finding with the evidence it quotes.
+ */
+function TopFindings({ findings }: { findings: QueueFinding[] }) {
+  if (!findings.length) return null;
+  const rest = findings.length - SHOWN_FINDINGS;
+  return (
+    <div className="flex flex-col gap-1">
+      <ul className="flex flex-wrap gap-1">
+        {findings.slice(0, SHOWN_FINDINGS).map((finding) => (
+          <li key={finding.code}>
+            <FindingChip finding={finding} />
+          </li>
+        ))}
+      </ul>
+      <Disclosure
+        summary={(open) => (open ? "Hide" : rest > 0 ? `+${rest} more` : "Evidence")}
+        testId="findings-more"
+      >
+        <ul className="flex max-w-xs flex-col gap-2" data-testid="findings-all">
+          {findings.map((finding) => (
+            <li key={finding.code} className={cx("text-sm", finding.context && "text-ink-soft")}>
+              <span className="font-medium" title={sharedBy(finding)}>
+                {findingLabel(finding.code)}
+              </span>{" "}
+              <span className="text-ink-soft">{severityLabel(finding.severity)}</span>
+              {finding.context ? (
+                <span className="text-xs italic text-ink-soft" title={CONTEXT_TITLE}>
+                  {" "}
+                  context
+                </span>
+              ) : null}
+              {finding.evidence_text ? (
+                <blockquote className="mt-0.5 border-l-2 border-line pl-2 font-mono text-xs text-ink">
+                  {finding.evidence_text}
+                </blockquote>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      </Disclosure>
+    </div>
   );
 }
 
@@ -108,7 +181,12 @@ export function QueueTable({
             <Th>Source</Th>
             <Th>Opportunities</Th>
             <Th>Audit</Th>
-            <Th>Top findings</Th>
+            <Th title="Worst first; among equals, the code fewer businesses in this filtered list share comes first">
+              Top findings
+              <span className="block text-xs font-normal text-ink-soft" data-testid="findings-order">
+                Worst first, then rarest in this list
+              </span>
+            </Th>
             <Th numeric title="How many findings the latest audit filed">
               Findings
             </Th>
@@ -234,16 +312,8 @@ export function QueueTable({
                     <span className="text-ink-soft">not audited</span>
                   )}
                 </Td>
-                <Td>
-                  <ul className="flex flex-wrap gap-1">
-                    {item.latest_audit?.top_findings.map((code) => (
-                      <li key={code}>
-                        <Chip className="text-sm" title={code}>
-                          {findingLabel(code)}
-                        </Chip>
-                      </li>
-                    ))}
-                  </ul>
+                <Td data-testid="top-findings">
+                  <TopFindings findings={item.latest_audit?.findings ?? []} />
                 </Td>
                 <Td numeric data-testid="finding-count">
                   {!item.latest_audit ? (

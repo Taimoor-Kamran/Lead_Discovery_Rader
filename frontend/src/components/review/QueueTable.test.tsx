@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { QueueTable } from "./QueueTable";
-import { queueItem } from "@/test/utils";
+import { queueFinding, queueItem } from "@/test/utils";
 
 describe("QueueTable", () => {
   it("shows city and state next to the business name, and the hidden-weak count", () => {
@@ -25,7 +25,7 @@ describe("QueueTable", () => {
     // Human wording on the page, the raw code in the tooltip only.
     expect(rows[0].textContent).toContain("No HTTPS");
     expect(rows[0].textContent).not.toContain("no_https");
-    expect(screen.getAllByTitle("no_https").length).toBeGreaterThan(0);
+    expect(screen.getAllByTitle(/^no_https\b/).length).toBeGreaterThan(0);
     expect(rows[0].textContent).toContain("Website redesign");
     expect(rows[0].textContent).not.toContain("website_design");
     expect(rows[0].textContent).toContain("Audited");
@@ -115,6 +115,7 @@ describe("QueueTable", () => {
               status: "unreachable",
               audited_at: "2026-09-20T10:00:00Z",
               top_findings: [],
+              findings: [],
               finding_count: null,
               pagespeed_score: null,
             },
@@ -214,5 +215,68 @@ describe("QueueTable", () => {
     fireEvent.click(screen.getByRole("button", { name: /Score/ }));
     expect(onSort).toHaveBeenCalledWith("score");
     expect(screen.getByRole("columnheader", { name: /PageSpeed/ }).getAttribute("aria-sort")).toBeNull();
+  });
+
+  it("shows the server's top two findings and a count of the rest; expanding lists every one with its evidence (F3)", () => {
+    render(
+      <QueueTable items={[queueItem()]} selected={new Set()} onToggle={() => {}} onToggleBusiness={() => {}} canSelect={false} />,
+    );
+    const cell = screen.getByTestId("top-findings");
+    // In the server's order, not re-sorted here: the rarity tie-break lives in the API.
+    expect(within(cell).getAllByTestId("finding-chip").map((c) => c.getAttribute("title"))).toEqual([
+      "no_https, on 2 businesses in this list",
+      "no_h1, on 1 business in this list",
+    ]);
+    expect(screen.queryByTestId("findings-all")).toBeNull();
+    const more = within(cell).getByRole("button", { name: "+2 more" });
+    fireEvent.click(more);
+    const all = screen.getByTestId("findings-all");
+    expect(all.querySelectorAll("li")).toHaveLength(4);
+    for (const code of ["no_https", "no_h1", "images_without_alt", "no_dmarc"]) {
+      expect(all.textContent).toContain(`evidence for ${code}`);
+    }
+    expect(within(cell).getByRole("button", { name: "Hide" })).toBeTruthy();
+  });
+
+  it("explains the ordering in the column header", () => {
+    render(
+      <QueueTable items={[queueItem()]} selected={new Set()} onToggle={() => {}} onToggleBusiness={() => {}} canSelect={false} />,
+    );
+    expect(screen.getByTestId("findings-order").textContent).toBe("Worst first, then rarest in this list");
+  });
+
+  it("marks a finding filed under no service as context, and shows no count when there is no rest", () => {
+    render(
+      <QueueTable
+        items={[
+          queueItem({
+            latest_audit: {
+              status: "done",
+              audited_at: "2026-09-20T10:00:00Z",
+              top_findings: ["no_https", "no_dmarc"],
+              findings: [
+                queueFinding({ code: "no_https" }),
+                queueFinding({ code: "no_dmarc", severity: "low", context: true }),
+              ],
+              finding_count: 2,
+              pagespeed_score: 62,
+            },
+          }),
+        ]}
+        selected={new Set()}
+        onToggle={() => {}}
+        onToggleBusiness={() => {}}
+        canSelect={false}
+      />,
+    );
+    const [sellable, context] = screen.getAllByTestId("finding-chip");
+    expect(sellable.dataset.context).toBeUndefined();
+    expect(sellable.className).not.toContain("border-dashed");
+    expect(context.dataset.context).toBe("true");
+    expect(context.className).toContain("border-dashed");
+    expect(context.textContent).toContain("context");
+    expect(context.getAttribute("title")).toContain("filed under no service");
+    expect(screen.queryByRole("button", { name: /more/ })).toBeNull();
+    expect(screen.getByRole("button", { name: "Evidence" })).toBeTruthy();
   });
 });

@@ -4,11 +4,19 @@ import { OpportunityCard } from "./OpportunityCard";
 import { reviewOpportunity } from "@/test/utils";
 import { AI_LABEL } from "@/lib/safe";
 
-function card(overrides: Parameters<typeof reviewOpportunity>[0] = {}, canDecide = true, weakThreshold?: number) {
+const WEIGHTS = { scoring_version: "scoring-1", facts: 0.25, inference: 0.45, intent: 0.1, contactability: 0.2 };
+
+function card(
+  overrides: Parameters<typeof reviewOpportunity>[0] = {},
+  canDecide = true,
+  weakThreshold?: number,
+  scoringWeights?: typeof WEIGHTS,
+) {
   return render(
     <OpportunityCard
       opportunity={reviewOpportunity(overrides)}
       weakThreshold={weakThreshold}
+      scoringWeights={scoringWeights}
       focused={false}
       canDecide={canDecide}
       busy={false}
@@ -194,5 +202,45 @@ describe("OpportunityCard safety rules", () => {
     expect(screen.getByLabelText("Contactability 100%")).toBeTruthy();
     expect(screen.getByTestId("history-row").textContent).toContain("AI mistake");
     expect(screen.getByRole("button", { name: "Undo" })).toBeTruthy();
+  });
+});
+
+describe("OpportunityCard: why this score (v0.14.0)", () => {
+  // 0.25×0.5 + 0.45×0.8 + 0.10×0 + 0.20×1 = 0.685
+  const scored = { score: 0.685 };
+
+  it("shows each component with its weight when the weights produce the stored total", () => {
+    card(scored, true, 0.4, WEIGHTS);
+    const rows = screen.getAllByTestId("score-component");
+    expect(rows.map((r) => r.textContent)).toEqual([
+      "Facts50× 0.25",
+      "Confidence80× 0.45",
+      "Intent0× 0.10",
+      "Contactability100× 0.20",
+    ]);
+    expect(screen.getByTestId("weights-note").textContent).toContain("each component × its weight (scoring-1)");
+  });
+
+  it("shows no weights when they do not reproduce the stored score", () => {
+    card({ score: 0.72 }, true, 0.4, WEIGHTS);
+    expect(screen.getAllByTestId("score-weight").map((w) => w.textContent)).toEqual(["", "", "", ""]);
+    expect(screen.getByTestId("weights-note").textContent).toContain("Weights not shown");
+  });
+
+  it("shows no weights for a score from another scoring version", () => {
+    card({ ...scored, scoring_version: "scoring-0" }, true, 0.4, WEIGHTS);
+    expect(screen.getByTestId("weights-note").textContent).toContain("Weights not shown");
+  });
+
+  it("renders a component that was not stored as a dash, never 0, and then shows no weights", () => {
+    card(
+      { ...scored, score_components: { facts: 0.5, inference: 0.8, intent: 0, contactability: null } },
+      true,
+      0.4,
+      WEIGHTS,
+    );
+    const last = screen.getAllByTestId("score-component")[3];
+    expect(last.textContent).toBe("Contactability—");
+    expect(screen.getByTestId("weights-note").textContent).toContain("Weights not shown");
   });
 });
