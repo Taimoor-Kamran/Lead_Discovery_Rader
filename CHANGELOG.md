@@ -37,12 +37,33 @@ are unchanged, so `AUDIT_LOGIC_VERSION` stays at 8.
   permanently closed business gets no opportunity and has its open ones withdrawn, so the
   closed badge is not expected in the queue.
 
+### Added — findings column (F3) and why this score
+
+- Queue rows carry `latest_audit.findings`: every finding of the latest audit, ordered by
+  severity, then by how many businesses in the current filtered queue share the code
+  (fewer first), then by code. The count is over the whole filtered set, not the page, so
+  the order is the same on every page and under both sorts. Each item carries its
+  evidence text, method, `businesses_with_code` and `context`. `top_findings` in the queue
+  is now the first two of that order (it was three, by severity only); the CRM payload's
+  `top_findings` is unchanged.
+- The findings column shows those two and "+N more"; expanding lists every finding with
+  the evidence it quotes. The header says "Worst first, then rarest in this list".
+- A finding filed under no service (the email findings, `robots_blocked`) is marked
+  context: a dashed chip in the queue, a "Context" badge in the finding list.
+- The opportunity card's components are headed "Why this score" and show each weight,
+  but only where the current weights reproduce the stored total under the same scoring
+  version; otherwise it says the weights are not shown. `GET /review-queue/{id}` carries
+  `scoring_weights`.
+
+### Changed
+
+- `score_components` fields are `null`, not `0.0`, when the stored row lacks that
+  component, and render as "—".
+
 ### Not in this release
 
 - No service-area badge: Places' `pureServiceAreaBusiness` is not in the field mask, and
   the mask is not widened while our Places billing tier is unverified.
-- The findings-column rarity ordering and "+N more", the score-components weights and the
-  context styling for `service: null` findings wait on open questions in the spec.
 
 ## [v0.13.0] - unreleased
 
