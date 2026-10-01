@@ -545,8 +545,37 @@ BOOKING_TO_FOLLOW = frozenset({BOOKING_CTA, BOOKING_PATH})
 # placeholder that say it is one (a Gravity Forms date field is `type="text"
 # class="datepicker"`).
 DATE_TIME_INPUT_TYPES = frozenset({"date", "time", "datetime-local", "month", "week"})
-# Path segments of a location picker: a chain's "choose your salon" page.
-LOCATION_SEGMENTS = frozenset({"location", "locations", "salon", "salons", "store", "stores"})
+# Words that make a link on a booking target lead on to booking (v0.12.1), matched as
+# whole words of its text or href: `facebook` and `bookkeeping` are not `book`.
+ONWARD_BOOKING_WORDS = frozenset(
+    {
+        "book",
+        "booking",
+        "bookings",
+        "appointment",
+        "appointments",
+        "schedule",
+        "scheduling",
+        "reserve",
+        "reservation",
+        "reservations",
+    }
+)
+# Words of a branch, store, location or city picker: a chain's "choose your salon" page.
+LOCATION_WORDS = frozenset(
+    {
+        "location",
+        "locations",
+        "branch",
+        "branches",
+        "store",
+        "stores",
+        "salon",
+        "salons",
+        "city",
+        "cities",
+    }
+)
 DATE_TIME_WORD = re.compile(r"(?:^|[^a-z])(date|time|datepicker|timepicker)(?:[^a-z]|$)")
 
 
@@ -693,42 +722,45 @@ def booking_target_flow(outcome: FetchOutcome) -> str | None:
 
 
 def booking_onward_hop(outcome: FetchOutcome) -> str | None:
-    """Where a target with no scheduler of its own leads on, or `None` (v0.12.1).
+    """Where a target with no scheduler of its own leads on to booking, or `None` (v0.12.1).
 
-    A further booking-looking link (not back to this page), a location picker (links into
-    a `/locations/`-style section, or a select named for a location), or a link to another
-    host. A Google or social-profile host is not a hop: those sit in every footer. Never
-    followed — one page is the limit — only named, so the audit can stay silent.
+    Only two things count. (a) A link whose text or href carries a booking word (book,
+    booking, appointment, schedule, reserve). (b) A choice of locations: two or more
+    links, or a select with two or more options, that read like a branch, store, location
+    or city picker. A bare outside link is **not** onward booking. ATX's contact page has
+    "Website Crafted by Enlightened Owl Digital" in its footer, and counting that would
+    silence the very finding this check exists for. Designer credits, trade bodies,
+    badges, directories, social and Google are ignored wherever they sit. Links back to
+    this page never count. Nothing is followed; the hop is only named.
     """
     if outcome.text is None:
         return None
     page = outcome.final_url or outcome.url
-    own = _page_key(page)[0]
     soup = BeautifulSoup(outcome.text, "lxml")
-    for element in _clickables(soup):
-        label = _clickable_label(element)
-        if not label or booking_text_match(label.lower()) is None:
-            continue
-        target = _clickable_target(element, page)
-        if target is not None and not same_page(target, page):
-            return f"'{label}' leads on to {target}"
-    for select in find_tags(soup, "select"):
-        words = " ".join(str(select.get(attr, "")) for attr in ("name", "id", "aria-label"))
-        if "location" in words.lower():
-            return f"the page asks which location: {clip(str(select), 160)}"
+    locations: list[str] = []
     for link in find_tags(soup, "a", href=True):
-        href = str(link["href"]).strip()
-        target = _link_target(page, href)
+        target = _link_target(page, str(link["href"]))
         if target is None or same_page(target, page):
             continue
-        if _is_booking_path(href):
-            return f"'{href}' leads on to {target}"
-        host, path = _page_key(target)
-        if host == own and set(path.split("/")) & LOCATION_SEGMENTS:
-            return f"the page lists locations, e.g. {target}"
-        if host and host != own and not is_never_booking_host(host) and not is_social_host(host):
-            return f"the page links to another host, {host}: {target}"
+        host = urlsplit(target).hostname or ""
+        if is_never_booking_host(host) or is_social_host(host):
+            continue
+        words = _words(f"{link.get_text(' ', strip=True)} {_clickable_label(link)} {target}")
+        if words & ONWARD_BOOKING_WORDS:
+            return f"'{_clickable_label(link) or target}' leads on to {target}"
+        if words & LOCATION_WORDS and target not in locations:
+            locations.append(target)
+    if len(locations) >= 2:
+        return f"the page offers a choice of locations, e.g. {locations[0]}"
+    for select in find_tags(soup, "select"):
+        named = _words(" ".join(str(select.get(a, "")) for a in ("name", "id", "aria-label")))
+        if named & LOCATION_WORDS and len(find_tags(select, "option")) >= 2:
+            return f"the page asks which location: {clip(str(select), 160)}"
     return None
+
+
+def _words(text: str) -> set[str]:
+    return set(re.findall(r"[a-z]+", text.lower()))
 
 
 def looks_script_built(outcome: FetchOutcome) -> bool:

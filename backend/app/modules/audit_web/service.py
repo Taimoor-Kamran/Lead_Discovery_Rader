@@ -268,7 +268,7 @@ def _follow_booking_link(
     goes to a contact form with no date or time on it. So the target is fetched once,
     through `safe_fetch` (robots, SSRF guard, per-host throttle), and only what is on it
     decides: a booking flow there is `verified_target`; a page that only leads further (a
-    booking link, a location picker, another host) is `unverified_multi_hop`; none of
+    link with a booking word, a choice of locations) is `unverified_multi_hop`; none of
     these is `False`, with the call to action and the target named in the evidence; and
     anything that stops us reading the page is `unverified`. Both unverified outcomes
     carry a null value and draw no finding. One page, never a crawl.

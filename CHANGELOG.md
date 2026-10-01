@@ -41,9 +41,11 @@ The paused v0.13.0 branch's `0014_domain_intel` becomes `0015` when it resumes.
     Zenoti) counts without a fetch. On the followed target, such a host in an iframe, a
     script or a link is booking too; a Google host (reCAPTCHA, Maps, Tag Manager, Ads)
     never is.
-  - A target with no scheduler that leads further — a booking link, a location picker, a
-    link to another host — is `unverified_multi_hop` and draws no finding: only one page is
-    followed. A booking link back to the audited page is skipped without a fetch.
+  - A target with no scheduler that leads on to booking is `unverified_multi_hop` and draws
+    no finding, since only one page is followed. "Leads on" means a link with a booking word
+    (book, appointment, schedule, reserve), or a choice of two or more locations. A bare
+    outside link (a designer credit, a badge, a directory) does not count. A booking link
+    back to the audited page is skipped without a fetch.
   - The method is stored in `checks.booking.method`: `widget`, `booking_host`,
     `verified_target`, `cta`, `path`, `unverified` or `unverified_multi_hop`.
 - `no_online_booking` now reads "Audit found no visible online booking flow on the

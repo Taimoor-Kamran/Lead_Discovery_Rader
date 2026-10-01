@@ -308,6 +308,26 @@ def test_atx_a_contact_form_with_only_google_hosts_fires_the_finding(db: Session
     assert target in finding["evidence_text"]
 
 
+def test_atx_the_enlightened_owl_footer_credit_does_not_silence_the_finding(
+    db: Session,
+) -> None:
+    """Found on the real page after the multi-hop rule was written, not by these tests."""
+    contact = fixture("atx_contact")
+    assert "https://enlightenedowl.com/" in contact
+    home = "https://atxelectricalservices.com/"
+    target = f"{home}contact/"
+    audit, _ = audit_site(
+        db,
+        home,
+        {home: page(f'<a href="{target}">Schedule Now</a>'), target: contact},
+        "electrical",
+    )
+
+    assert audit.checks["booking"]["method"] == "cta"
+    assert "enlightenedowl" not in audit.checks["booking"]["evidence_text"]
+    assert "no_online_booking" in codes(audit)
+
+
 def test_atx_schedule_now_on_contact_pointing_at_contact_is_caught_without_a_fetch(
     db: Session,
 ) -> None:
@@ -345,11 +365,19 @@ def test_a_google_host_on_the_target_is_never_a_booking_signal(db: Session, mark
     ("markup", "why"),
     [
         ('<a href="https://wellington.invalid/booking/">Continue</a>', "leads on"),
-        ('<a href="https://other-shop.test/">Our partner</a>', "another host"),
-        ('<select name="location"><option>North</option></select>', "which location"),
+        ('<a href="https://other-shop.test/x">Reserve a table</a>', "leads on"),
+        ('<a href="https://other-shop.test/appointments">Next</a>', "leads on"),
+        (
+            '<a href="/locations/north/">North</a><a href="/locations/south/">South</a>',
+            "choice of locations",
+        ),
+        (
+            '<select name="location"><option>North</option><option>South</option></select>',
+            "which location",
+        ),
     ],
 )
-def test_a_target_that_leads_further_is_multi_hop(db: Session, markup: str, why: str) -> None:
+def test_a_target_that_leads_on_to_booking_is_multi_hop(db: Session, markup: str, why: str) -> None:
     audit, _ = audit_of(
         db, {HOME: page('<a href="/book/">Book Now</a>'), f"{HOME}book/": page(markup)}
     )
@@ -357,3 +385,28 @@ def test_a_target_that_leads_further_is_multi_hop(db: Session, markup: str, why:
     assert audit.checks["booking"]["method"] == "unverified_multi_hop"
     assert why in audit.checks["booking"]["evidence_text"]
     assert "no_online_booking" not in codes(audit)
+
+
+@pytest.mark.parametrize(
+    "markup",
+    [
+        # The real ATX footer credit (correction G): another host, and nothing more.
+        '<p>Website Crafted by <a href="https://enlightenedowl.com/">Enlightened Owl Digital'
+        "</a></p>",
+        '<a href="https://www.bbb.org/us/tx/austin/profile/x">BBB Accredited</a>',
+        '<a href="https://www.facebook.com/x">Facebook</a>',
+        '<a href="https://www.google.com/maps/place/x">Directions</a>',
+        '<a href="/locations/north/">Our one location</a>',
+        '<a href="https://example-bookkeeping.test/">Our accountant</a>',
+    ],
+)
+def test_a_bare_outside_link_or_single_location_does_not_silence_the_finding(
+    db: Session, markup: str
+) -> None:
+    audit, _ = audit_of(
+        db,
+        {HOME: page('<a href="/book/">Book Now</a>'), f"{HOME}book/": GRAVITY_CONTACT + markup},
+    )
+
+    assert audit.checks["booking"]["method"] == "cta"
+    assert "no_online_booking" in codes(audit)
