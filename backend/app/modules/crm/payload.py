@@ -266,7 +266,7 @@ def _top_findings(latest: WebsiteAudit | None) -> str | None:
         return None
     from app.modules.review.service import top_findings
 
-    labels = [finding_label(code) for code in top_findings(latest)]
+    labels = [finding_label(code) for code in top_findings(latest, sellable_only=True)]
     return SERVICES_SEPARATOR.join(labels) or None
 
 

@@ -21,6 +21,7 @@ from typing import Any
 from app.core.config import Settings, get_settings
 from app.modules.ai import pii
 from app.modules.ai.schema import PROMPT_VERSION
+from app.modules.audit_web.findings import CATALOGUE
 from app.modules.audit_web.models import WebsiteAudit
 from app.modules.businesses.models import Business
 from app.modules.normalization.taxonomy import OTHER, PLACES_TYPE_TO_INDUSTRY, TEXT_TO_INDUSTRY
@@ -122,6 +123,14 @@ class ClassificationInput:
         )
 
 
+def _filed_under_no_service(code: str) -> bool:
+    """A finding with no service is context for a rep, never something to sell, so the
+    model never sees it (v0.13.0, decision C4). A code no longer in the catalogue is kept,
+    as before."""
+    spec = CATALOGUE.get(code)
+    return spec is not None and spec.service is None
+
+
 def build_input(
     business: Business, audit: WebsiteAudit, *, settings: Settings | None = None
 ) -> ClassificationInput:
@@ -148,7 +157,7 @@ def build_input(
             evidence_url=item.get("evidence_url"),
         )
         for item in (audit.findings or [])
-        if item.get("code")
+        if item.get("code") and not _filed_under_no_service(str(item.get("code")))
     ]
     psi_score = (audit.psi or {}).get("performance_score")
     platforms = (audit.tech_stack or {}).get("platforms") or []

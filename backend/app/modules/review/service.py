@@ -36,6 +36,7 @@ from app.core.pagination import DEFAULT_LIMIT, Page
 from app.modules.ai.models import AIClassification
 from app.modules.audit import service as audit_log
 from app.modules.audit_web import service as audits
+from app.modules.audit_web.findings import CATALOGUE as FINDING_CATALOGUE
 from app.modules.audit_web.models import WebsiteAudit
 from app.modules.auth.models import Role, User
 from app.modules.businesses import service as businesses
@@ -852,13 +853,27 @@ def _queue_item(
     )
 
 
-def top_findings(audit: WebsiteAudit) -> list[str]:
-    """The worst few finding codes of an audit, high severity first."""
+def top_findings(audit: WebsiteAudit, *, sellable_only: bool = False) -> list[str]:
+    """The worst few finding codes of an audit, high severity first.
+
+    `sellable_only` leaves out findings filed under no service — the six email findings and
+    `robots_blocked`. The CRM asks for that (v0.13.0, decision C5): a finding FlexTBS
+    cannot service is context for a reviewer, never a claim on a CRM lead.
+    """
     ranked = sorted(
-        (item for item in (audit.findings or []) if item.get("code")),
+        (
+            item
+            for item in (audit.findings or [])
+            if item.get("code") and not (sellable_only and _unserviced(str(item["code"])))
+        ),
         key=lambda item: SEVERITY_ORDER.get(str(item.get("severity")), len(SEVERITY_ORDER)),
     )
     return [str(item["code"]) for item in ranked[:TOP_FINDINGS]]
+
+
+def _unserviced(code: str) -> bool:
+    spec = FINDING_CATALOGUE.get(code)
+    return spec is not None and spec.service is None
 
 
 def service_name(key: str) -> str:

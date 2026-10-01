@@ -61,7 +61,11 @@ from app.modules.opportunities.catalogue import (
     service_keys,
 )
 from app.modules.opportunities.models import Opportunity, OpportunitySource, ReviewStatus
-from app.modules.opportunities.rules import RuleOpportunity, rule_opportunities
+from app.modules.opportunities.rules import (
+    BOT_CHALLENGE_FINDINGS,
+    RuleOpportunity,
+    rule_opportunities,
+)
 from app.modules.opportunities.schemas import (
     AIProvenanceRead,
     OpportunityDetail,
@@ -279,11 +283,15 @@ def classify(
 
 def _no_opportunities(business: Business, audit: WebsiteAudit) -> bool:
     """Businesses the spec says get nothing: closed for good, or a site that refused us —
-    by robots.txt, or with a bot-protection challenge (v0.12.0)."""
+    by robots.txt, or with a bot-protection challenge (v0.12.0) that carries no domain
+    finding allowed to stand on that status (v0.13.0, decision C1)."""
     return (
         business.business_status is BusinessStatus.closed_permanently
         or audit.status is AuditStatus.robots_blocked
-        or audit.status is AuditStatus.bot_challenge
+        or (
+            audit.status is AuditStatus.bot_challenge
+            and not set(audit.finding_codes) & BOT_CHALLENGE_FINDINGS
+        )
         or "robots_blocked" in audit.finding_codes
     )
 

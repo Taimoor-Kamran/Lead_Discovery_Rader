@@ -17,7 +17,7 @@ from typing import Any
 
 from app.modules.ai import pii
 from app.modules.ai.schema import UNKNOWN, AIEvidence, AIOpportunity, AIOutput
-from app.modules.audit_web.findings import BANNED_WORDS
+from app.modules.audit_web.findings import BANNED_WORDS, CATALOGUE
 from app.modules.opportunities.catalogue import is_service
 
 _WS = re.compile(r"\s+")
@@ -173,6 +173,20 @@ def _check_evidence(
     context: GuardrailContext,
     rejected: list[dict[str, Any]],
 ) -> AIEvidence | None:
+    spec = CATALOGUE.get(item.finding_code) if item.finding_code is not None else None
+    if spec is not None and spec.service is None:
+        # A finding filed under no service (the six email findings, `robots_blocked`) is
+        # context for a rep, never grounds for selling anything (v0.13.0, decision C4).
+        # Never sent to the model; refused here too in case it is cited anyway.
+        rejected.append(
+            _claim(
+                "finding_has_no_service",
+                service=service,
+                detail=f"'{item.finding_code}' is filed under no service",
+                text=item.quote,
+            )
+        )
+        return None
     if item.finding_code is not None and item.finding_code not in context.finding_codes:
         rejected.append(
             _claim(

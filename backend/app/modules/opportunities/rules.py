@@ -26,9 +26,28 @@ ADS_SOCIAL_REASON = "Audit found no social profile links on the homepage."
 # The only findings an unreachable site may contribute: the site itself could not be read,
 # so nothing about its content is known.
 # `few_reviews` is read from the listing, not the site, so it stands however the site did.
-UNREACHABLE_FINDINGS = frozenset({"unreachable", "tls_invalid", "few_reviews"})
+# The three domain findings FlexTBS can sell (v0.13.0). They come from DNS and the
+# registry, never from the page, so whatever the homepage did does not reach them.
+DOMAIN_SERVICE_FINDINGS = frozenset(
+    {"domain_expired", "domain_no_a_record", "domain_expiring_soon"}
+)
+UNREACHABLE_FINDINGS = (
+    frozenset({"unreachable", "tls_invalid", "few_reviews"}) | DOMAIN_SERVICE_FINDINGS
+)
 # A homepage that answered non-2xx (v0.12.0): only what the URLs show, never the page.
-NOT_READABLE_FINDINGS = frozenset({"listing_website_http", "listing_website_host_mismatch"})
+NOT_READABLE_FINDINGS = (
+    frozenset({"listing_website_http", "listing_website_host_mismatch"}) | DOMAIN_SERVICE_FINDINGS
+)
+# A bot-protection challenge (v0.12.0) was a blanket exclusion: its page findings described
+# the challenge page, not the business's site. Domain findings are not read from the page,
+# so that reason does not reach them, and they alone may contribute (v0.13.0, decision C1).
+BOT_CHALLENGE_FINDINGS = DOMAIN_SERVICE_FINDINGS
+# Per-status allow-lists. A status not named here keeps every finding it has.
+ALLOWED_FINDINGS: dict[AuditStatus, frozenset[str]] = {
+    AuditStatus.unreachable: UNREACHABLE_FINDINGS,
+    AuditStatus.not_readable: NOT_READABLE_FINDINGS,
+    AuditStatus.bot_challenge: BOT_CHALLENGE_FINDINGS,
+}
 
 
 @dataclass(frozen=True)
@@ -54,21 +73,16 @@ def rule_opportunities(business: Business, audit: WebsiteAudit) -> list[RuleOppo
     """Every service the audit points at, in catalogue order, with its combined confidence."""
     if business.business_status is BusinessStatus.closed_permanently:
         return []
-    if audit.status in (
-        AuditStatus.robots_blocked,
-        AuditStatus.failed,
-        AuditStatus.bot_challenge,
-    ):
+    if audit.status in (AuditStatus.robots_blocked, AuditStatus.failed):
         return []
     codes = set(audit.finding_codes)
     if codes & NO_OPPORTUNITY_FINDINGS:
         return []
 
     findings = [item for item in (audit.findings or []) if item.get("code")]
-    if audit.status is AuditStatus.unreachable:
-        findings = [item for item in findings if item["code"] in UNREACHABLE_FINDINGS]
-    elif audit.status is AuditStatus.not_readable:
-        findings = [item for item in findings if item["code"] in NOT_READABLE_FINDINGS]
+    allowed = ALLOWED_FINDINGS.get(audit.status)
+    if allowed is not None:
+        findings = [item for item in findings if item["code"] in allowed]
 
     grouped: dict[str, list[dict[str, Any]]] = {}
     for item in findings:
