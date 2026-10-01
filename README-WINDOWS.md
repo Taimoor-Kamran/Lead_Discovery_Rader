@@ -216,14 +216,14 @@ In the **Ubuntu** window:
 cd ~
 git clone https://github.com/Taimoor-Kamran/Lead_Discovery_Rader.git lead-discovery-radar
 cd lead-discovery-radar
-git checkout v0.11.2
+git checkout v0.14.0
 ```
 
-`git checkout v0.11.2` picks the exact version this guide was written for. (Not yet
+`git checkout v0.14.0` picks the exact version this guide was written for. (Not yet
 tested: this version is published when this guide is approved, so the walkthrough used
 the same code under its working name.) It prints a
 note about a *"detached HEAD"*; that is expected and harmless. If it says
-`pathspec 'v0.11.2' did not match`, we have not published that version yet: tell us, and
+`pathspec 'v0.14.0' did not match`, we have not published that version yet: tell us, and
 do not continue on a different version.
 
 Check the line endings. This prints `0`:
@@ -381,7 +381,7 @@ about:
 | `ADMIN_PASSWORD=` | *(empty)* | Leave it empty. The app generates a strong password and shows it to you **once** (section 7). |
 | `POSTGRES_USER=`, `POSTGRES_DB=` | `radar` | The database's user and name. The password was generated in 6.1. |
 | `POSTGRES_PASSWORD=`, `DATABASE_URL=`, `JWT_SECRET=` | *(generated in 6.1)* | Do not edit. If you change the database password after the first start, the app can no longer open its own database (see *Troubleshooting*). |
-| `PLACES_DAILY_CALL_CAP=` | `200` | **Leave it at 200.** See 6.4. |
+| `PLACES_DAILY_CALL_CAP=` | `100` | **Leave it at 100.** See 6.4. |
 | `PLACES_RUN_CALL_CAP_MULTIPLIER=` | `4` | A second guard: one search may make at most 4 × (businesses ÷ 20) Places requests, so 12 for a 60-business search. Leave it. |
 | `PLACES_MAX_RESULTS_PER_JOB=` | `60` | The most businesses one search can ask for. |
 | `PSI_DAILY_CALL_CAP=` | `200` | The same kind of daily guard for PageSpeed. PageSpeed is free, but 200 is enough for three 60-business searches a day. |
@@ -397,7 +397,7 @@ This is the most requests the app may send to Google Places in one day, counted 
 the app stops **before** sending the request, so nothing is charged, and the search is
 marked failed with a message beginning `QuotaExceededError`.
 
-**Leave it at its default of 200, and do not raise it.** It is not there because we expect
+**Leave it at its default of 100, and do not raise it.** It is not there because we expect
 you to need 200 requests a day — a normal evaluation uses a few dozen. It is there because
 software has bugs. While we were building this, a fault made searches send the same Places
 request over and over: **500 real, billable requests in two days** before we found it, and
