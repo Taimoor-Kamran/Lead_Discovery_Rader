@@ -42,7 +42,26 @@ SHORTENER_DOMAINS = frozenset(
         "bl.ink",
     }
 )
-SHARED_DOMAINS = BUILDER_DOMAINS | SOCIAL_DOMAINS | LINK_IN_BIO_DOMAINS | SHORTENER_DOMAINS
+# A booking platform's page used as the website. The domain is the platform's, so its DNS
+# and registry say nothing about this business (found in the v0.13.0 smoke sample).
+BOOKING_PLATFORM_DOMAINS = frozenset(
+    {
+        "vagaro.com",
+        "phorest.com",
+        "zenoti.com",
+        "fresha.com",
+        "booksy.com",
+        "squareup.com",
+        "setmore.com",
+    }
+)
+SHARED_DOMAINS = (
+    BUILDER_DOMAINS
+    | SOCIAL_DOMAINS
+    | LINK_IN_BIO_DOMAINS
+    | SHORTENER_DOMAINS
+    | BOOKING_PLATFORM_DOMAINS
+)
 
 # Statuses whose audit asks no domain question at all. `skipped` had no site to ask about;
 # on `robots_blocked` the owner said not to crawl, and no domain finding is emitted there

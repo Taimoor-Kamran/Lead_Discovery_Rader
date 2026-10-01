@@ -125,10 +125,18 @@ def snapshot(
             split = records.split_apex_txt(answer.values)
             spf, txt_other = list(split.spf), split.other_count
             entry["values"] = list(split.spf)
+            entry["values_withheld"] = (
+                "only v=spf1 records are kept; any other TXT record is counted in "
+                "txt_other_count (C8)"
+            )
         elif rdtype == "TXT" and name == dmarc_name(target.apex):
             parsed = records.split_dmarc_txt(answer.values)
             dmarc, dmarc_other = list(parsed.records), parsed.other_count
             entry["values"] = []
+            entry["values_withheld"] = (
+                "DMARC kept as parsed v, p and sp tags in dmarc; any other TXT record is "
+                "counted in dmarc_other_count (C8)"
+            )
         entries.append(entry)
     resolvers = sorted({a.resolver for a in answers.values() if a.resolver})
     ns = _values(entries, target.apex, "NS")

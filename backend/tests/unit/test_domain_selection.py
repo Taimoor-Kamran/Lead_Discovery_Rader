@@ -123,3 +123,23 @@ def test_a_host_no_idna_codec_accepts_is_skipped_with_a_reason() -> None:
     )
     assert chosen.target is None
     assert chosen.skip_reason == "b\u00fccher\u200d.de is not a valid domain name"
+
+
+@pytest.mark.parametrize(
+    "domain",
+    [
+        "vagaro.com",
+        "phorest.com",
+        "zenoti.com",
+        "fresha.com",
+        "booksy.com",
+        "squareup.com",
+        "setmore.com",
+    ],
+)
+def test_a_booking_platform_page_as_the_website_asks_nothing(domain: str) -> None:
+    chosen = select(
+        status=AuditStatus.done, final_url=f"https://www.{domain}/acme-salon", website=None
+    )
+    assert chosen.target is None
+    assert chosen.skip_reason == f"{domain} is shared by many businesses"

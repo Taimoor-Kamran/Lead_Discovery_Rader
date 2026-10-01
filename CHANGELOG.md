@@ -23,7 +23,8 @@ only; every audit copies what it used into its own `checks`. `make migrate` also
   registrable domain, and RDAP about the domain's registration, within 15 seconds in all.
   The snapshot is stored in `checks.domain_intel` with the resolver asked and the RDAP URL.
   No lookup is made on `skipped`, `robots_blocked` or `failed` audits, for a builder,
-  social, link-in-bio or URL-shortener host, or for a host with no registrable domain.
+  social, link-in-bio, URL-shortener or booking-platform host (Vagaro, Phorest, Zenoti,
+  Fresha, Booksy, Square, Setmore), or for a host with no registrable domain.
 - Nine findings: `domain_expired`, `domain_no_a_record` (high); `domain_expiring_soon`,
   `multiple_spf_records`, `spf_allows_all` (medium); `no_spf`, `no_dmarc`,
   `dmarc_policy_none`, `no_domain_mx` (low). They are emitted on `done`, `bot_challenge`,
@@ -38,7 +39,9 @@ only; every audit copies what it used into its own `checks`. `make migrate` also
 - No registrant data is kept. From RDAP only the registrar's name, creation date, expiry
   date and status codes are read; every contact is dropped where the answer is parsed.
   From DMARC only the `v`, `p` and `sp` tags are kept, never the report addresses; from
-  other TXT records only a count.
+  other TXT records only a count. The snapshot's apex `TXT` and `_dmarc` `TXT` entries carry
+  a `values_withheld` note saying so, so an `answered` entry with few or no values is not
+  misread as an empty answer.
 - RDAP calls are rate-limited (`RDAP_RPS`), capped per day (`RDAP_DAILY_CALL_CAP`) and
   logged in `api_calls` under the new `rdap` source.
 - Domain hosts are keyed by their ASCII (IDNA) spelling, so `bücher.de` and
