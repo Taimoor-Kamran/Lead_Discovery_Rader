@@ -57,6 +57,7 @@ from app.modules.audit_web.psi import (
 from app.modules.audit_web.schemas import WebsiteAuditDetail, WebsiteAuditSummary
 from app.modules.businesses.models import Business, BusinessFieldValue
 from app.modules.discovery.models import DiscoveredRecord
+from app.modules.domain_intel import findings as domain_findings
 from app.modules.domain_intel import service as domain_service
 from app.modules.domain_intel.service import DomainTools
 from app.modules.jobs.models import JobRun as JobRunType
@@ -156,8 +157,39 @@ def _attach_domain_intel(
         now=now,
     )
     audit.checks = {**(audit.checks or {}), domain_service.CHECK_KEY: result.as_dict()}
+    found = domain_findings.for_domain(
+        result.value,
+        status=audit.status,
+        site_answered=_site_answered(audit, seen),
+        now=now,
+        expiry_warn_days=settings.audit_domain_expiry_warn_days,
+    )
+    if found:
+        audit.findings = [*(audit.findings or []), *findings_module.as_payload(found)]
+        logger.info(
+            "domain findings",
+            extra={
+                "business_id": str(audit.business_id),
+                "website_audit_id": str(audit.id),
+                "findings": [finding.code for finding in found],
+            },
+        )
     audit.finished_at = datetime.now(UTC)
     session.flush()
+
+
+def _site_answered(audit: WebsiteAudit, seen: _Seen) -> bool:
+    """Whether this audit proved the site host resolves (decision C10).
+
+    Any HTTP status line from the homepage or from robots.txt; or a TLS certificate that
+    failed verification, since a handshake needs a connection, and a connection needs an
+    address. Stricter than the spec's "a 2xx page" on purpose: each of these contradicts
+    "no address record".
+    """
+    if audit.http_status is not None or seen.robots_status is not None:
+        return True
+    tls = (audit.checks or {}).get("tls_valid")
+    return isinstance(tls, dict) and tls.get("value") is False
 
 
 def _audit_homepage(

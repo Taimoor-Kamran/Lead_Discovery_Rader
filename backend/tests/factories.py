@@ -34,6 +34,19 @@ def make_business(**overrides: Any) -> Business:
     return Business(**values)
 
 
+DOMAIN_WORDING: dict[str, dict[str, Any]] = {
+    "domain_expired": {"domain": "example-plumbing.com", "date": "2026-09-01"},
+    "domain_no_a_record": {"host": "www.example-plumbing.com"},
+    "domain_expiring_soon": {"domain": "example-plumbing.com", "date": "2026-11-01", "days": 31},
+    "multiple_spf_records": {"count": 2, "domain": "example-plumbing.com"},
+    "spf_allows_all": {"domain": "example-plumbing.com", "mechanism": "+all"},
+    "no_spf": {"domain": "example-plumbing.com"},
+    "no_dmarc": {"domain": "example-plumbing.com"},
+    "dmarc_policy_none": {"domain": "example-plumbing.com"},
+    "no_domain_mx": {"domain": "example-plumbing.com"},
+}
+
+
 def finding(code: str, *, text: str | None = None, url: str | None = PAGE_URL) -> dict[str, Any]:
     """A real catalogue finding, so the message is the one the audit would have written."""
     wording: dict[str, Any] = {}
@@ -53,6 +66,9 @@ def finding(code: str, *, text: str | None = None, url: str | None = PAGE_URL) -
         wording.update(count=4, noun="reviews")
     if code == "heading_level_skipped":
         wording.update(higher="h1", lower="h3")
+    # v0.13.0: domain findings name the domain, never a page.
+    if code in DOMAIN_WORDING:
+        wording.update(DOMAIN_WORDING[code])
     return findings_module.build(
         code, evidence_text=text or f"evidence for {code}", evidence_url=url, **wording
     ).as_dict()

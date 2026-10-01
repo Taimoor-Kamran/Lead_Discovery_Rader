@@ -56,6 +56,16 @@ export const FINDING_LABELS: Record<string, string> = {
   placeholder_email: "Placeholder email address",
   placeholder_text: "Template placeholder text",
   future_copyright: "Copyright year in the future",
+  // v0.13.0: from DNS and the domain registry, not from the page.
+  domain_expired: "Domain registration expired",
+  domain_no_a_record: "Domain has no address record",
+  domain_expiring_soon: "Domain registration expiring soon",
+  multiple_spf_records: "More than one SPF record",
+  spf_allows_all: "SPF record allows any sender",
+  no_spf: "No SPF record",
+  no_dmarc: "No DMARC record",
+  dmarc_policy_none: "DMARC policy set to none",
+  no_domain_mx: "No mail server (MX) record",
 };
 
 /** How an opportunity was arrived at, not where a fact came from. See SOURCE_NAME_LABELS. */
