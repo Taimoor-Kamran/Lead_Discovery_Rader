@@ -3,6 +3,67 @@
 All notable changes, one section per merged spec. Newest first.
 Format: `## [vX.Y.Z] - YYYY-MM-DD` followed by Added / Changed / Fixed.
 
+## [v0.13.0] - unreleased
+
+**`AUDIT_LOGIC_VERSION` stays at 8** (acceptance 10), although this spec adds findings —
+CLAUDE.md's rule is to bump it when a finding changes what an audit concludes. Bumping it
+would make every audited business due at once and spend one PageSpeed call each against
+the 200/day cap. Domain findings therefore reach a business on its next audit by age, or at
+once through `POST /api/v1/businesses/{id}/audit`. A stored audit made before this spec has
+no `checks.domain_intel` and no domain findings; that is not a sign the domain is healthy.
+
+**Migration `0015_domain_intel`** adds the `domain_intel` cache table (one row per
+registrable domain: DNS and RDAP snapshots with their checked-at times). It is a cache
+only; every audit copies what it used into its own `checks`. `make migrate` also adds the
+`rdap` row to `sources`.
+
+### Added — domain intelligence (DNS and RDAP)
+
+- Every audit, whatever its homepage did, asks DNS about the site host and its
+  registrable domain, and RDAP about the domain's registration, within 15 seconds in all.
+  The snapshot is stored in `checks.domain_intel` with the resolver asked and the RDAP URL.
+  No lookup is made on `skipped`, `robots_blocked` or `failed` audits, for a builder,
+  social, link-in-bio or URL-shortener host, or for a host with no registrable domain.
+- Nine findings: `domain_expired`, `domain_no_a_record` (high); `domain_expiring_soon`,
+  `multiple_spf_records`, `spf_allows_all` (medium); `no_spf`, `no_dmarc`,
+  `dmarc_policy_none`, `no_domain_mx` (low). They are emitted on `done`, `bot_challenge`,
+  `not_readable` and `unreachable` audits. Only a DNS answer that is certain becomes a
+  finding: a timeout, `SERVFAIL`, `REFUSED` or `NXDOMAIN` on the domain itself produces
+  nothing. `domain_no_a_record` never appears beside any HTTP answer from the site.
+- The first three are filed under website design and can open an opportunity, now also on
+  `bot_challenge`, `not_readable` and `unreachable` audits, where no page finding can. The
+  six email findings have no service: they open no opportunity, are never sent to the AI
+  step (and the guardrail refuses them if cited), and are left out of the CRM's
+  `top_findings`. They still show in the review queue.
+- No registrant data is kept. From RDAP only the registrar's name, creation date, expiry
+  date and status codes are read; every contact is dropped where the answer is parsed.
+  From DMARC only the `v`, `p` and `sp` tags are kept, never the report addresses; from
+  other TXT records only a count.
+- RDAP calls are rate-limited (`RDAP_RPS`), capped per day (`RDAP_DAILY_CALL_CAP`) and
+  logged in `api_calls` under the new `rdap` source.
+- Domain hosts are keyed by their ASCII (IDNA) spelling, so `bücher.de` and
+  `xn--bcher-kva.de` share one cache row.
+- `scripts/domain_intel_smoke.py`: live DNS and RDAP for a few domains, printing the
+  snapshot and findings; `--record` writes redacted fixtures. Run by a human.
+- New settings, all with defaults: `DNS_ENABLED`, `DNS_RESOLVER_TIMEOUT_SECONDS`,
+  `DNS_INTEL_TTL_DAYS`, `RDAP_ENABLED`, `RDAP_TTL_DAYS`, `RDAP_RPS`, `RDAP_DAILY_CALL_CAP`,
+  `AUDIT_DOMAIN_EXPIRY_WARN_DAYS`. With `DNS_ENABLED=false` and `RDAP_ENABLED=false` an
+  audit is exactly as before.
+
+### Changed
+
+- **Withdrawal judges each kind of evidence by its own lookup.** A pending opportunity
+  resting only on domain findings can be withdrawn by any audit whose DNS or RDAP lookup
+  answered the question behind each finding, whatever the homepage did. An audit that
+  could not read the page still never withdraws one resting on page evidence.
+- **The v0.12.1 backfill and repair scripts use the same rule** (a forward change; v0.12.1
+  is not reopened). Without it, the repair script would restore rows a working domain lookup
+  had rightly withdrawn.
+- `AUDIT_SECONDS_PER_BUSINESS` defaults to 210 (was 190) to cover the domain lookup.
+- `PSI_RPS` is now listed in `.env.prod.example`, as it already was in `.env.example`.
+- A business whose latest audit is `robots_blocked` and has an approved CRM lead loses
+  "Blocked by robots.txt" from that lead's `top_findings`, and is re-sent once.
+
 ## [v0.12.1] - unreleased
 
 **`AUDIT_LOGIC_VERSION` stays at 8.** The booking change is reached by a targeted re-audit
