@@ -20,7 +20,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import Select, func, literal, or_, select, tuple_
+from sqlalchemy import Select, and_, func, literal, or_, select, tuple_
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
@@ -37,7 +37,7 @@ from app.modules.ai.models import AIClassification
 from app.modules.audit import service as audit_log
 from app.modules.audit_web import service as audits
 from app.modules.audit_web.findings import CATALOGUE as FINDING_CATALOGUE
-from app.modules.audit_web.models import WebsiteAudit
+from app.modules.audit_web.models import AuditStatus, WebsiteAudit
 from app.modules.auth.models import Role, User
 from app.modules.businesses import service as businesses
 from app.modules.businesses.models import Business
@@ -46,6 +46,7 @@ from app.modules.compliance.models import SuppressionSource
 from app.modules.crm import service as crm
 from app.modules.crm.schemas import CrmLeadStatusRead
 from app.modules.discovery.schemas import DataProviderRead
+from app.modules.normalization.schemas import BusinessStatus, WebsiteKind
 from app.modules.opportunities import service as opportunities
 from app.modules.opportunities.catalogue import SERVICES
 from app.modules.opportunities.models import Opportunity, OpportunitySource, ReviewStatus
@@ -63,12 +64,15 @@ from app.modules.review.schemas import (
     LeadDetail,
     LeadRead,
     QueueAudit,
+    QueueBadge,
     QueueItem,
     QueueOpportunity,
+    QueueSort,
     ReviewDecisionRead,
     ReviewDetail,
     ReviewOpportunity,
     ReviewRequest,
+    SortDir,
     UndoResult,
 )
 
@@ -685,15 +689,24 @@ def review_queue(
     include_weak: bool = False,
     q: str | None = None,
     discovered_within_days: int | None = None,
+    badge: QueueBadge | None = None,
+    sort: QueueSort = QueueSort.score,
+    sort_dir: SortDir = SortDir.desc,
     limit: int = DEFAULT_LIMIT,
     cursor: str | None = None,
     settings: Settings | None = None,
     now: datetime | None = None,
 ) -> Page[QueueItem]:
-    """Businesses with at least one open opportunity, strongest first, suppressed ones out.
+    """Businesses with at least one open opportunity, suppressed ones out, by `sort`.
 
     `discovered_within_days` narrows to businesses **first found** within that many days —
     see `provenance.discovered_within` for why that is not "last seen".
+
+    `sort=score` orders by the best shown score, `sort=reviews` by the listing's review
+    count with businesses that have none last in either direction (v0.14.0). Both break
+    ties on `business.id` in the same direction, so the order is total and the keyset
+    cursor neither repeats nor skips a row. A cursor names the sort and direction it was
+    made under; replayed under another, it is a 422.
     """
     config = settings or get_settings()
     if status not in QUEUE_STATUSES:
@@ -736,6 +749,10 @@ def review_queue(
         stmt = stmt.where(func.lower(Business.industry) == industry.lower())
     if min_score is not None:
         stmt = stmt.where(agg.c.top_score >= Decimal(str(min_score)))
+    if badge is QueueBadge.no_website:
+        stmt = stmt.where(Business.website_kind == WebsiteKind.none)
+    elif badge is QueueBadge.closed_permanently:
+        stmt = stmt.where(Business.business_status == BusinessStatus.closed_permanently)
     if q:
         pattern = f"%{q.strip().lower()}%"
         stmt = stmt.where(
@@ -745,19 +762,24 @@ def review_queue(
             )
         )
     stmt = provenance.discovered_within(stmt, discovered_within_days, now=now)
+    key: Any = agg.c.top_score if sort is QueueSort.score else Business.user_rating_count
+    descending = sort_dir is SortDir.desc
     if cursor:
-        score_after, id_after = _decode_queue_cursor(cursor)
-        stmt = stmt.where(
-            tuple_(agg.c.top_score, Business.id) < tuple_(literal(score_after), literal(id_after))
-        )
-    stmt = stmt.order_by(agg.c.top_score.desc(), Business.id.desc()).limit(limit + 1)
+        value_after, id_after = _decode_queue_cursor(cursor, sort=sort, sort_dir=sort_dir)
+        stmt = stmt.where(_after(key, value_after, id_after, descending=descending))
+    ordered = (key.desc(), Business.id.desc()) if descending else (key.asc(), Business.id.asc())
+    # `top_score` is never null here; the review count may be, and nulls go last both ways.
+    stmt = stmt.order_by(key.is_(None), *ordered).limit(limit + 1)
     rows = list(session.execute(stmt))
 
     next_cursor = None
     if len(rows) > limit:
         rows = rows[:limit]
         last_business, last_score, _ = rows[-1]
-        next_cursor = _encode_queue_cursor(Decimal(last_score), last_business.id)
+        last_value: Decimal | int | None = (
+            Decimal(last_score) if sort is QueueSort.score else last_business.user_rating_count
+        )
+        next_cursor = _encode_queue_cursor(sort, sort_dir, last_value, last_business.id)
 
     business_ids = [row[0].id for row in rows]
     open_rows = _open_opportunities(session, business_ids, status)
@@ -826,6 +848,8 @@ def _queue_item(
                 status=latest.status,
                 audited_at=latest.created_at,
                 top_findings=top_findings(latest),
+                finding_count=finding_count(latest),
+                pagespeed_score=pagespeed_score(latest),
             )
             if latest is not None
             else None
@@ -850,7 +874,40 @@ def _queue_item(
         data_providers=data_providers or [],
         rating=business.rating,
         user_rating_count=business.user_rating_count,
+        website_kind=business.website_kind,
+        business_status=business.business_status,
+        badges=badges_of(business),
     )
+
+
+def badges_of(business: Business) -> list[QueueBadge]:
+    """F9 badges, from the stored listing only. A service-area badge is not among them: the
+    field that would say so is not requested from Places (see the v0.14.0 blockers)."""
+    badges: list[QueueBadge] = []
+    if business.website_kind is WebsiteKind.none:
+        badges.append(QueueBadge.no_website)
+    if business.business_status is BusinessStatus.closed_permanently:
+        badges.append(QueueBadge.closed_permanently)
+    return badges
+
+
+def finding_count(audit: WebsiteAudit) -> int | None:
+    """How many findings the audit filed — or null when it read nothing and found nothing.
+
+    An audit that never got the page (unreachable, refused, challenged) and filed no domain
+    finding has not measured anything, so its count is unknown rather than zero.
+    """
+    count = sum(1 for item in (audit.findings or []) if item.get("code"))
+    if count == 0 and audit.status not in (AuditStatus.done, AuditStatus.skipped):
+        return None
+    return count
+
+
+def pagespeed_score(audit: WebsiteAudit) -> int | None:
+    value = (audit.psi or {}).get("performance_score")
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return None
+    return int(value)
 
 
 def top_findings(audit: WebsiteAudit, *, sellable_only: bool = False) -> list[str]:
@@ -881,20 +938,48 @@ def service_name(key: str) -> str:
     return spec.name if spec is not None else key
 
 
-def _encode_queue_cursor(score: Decimal, business_id: uuid.UUID) -> str:
+def _after(key: Any, value: Decimal | int | None, row_id: uuid.UUID, *, descending: bool) -> Any:
+    """Rows strictly after `(value, row_id)` in `(key IS NULL, key, id)` order.
+
+    A row-value comparison alone would drop every null key: `(NULL, id) < (x, id)` is NULL in
+    Postgres, not true. So the nulls, which sort last, are added back explicitly.
+    """
+    if value is None:
+        tail = Business.id < row_id if descending else Business.id > row_id
+        return and_(key.is_(None), tail)
+    row = tuple_(key, Business.id)
+    bound = tuple_(literal(value), literal(row_id))
+    return or_(row < bound if descending else row > bound, key.is_(None))
+
+
+def _encode_queue_cursor(
+    sort: QueueSort, sort_dir: SortDir, value: Decimal | int | None, business_id: uuid.UUID
+) -> str:
     import base64
 
-    return base64.urlsafe_b64encode(f"{score}|{business_id}".encode()).decode().rstrip("=")
+    raw = f"{sort.value}|{sort_dir.value}|{'' if value is None else value}|{business_id}"
+    return base64.urlsafe_b64encode(raw.encode()).decode().rstrip("=")
 
 
-def _decode_queue_cursor(cursor: str) -> tuple[Decimal, uuid.UUID]:
+def _decode_queue_cursor(
+    cursor: str, *, sort: QueueSort, sort_dir: SortDir
+) -> tuple[Decimal | int | None, uuid.UUID]:
     import base64
     import binascii
 
     padded = cursor + "=" * (-len(cursor) % 4)
     try:
-        raw, _, id_raw = base64.urlsafe_b64decode(padded).decode().partition("|")
-        return Decimal(raw), uuid.UUID(id_raw)
+        sort_raw, dir_raw, value_raw, id_raw = base64.urlsafe_b64decode(padded).decode().split("|")
+        if (sort_raw, dir_raw) != (sort.value, sort_dir.value):
+            raise ValueError("cursor was made under another sort")
+        value: Decimal | int | None
+        if value_raw == "":
+            if sort is QueueSort.score:
+                raise ValueError("a score cursor always carries a score")
+            value = None
+        else:
+            value = Decimal(value_raw) if sort is QueueSort.score else int(value_raw)
+        return value, uuid.UUID(id_raw)
     except (binascii.Error, UnicodeDecodeError, ValueError, ArithmeticError) as exc:
         raise ValidationFailedError("Cursor is not valid", details={"cursor": cursor}) from exc
 

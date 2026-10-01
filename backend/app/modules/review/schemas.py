@@ -1,5 +1,6 @@
 """Request and response models for the review queue, decisions, undo and leads."""
 
+import enum
 import uuid
 from datetime import datetime
 from typing import Any, Literal
@@ -12,6 +13,7 @@ from app.modules.businesses.schemas import BusinessDetail
 from app.modules.compliance.schemas import SuppressionRead
 from app.modules.crm.schemas import CrmLeadStatusRead, CrmSyncAttemptRead
 from app.modules.discovery.schemas import DataProviderRead
+from app.modules.normalization.schemas import BusinessStatus, WebsiteKind
 from app.modules.opportunities.models import OpportunitySource, ReviewStatus
 from app.modules.opportunities.schemas import OpportunityDetail
 from app.modules.review.models import Decision
@@ -148,6 +150,29 @@ class QueueAudit(BaseModel):
     status: AuditStatus
     audited_at: datetime
     top_findings: list[str]
+    # How many findings the audit filed (v0.14.0). Null where the audit read nothing and
+    # found nothing: that is "not measured", never "nothing wrong".
+    finding_count: int | None = None
+    # The PageSpeed mobile performance score, 0-100 (v0.14.0). Null when PageSpeed was not
+    # run or did not answer — never 0.
+    pagespeed_score: int | None = None
+
+
+class QueueSort(enum.StrEnum):
+    score = "score"
+    reviews = "reviews"
+
+
+class SortDir(enum.StrEnum):
+    asc = "asc"
+    desc = "desc"
+
+
+class QueueBadge(enum.StrEnum):
+    """Data-quality flags read straight off the stored listing (v0.14.0, F9)."""
+
+    no_website = "no_website"
+    closed_permanently = "closed_permanently"
 
 
 class QueueItem(BaseModel):
@@ -170,6 +195,11 @@ class QueueItem(BaseModel):
     sources: list[str]
     # Third-party data providers the source requires shown with the business (v0.11.1).
     data_providers: list[DataProviderRead] = []
+    # What the listing says about the website and whether the business still trades
+    # (v0.14.0); `badges` is derived from these two and nothing else.
+    website_kind: WebsiteKind = WebsiteKind.none
+    business_status: BusinessStatus = BusinessStatus.unknown
+    badges: list[QueueBadge] = []
 
 
 # --- detail -------------------------------------------------------------------------------
