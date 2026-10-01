@@ -4,10 +4,11 @@ import { OpportunityCard } from "./OpportunityCard";
 import { reviewOpportunity } from "@/test/utils";
 import { AI_LABEL } from "@/lib/safe";
 
-function card(overrides: Parameters<typeof reviewOpportunity>[0] = {}, canDecide = true) {
+function card(overrides: Parameters<typeof reviewOpportunity>[0] = {}, canDecide = true, weakThreshold?: number) {
   return render(
     <OpportunityCard
       opportunity={reviewOpportunity(overrides)}
+      weakThreshold={weakThreshold}
       focused={false}
       canDecide={canDecide}
       busy={false}
@@ -19,6 +20,20 @@ function card(overrides: Parameters<typeof reviewOpportunity>[0] = {}, canDecide
 }
 
 describe("OpportunityCard display", () => {
+  it("shows confidence on the card itself with the weak threshold marked (v0.14.0, F8)", () => {
+    card({}, true, 0.4);
+    const meter = screen.getByTestId("confidence");
+    expect(meter.textContent).toContain("80%");
+    expect(meter.textContent).toContain("weak below 40%");
+    expect(screen.getByTestId("weak-threshold").getAttribute("style")).toContain("left: 40%");
+  });
+
+  it("marks a confidence under the line as weak", () => {
+    card({ confidence: 0.3, weak: true }, true, 0.4);
+    expect(screen.getByTestId("confidence").textContent).toContain("30%");
+    expect(screen.getByRole("img", { name: "Confidence 30%" }).className).toContain("bg-warn");
+  });
+
   it("shows the service in plain words and one score number, confidence in the tooltip", () => {
     card();
     expect(screen.getByRole("heading", { level: 3 }).textContent).toBe("Website redesign");

@@ -40,6 +40,8 @@ type Props = {
   opportunity: ReviewOpportunity;
   /** With the AI layer off, no AI element renders here at all (spec v0.10.0 §3). */
   aiEnabled?: boolean;
+  /** Below this confidence an opportunity is a weak signal (`REVIEW_WEAK_CONFIDENCE`). */
+  weakThreshold?: number;
   focused: boolean;
   canDecide: boolean;
   busy: boolean;
@@ -55,6 +57,7 @@ type Props = {
 export function OpportunityCard({
   opportunity,
   aiEnabled = true,
+  weakThreshold,
   focused,
   canDecide,
   busy,
@@ -132,6 +135,7 @@ export function OpportunityCard({
           </Badge>
           {opportunity.weak ? <Badge tone="warn">weak signal</Badge> : null}
         </div>
+        <ConfidenceMeter value={opportunity.confidence} threshold={weakThreshold} weak={opportunity.weak} />
       </div>
 
       <div className="flex flex-col gap-3 p-3">
@@ -227,5 +231,38 @@ export function OpportunityCard({
         ) : null}
       </div>
     </Card>
+  );
+}
+
+/**
+ * How sure the pipeline is of this claim, on a 0–100% track with the weak line marked, so
+ * a reviewer sees both the number and which side of the line it falls (v0.14.0, F8).
+ */
+function ConfidenceMeter({ value, threshold, weak }: { value: number; threshold?: number; weak: boolean }) {
+  const clamp = (n: number) => Math.max(0, Math.min(1, n)) * 100;
+  return (
+    <div className="flex items-center gap-2 text-sm" data-testid="confidence">
+      <span className="text-ink-soft">Confidence</span>
+      <div className="relative h-1.5 w-28 rounded-full bg-surface-sunken">
+        <div
+          className={cx("h-1.5 rounded-full", weak ? "bg-warn" : "bg-accent")}
+          style={{ width: `${clamp(value)}%` }}
+          role="img"
+          aria-label={`Confidence ${percent(value)}`}
+        />
+        {threshold === undefined ? null : (
+          <span
+            className="absolute -top-1 h-3.5 w-px bg-ink"
+            style={{ left: `${clamp(threshold)}%` }}
+            title={`Weak below ${percent(threshold)}`}
+            data-testid="weak-threshold"
+          />
+        )}
+      </div>
+      <span className="font-mono tabular-nums text-ink">{percent(value)}</span>
+      {threshold === undefined ? null : (
+        <span className="text-xs text-ink-soft">weak below {percent(threshold)}</span>
+      )}
+    </div>
   );
 }

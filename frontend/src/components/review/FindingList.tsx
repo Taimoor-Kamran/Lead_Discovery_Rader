@@ -1,6 +1,6 @@
 import { SafeLink } from "@/components/SafeLink";
 import { SeverityDot } from "@/components/ui";
-import { findingLabel, severityLabel } from "@/lib/labels";
+import { findingLabel, METHOD_LABELS, severityLabel } from "@/lib/labels";
 
 export type Finding = {
   code?: string;
@@ -8,6 +8,8 @@ export type Finding = {
   message?: string;
   evidence_text?: string | null;
   evidence_url?: string | null;
+  /** "deterministic", "api" or "ai" (v0.12.0). Older audits may not carry it. */
+  method?: string | null;
 };
 
 const ORDER: Record<string, number> = { high: 0, medium: 1, low: 2, info: 3 };
@@ -33,6 +35,16 @@ export function FindingList({ findings }: { findings: Finding[] }) {
                 {findingLabel(finding.code)}
               </span>
               <span className="text-sm text-ink-soft">{severityLabel(finding.severity)}</span>
+              {/* No method on an older audit: say nothing rather than guess one. */}
+              {finding.method ? (
+                <span
+                  className="text-xs text-ink-soft"
+                  title={METHOD_LABELS[finding.method]?.title ?? finding.method}
+                  data-testid="finding-method"
+                >
+                  {METHOD_LABELS[finding.method]?.label ?? finding.method}
+                </span>
+              ) : null}
             </p>
             {finding.message ? (
               <p className="print-terse mt-0.5 max-w-measure text-base text-ink-soft">{finding.message}</p>

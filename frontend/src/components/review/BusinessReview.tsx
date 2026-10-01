@@ -309,6 +309,7 @@ export function BusinessReview({ businessId }: { businessId: string }) {
                 key={opportunity.id}
                 opportunity={opportunity}
                 aiEnabled={detail.ai_enabled !== false}
+                weakThreshold={detail.weak_confidence}
                 focused={index === focused}
                 canDecide={decider && !detail.suppressed}
                 busy={busy}

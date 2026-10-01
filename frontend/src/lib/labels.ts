@@ -158,6 +158,13 @@ export const INDUSTRY_LABELS: Record<string, string> = {
   hvac: "HVAC",
 };
 
+/** How a finding was established (v0.12.0 `Method`), in the reviewer's words (v0.14.0). */
+export const METHOD_LABELS: Record<string, { label: string; title: string }> = {
+  deterministic: { label: "Our check", title: "Our own code read the homepage or the listing" },
+  api: { label: "Outside service", title: "An outside service measured or reported this (PageSpeed, the listing, DNS)" },
+  ai: { label: "AI reading", title: "A model's reading of the page" },
+};
+
 export const SEVERITY_LABELS: Record<string, string> = {
   high: "High",
   medium: "Medium",
