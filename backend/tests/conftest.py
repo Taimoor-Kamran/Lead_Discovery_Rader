@@ -268,6 +268,33 @@ def mock_http() -> Iterator[respx.MockRouter]:
 
 
 @pytest.fixture(autouse=True)
+def no_live_dns(monkeypatch: pytest.MonkeyPatch) -> Iterator[list[str]]:
+    """Refuse every live DNS query, the way `mock_http` refuses live HTTP (v0.13.0).
+
+    The resolver turns a transport error into `unknown`, and runs inside a thread pool, so
+    an exception alone could pass unnoticed; each attempt is recorded and fails the test at
+    teardown instead. A test that scripts the transport (`test_dns_resolver.py`) patches
+    over this with its own stand-in.
+    """
+    import dns.query
+
+    attempts: list[str] = []
+
+    def refuse(kind: str) -> Any:
+        def call(query: Any, where: str, *args: Any, **kwargs: Any) -> Any:
+            attempts.append(f"{kind} to {where}")
+            raise OSError(f"live DNS ({kind}) is not allowed in tests")
+
+        return call
+
+    for kind in ("udp", "tcp", "tls", "https", "quic"):
+        if hasattr(dns.query, kind):
+            monkeypatch.setattr(dns.query, kind, refuse(kind))
+    yield attempts
+    assert not attempts, f"a test tried live DNS: {attempts}"
+
+
+@pytest.fixture(autouse=True)
 def adapter_registry() -> Iterator[None]:
     """Restore the adapter registry after a test installs a stand-in."""
     registry.names()  # force the built-in adapters in before snapshotting

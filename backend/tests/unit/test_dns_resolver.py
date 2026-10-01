@@ -304,3 +304,12 @@ def test_a_resolver_that_raises_is_unknown() -> None:
 
     snap = dns_lookup.lookup(Broken(), TARGET, budget_seconds=1, now=NOW)
     assert {item["outcome"] for item in snap["queries"]} == {"unknown"}
+
+
+def test_no_test_can_reach_a_live_resolver(no_live_dns: list[str]) -> None:
+    """Task 8: the suite refuses live DNS, and says so rather than reading it as `unknown`."""
+    answer = LiveResolver(timeout=5, nameservers=["192.0.2.53"]).query("acme.com", "A")
+
+    assert answer.rcode is Rcode.error
+    assert no_live_dns == ["udp to 192.0.2.53", "udp to 192.0.2.53"]
+    no_live_dns.clear()  # the refusal was the point of this test
