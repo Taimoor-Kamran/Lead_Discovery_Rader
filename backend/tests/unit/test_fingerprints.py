@@ -11,6 +11,7 @@ from app.modules.audit_web.fingerprints import (
     BOOKING_SIGNATURES,
     TECH_SIGNATURES,
     Signature,
+    booking_host,
     booking_text_match,
     find_signatures,
     generator_label,
@@ -119,8 +120,6 @@ def test_snippet_forward_keeps_its_first_character() -> None:
         "book an appointment",
         "schedule online",
         "schedule a visit",
-        "request a quote",
-        "request quote",
         "book a consultation",
     ],
 )
@@ -170,9 +169,45 @@ def test_local_business_types_are_recognised(raw: object, expected: bool) -> Non
         "book service",
         "schedule a service",
         "schedule now",
-        "request service",
-        "request an appointment",
     ],
 )
 def test_the_v0_11_booking_phrases_are_recognised(text: str) -> None:
     assert booking_text_match(text) is not None
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "request a quote",
+        "request quote",
+        "request service",
+        "request a quote online",
+        "request an appointment",
+    ],
+)
+def test_a_request_is_not_booking(text: str) -> None:
+    """v0.12.1: a quote or service request is not scheduling under any reading."""
+    assert booking_text_match(text) is None
+
+
+@pytest.mark.parametrize(
+    ("url", "expected"),
+    [
+        ("https://www.fresha.com/a/some-salon-austin-abc123", "Fresha"),
+        ("https://calendly.com/someone/30min", "Calendly"),
+        ("https://app.squarespacescheduling.com/schedule.php?owner=1", "Acuity Scheduling"),
+        ("https://squareup.com/appointments/book/abc", "Square Appointments"),
+        ("https://squareup.com/us/en", None),
+        ("https://notfresha.com/", None),
+        ("https://example.test/book", None),
+        ("https://www.phorest.com/salon/x/book", "Phorest"),
+        ("https://bishops.zenoti.com/webstoreNew/services", "Zenoti"),
+        ("https://www.google.com/recaptcha/api2/anchor", None),
+        ("https://maps.googleapis.com/maps/api/js", None),
+        ("https://www.googletagmanager.com/gtag/js", None),
+        ("https://googleads.g.doubleclick.net/pagead/x", None),
+        ("https://www.gstatic.com/recaptcha/x.js", None),
+    ],
+)
+def test_a_booking_host_is_recognised_by_host_not_substring(url: str, expected: str | None) -> None:
+    assert booking_host(url) == expected

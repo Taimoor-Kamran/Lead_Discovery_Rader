@@ -422,13 +422,14 @@ def test_the_not_readable_status_comes_off_as_failed(database_url: str) -> None:
 
 
 def test_the_domain_intel_table_comes_off_alone_and_back(database_url: str) -> None:
-    """v0.13.0 adds one table and nothing else; down to 0013 takes exactly that table."""
+    """v0.13.0 adds one table and nothing else; down to 0014 takes exactly that table."""
     url = _fresh_database(database_url)
     config = alembic_config(url)
     command.upgrade(config, "head")
     engine = create_engine(url)
     tables_at_head = set(inspect(engine).get_table_names())
-    assert _columns(engine, "domain_intel") == {
+    columns_at_head = {table: _columns(engine, table) for table in tables_at_head}
+    assert columns_at_head["domain_intel"] == {
         "domain",
         "dns",
         "rdap",
@@ -440,13 +441,69 @@ def test_the_domain_intel_table_comes_off_alone_and_back(database_url: str) -> N
     enums_at_head = _enums(engine)
     engine.dispose()
 
-    command.downgrade(config, "0013_not_readable_status")
+    command.downgrade(config, "0014_opportunity_withdrawal")
     engine = create_engine(url)
     assert set(inspect(engine).get_table_names()) == tables_at_head - {"domain_intel"}
+    assert {"withdrawn_at", "withdrawn_reason"} <= _columns(engine, "opportunities")
+    for table in tables_at_head - {"domain_intel"}:
+        assert _columns(engine, table) == columns_at_head[table], table
     assert _enums(engine) == enums_at_head
     engine.dispose()
 
     command.upgrade(config, "head")
     engine = create_engine(url)
+    assert "domain_intel" in inspect(engine).get_table_names()
+    engine.dispose()
+
+
+def _insert_opportunity(connection: object, business_id: uuid.UUID, *, withdrawn: bool) -> None:
+    connection.execute(  # type: ignore[attr-defined]
+        text(
+            "INSERT INTO opportunities (id, business_id, service, source, reason, evidence, "
+            "confidence, score, score_components, scoring_version, review_status, "
+            "withdrawn_at) VALUES (:id, :business, 'booking_setup', 'rules', '', '[]', 0.5, "
+            "0.5, '{}', 'v1', 'pending', CASE WHEN :withdrawn THEN now() ELSE NULL END)"
+        ),
+        {"id": uuid.uuid4(), "business": business_id, "withdrawn": withdrawn},
+    )
+
+
+def test_withdrawal_columns_let_a_live_row_sit_beside_a_withdrawn_one(database_url: str) -> None:
+    """0014: the pending index ignores withdrawn rows; downgrade keeps only the live one.
+
+    Down to 0013 also takes 0015 (domain_intel) off on the way, so the table set is checked
+    against that too.
+    """
+    url = _fresh_database(database_url)
+    config = alembic_config(url)
+    command.upgrade(config, "head")
+    engine = create_engine(url)
+    tables_at_head = set(inspect(engine).get_table_names())
+    assert {"withdrawn_at", "withdrawn_reason"} <= _columns(engine, "opportunities")
+    business_id = uuid.uuid4()
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO businesses (id, display_name, website_kind, business_status) "
+                "VALUES (:id, 'Withdrawn Plumbing', 'own_site', 'operational')"
+            ),
+            {"id": business_id},
+        )
+        _insert_opportunity(connection, business_id, withdrawn=True)
+        _insert_opportunity(connection, business_id, withdrawn=False)
+    engine.dispose()
+
+    command.downgrade(config, "0013_not_readable_status")
+    engine = create_engine(url)
+    assert set(inspect(engine).get_table_names()) == tables_at_head - DOMAIN_INTEL_TABLES
+    assert {"withdrawn_at", "withdrawn_reason"} & _columns(engine, "opportunities") == set()
+    with engine.connect() as connection:
+        count = connection.execute(text("SELECT count(*) FROM opportunities")).scalar_one()
+    engine.dispose()
+    assert count == 1
+
+    command.upgrade(config, "head")
+    engine = create_engine(url)
+    assert {"withdrawn_at", "withdrawn_reason"} <= _columns(engine, "opportunities")
     assert "domain_intel" in inspect(engine).get_table_names()
     engine.dispose()

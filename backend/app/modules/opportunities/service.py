@@ -189,6 +189,7 @@ class ClassificationOutcome:
     opportunities: list[Opportunity] = field(default_factory=list)
     created: int = 0
     updated: int = 0
+    withdrawn: int = 0
     ai: AIRun | None = None
 
 
@@ -218,6 +219,12 @@ def classify(
     rules = rule_opportunities(business, audit)
     outcome = ClassificationOutcome(business_id=business.id, website_audit_id=audit.id)
     if _no_opportunities(business, audit):
+        # A closed business is gone, so nothing it was offered still stands. A site that
+        # refused us was never read, and that is no evidence of anything (v0.12.1, H).
+        if business.business_status is BusinessStatus.closed_permanently:
+            outcome.withdrawn = withdraw_unsupported(
+                session, business, audit, [], merged_complete=True, now=now
+            )
         return outcome
 
     ai_run = _run_ai(session, business, audit, tools=tools, job_run_id=job_run_id, now=now)
@@ -236,6 +243,16 @@ def classify(
         classification=ai_run.classification if ai_run is not None else None,
         intent_explicit=intent_explicit,
         settings=tools.settings,
+        now=now,
+    )
+    # Without the AI's answer the merged result is only the rules' half of it, and an
+    # AI-sourced row missing from it says nothing about that row.
+    outcome.withdrawn = withdraw_unsupported(
+        session,
+        business,
+        audit,
+        merged,
+        merged_complete=ai_run is not None and ai_run.output is not None,
         now=now,
     )
     logger.info(
@@ -708,7 +725,9 @@ def pending_opportunities(session: Session, business_id: uuid.UUID) -> dict[str,
 
     A `pending` row wins over a `needs_enrichment` one for the same service, whatever
     their ages: `pending` is the status the unique index covers, so it is the row an
-    insert would collide with and therefore the row to update.
+    insert would collide with and therefore the row to update. Among pending rows a live
+    one wins over a withdrawn one (v0.12.1); a withdrawn one is still returned, so a later
+    audit that supports the service again reuses it instead of opening a second row.
     """
     rows = session.scalars(
         select(Opportunity)
@@ -721,12 +740,16 @@ def pending_opportunities(session: Session, business_id: uuid.UUID) -> dict[str,
     found: dict[str, Opportunity] = {}
     for row in rows:
         seen = found.get(row.service)
-        if seen is None or (
-            seen.review_status is not ReviewStatus.pending
-            and row.review_status is ReviewStatus.pending
-        ):
+        if seen is None or _rank(row) < _rank(seen):
             found[row.service] = row
     return found
+
+
+def _rank(row: Opportunity) -> int:
+    """Which open row to update: live pending, then withdrawn pending, then the rest."""
+    if row.review_status is ReviewStatus.pending:
+        return 0 if row.withdrawn_at is None else 1
+    return 2
 
 
 def blocked_services(
@@ -783,6 +806,9 @@ def _apply_classification(
     row.score = Decimal(str(computed.total))
     row.score_components = computed.components()
     row.scoring_version = SCORING_VERSION
+    # The audit supports this service again: a withdrawn row comes back as it is now.
+    row.withdrawn_at = None
+    row.withdrawn_reason = None
 
 
 def open_opportunity_for(
@@ -796,7 +822,11 @@ def open_opportunity_for(
             Opportunity.service == service,
             Opportunity.review_status.in_(OPEN_STATUSES),
         )
-        .order_by(Opportunity.created_at.desc(), Opportunity.id.desc())
+        .order_by(
+            Opportunity.withdrawn_at.is_not(None),
+            Opportunity.created_at.desc(),
+            Opportunity.id.desc(),
+        )
     ).first()
 
 
@@ -913,6 +943,137 @@ def upsert_opportunities(
     return rows, created, updated
 
 
+# --- withdrawing ---------------------------------------------------------------------------
+
+# The two reasons a pending opportunity stops being supported (v0.12.1).
+SERVICE_ABSENT = "service_absent"
+FINDINGS_ABSENT = "findings_absent"
+
+# The only audits that looked at the site and can show a finding is gone. `failed`,
+# `unreachable`, `bot_challenge`, `not_readable` and `robots_blocked` read nothing, so
+# they have no findings because they could not look (v0.12.1, correction H).
+WITHDRAWAL_AUDIT_STATUSES = frozenset({AuditStatus.done, AuditStatus.skipped})
+
+
+def can_withdraw_on(audit: WebsiteAudit) -> bool:
+    return audit.status in WITHDRAWAL_AUDIT_STATUSES
+
+
+def cited_findings(row: Opportunity) -> set[str]:
+    """The finding codes a row's evidence cites. Empty for a row that rests on none."""
+    return {
+        str(item["finding_code"])
+        for item in (row.evidence or [])
+        if isinstance(item, dict) and item.get("finding_code")
+    }
+
+
+def withdrawal_reasons(
+    row: Opportunity,
+    *,
+    audit: WebsiteAudit,
+    merged_services: set[str] | None,
+    merged_complete: bool,
+) -> list[str]:
+    """Why the latest audit no longer supports `row`, if it does not. Empty when it does.
+
+    `merged_services` is `None` when there is no merged result to compare with (the
+    backfill): then only the cited findings are judged. A row that cites no findings —
+    `ads_social` is built from an empty `social_links`, not from a finding — is never
+    withdrawn by the findings test, because "every cited finding is gone" is trivially
+    true of nothing (v0.12.1, correction C).
+    """
+    reasons: list[str] = []
+    if merged_services is not None:
+        if row.service in merged_services:
+            return []
+        if merged_complete or row.source is OpportunitySource.rules:
+            reasons.append(f"{SERVICE_ABSENT}: audit {audit.id} no longer produces this service")
+    cited = cited_findings(row)
+    if cited and not cited & set(audit.finding_codes):
+        reasons.append(
+            f"{FINDINGS_ABSENT}: none of the cited findings ({', '.join(sorted(cited))}) "
+            f"is in audit {audit.id}"
+        )
+    return reasons
+
+
+def withdraw_unsupported(
+    session: Session,
+    business: Business,
+    audit: WebsiteAudit,
+    merged: list[MergedOpportunity],
+    *,
+    merged_complete: bool,
+    now: datetime | None = None,
+) -> int:
+    """Withdraw the business's pending opportunities this audit no longer supports.
+
+    Only a live `pending` row is ever withdrawn. An `approved` row may already be in the
+    CRM and a `needs_enrichment` row carries a reviewer's decision, so either one in the
+    same situation is logged at warning level and left exactly as it is. Returns how many
+    rows were withdrawn.
+
+    An audit that could not look withdraws nothing, unless the business is permanently
+    closed: then the business itself is gone, whatever its audit says.
+    """
+    if not can_withdraw_on(audit) and business.business_status is not (
+        BusinessStatus.closed_permanently
+    ):
+        logger.info(
+            "audit could not look; nothing withdrawn",
+            extra={
+                "business_id": str(business.id),
+                "website_audit_id": str(audit.id),
+                "audit_status": audit.status.value,
+            },
+        )
+        return 0
+    moment = now or datetime.now(UTC)
+    services = {item.service for item in merged}
+    rows = session.scalars(
+        select(Opportunity).where(
+            Opportunity.business_id == business.id,
+            Opportunity.review_status.in_((*OPEN_STATUSES, ReviewStatus.approved)),
+            Opportunity.withdrawn_at.is_(None),
+        )
+    )
+    withdrawn = 0
+    for row in rows:
+        reasons = withdrawal_reasons(
+            row, audit=audit, merged_services=services, merged_complete=merged_complete
+        )
+        if not reasons:
+            continue
+        reason = "; ".join(reasons)
+        if row.review_status is not ReviewStatus.pending:
+            logger.warning(
+                "opportunity no longer supported by the latest audit; not withdrawn",
+                extra={
+                    "business_id": str(business.id),
+                    "opportunity_id": str(row.id),
+                    "service": row.service,
+                    "review_status": row.review_status.value,
+                    "reason": reason,
+                },
+            )
+            continue
+        row.withdrawn_at = moment
+        row.withdrawn_reason = reason
+        withdrawn += 1
+        logger.info(
+            "opportunity withdrawn",
+            extra={
+                "business_id": str(business.id),
+                "opportunity_id": str(row.id),
+                "service": row.service,
+                "reason": reason,
+            },
+        )
+    session.flush()
+    return withdrawn
+
+
 # --- enqueueing ---------------------------------------------------------------------------
 
 
@@ -1015,6 +1176,7 @@ def list_opportunities(
     state: str | None = None,
     source: OpportunitySource | None = None,
     business_id: uuid.UUID | None = None,
+    include_withdrawn: bool = False,
     sort: str = "score",
     limit: int = DEFAULT_LIMIT,
     cursor: str | None = None,
@@ -1025,6 +1187,8 @@ def list_opportunities(
         stmt = stmt.where(Opportunity.service == service)
     if review_status is not None:
         stmt = stmt.where(Opportunity.review_status == review_status)
+    if not include_withdrawn:
+        stmt = stmt.where(Opportunity.withdrawn_at.is_(None))
     if min_score is not None:
         stmt = stmt.where(Opportunity.score >= Decimal(str(min_score)))
     if industry:
@@ -1109,6 +1273,8 @@ def summarize(opportunity: Opportunity, business: Business) -> OpportunitySummar
         scoring_version=opportunity.scoring_version,
         review_status=opportunity.review_status,
         lock_version=opportunity.lock_version,
+        withdrawn_at=opportunity.withdrawn_at,
+        withdrawn_reason=opportunity.withdrawn_reason,
         top_evidence=opportunity.evidence[0] if opportunity.evidence else None,
         created_at=opportunity.created_at,
         updated_at=opportunity.updated_at,

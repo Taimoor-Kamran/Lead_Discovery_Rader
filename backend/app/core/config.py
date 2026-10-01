@@ -43,6 +43,17 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+psycopg://radar:radar@localhost:5432/radar"
     redis_url: str = "redis://localhost:6379/0"
+    # v0.12.1: nothing waits for ever. A DNS blip on 2026-09-28 left a connect hanging and
+    # froze the job queue for 30 minutes. 0 turns a PostgreSQL limit off.
+    db_connect_timeout_seconds: int = Field(default=10, ge=1)
+    db_statement_timeout_ms: int = Field(default=120_000, ge=0)
+    # Longer than the network time one audited business can spend inside a transaction
+    # (`AUDIT_SECONDS_PER_BUSINESS`), so a run between two statements is never cut off.
+    db_idle_in_transaction_timeout_ms: int = Field(default=600_000, ge=0)
+    redis_socket_connect_timeout_seconds: float = Field(default=5.0, gt=0)
+    # RQ raises a worker's own Redis read timeout to its blocking dequeue wait (415 s)
+    # when this is lower; everywhere else this is the limit.
+    redis_socket_timeout_seconds: float = Field(default=30.0, gt=0)
 
     jwt_secret: SecretStr = SecretStr("change-me-in-env")
     jwt_algorithm: str = "HS256"
@@ -280,6 +291,8 @@ class Settings(BaseSettings):
     # Where `make backup` writes `radar-YYYYMMDD-HHMMSS.dump` files and how many it keeps.
     backup_dir: str = "backups"
     backup_keep: int = 14
+    # v0.12.1: a pg_dump that has not finished by then is stopped and the backup fails.
+    backup_pg_dump_timeout_seconds: int = Field(default=1800, ge=60)
     # Daily backup time (HH:MM), the weekly verify (cron, Sunday 04:00) and the daily purge.
     backup_at: str = "02:00"
     backup_verify_cron: str = "0 4 * * 0"
@@ -293,8 +306,9 @@ class Settings(BaseSettings):
     # RQ's default of 180 s, which an audit of more than ~5 businesses cannot meet.
     job_timeout_seconds: int = Field(default=1800, ge=60)
     # An audit run's limit is this per business, or `job_timeout_seconds` if that is more:
-    # fetches with the per-host throttle (~15 s) plus PageSpeed at worst (2 x 65 s).
-    audit_seconds_per_business: int = Field(default=150, ge=10)
+    # fetches with the per-host throttle (~15 s) plus PageSpeed at worst (2 x 65 s), plus
+    # since v0.12.1 one booking-link target (its robots.txt and the page, 2 x 20 s).
+    audit_seconds_per_business: int = Field(default=190, ge=10)
     # JSON logs also go to `LOG_DIR/LOG_FILE` with daily rotation when LOG_DIR is set.
     log_dir: str = ""
     log_file: str = "app.log"

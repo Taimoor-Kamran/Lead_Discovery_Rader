@@ -1,0 +1,412 @@
+"""v0.12.1: a booking call to action is followed once, and only its target decides.
+
+The markup below is the *shape* of the pages production turned up, not their content:
+ATX Electrical Services' "Schedule Now" leads to a Gravity Forms contact page with no date
+or time input; a salon's "Book Now" leads to a page with a date picker. Hosts are the
+tests' own.
+"""
+
+from pathlib import Path
+from typing import Any
+
+import fakeredis
+import pytest
+from pydantic import SecretStr
+from sqlalchemy.orm import Session
+
+from app.core.config import Settings
+from app.core.fetch_backends import BackendResponse, FetchRequest
+from app.core.safe_fetch import SafeFetcher
+from app.modules.audit_web import service
+from app.modules.audit_web.models import AuditStatus
+from app.modules.audit_web.psi import PageSpeedUnavailableError
+from tests.conftest import FakeClock
+from tests.integration.test_website_audits_api import make_business
+
+PAGES = Path(__file__).resolve().parents[1] / "fixtures" / "pages"
+HOME = "https://wellington.invalid/"
+
+
+def page(body: str) -> str:
+    return (
+        "<!doctype html><html><head><title>Wellington Electrical | Austin electricians"
+        "</title></head><body><h1>Wellington Electrical</h1>"
+        "<p>Licensed electricians serving Austin since 1998. Panel upgrades, rewiring and "
+        "lighting for homes and businesses across the city.</p>"
+        f"{body}</body></html>"
+    )
+
+
+GRAVITY_CONTACT = page(
+    '<form id="gform_1" action="/contact/" method="post">'
+    '<label for="input_1_1">Name</label><input name="input_1" id="input_1_1" type="text">'
+    '<label for="input_1_2">Email</label><input name="input_2" id="input_1_2" type="email">'
+    '<label for="input_1_3">Message</label><textarea name="input_3" id="input_1_3"></textarea>'
+    '<input type="hidden" name="gform_submission_time" value="1">'
+    '<input type="submit" id="gform_submit_button_1" value="Submit"></form>'
+)
+DATE_PICKER = page(
+    '<form action="/book/"><input type="text" name="input_4" class="datepicker medium">'
+    '<select name="slot"><option>9:00</option></select><input type="submit" value="Book">'
+    "</form>"
+)
+DATE_INPUT = page('<form><input type="date" name="when"><input type="submit"></form>')
+WIDGET = page('<script src="https://assets.calendly.com/assets/external/widget.js"></script>')
+
+
+class SiteBackend:
+    """Serves `pages` by host and path; robots.txt allows everything unless told not to."""
+
+    resolves_dns = False
+
+    def __init__(self, pages: dict[str, str], *, robots: str = "User-agent: *\n") -> None:
+        self.pages = pages
+        self.robots = robots
+        self.calls: list[str] = []
+
+    def handles(self, host: str) -> bool:
+        return True
+
+    def get(self, request: FetchRequest) -> BackendResponse:
+        url = f"{request.parts.scheme}://{request.parts.netloc}{request.parts.path or '/'}"
+        self.calls.append(url)
+        if request.parts.path == "/robots.txt":
+            return BackendResponse(
+                status_code=200, headers={"content-type": "text/plain"}, body=self.robots.encode()
+            )
+        body = self.pages.get(url)
+        if body is None:
+            return BackendResponse(
+                status_code=404, headers={"content-type": "text/html"}, body=b"<h1>Not found</h1>"
+            )
+        return BackendResponse(
+            status_code=200,
+            headers={"content-type": "text/html; charset=UTF-8"},
+            body=body.encode(),
+        )
+
+
+class NoPsi:
+    def analyse(self, url: str) -> Any:
+        raise PageSpeedUnavailableError("not in tests")
+
+
+def tools_for(backend: SiteBackend) -> Any:
+    clock = FakeClock()
+    settings = Settings(
+        jwt_secret=SecretStr("x" * 40),
+        environment="ci",
+        audit_host_throttle_seconds=0.0,
+        bot_contact="x",
+    )
+    return service.AuditTools(
+        fetcher=SafeFetcher(
+            redis=fakeredis.FakeStrictRedis(),
+            backends=[backend],
+            settings=settings,
+            clock=clock,
+            sleeper=clock.sleep,
+        ),
+        psi=NoPsi(),
+        settings=settings,
+    )
+
+
+def audit_of(db: Session, pages: dict[str, str], **backend: Any) -> tuple[Any, SiteBackend]:
+    site = SiteBackend(pages, **backend)
+    business = make_business(db, industry="electrical")
+    audit = service.audit_business(db, business, tools=tools_for(site))
+    assert audit.status is AuditStatus.done
+    return audit, site
+
+
+def codes(audit: Any) -> set[str]:
+    return set(audit.finding_codes)
+
+
+def test_schedule_now_to_a_contact_form_is_no_online_booking_naming_cta_and_target(
+    db: Session,
+) -> None:
+    """The ATX case: the client's own verification found no date or time on the target."""
+    audit, site = audit_of(
+        db,
+        {
+            HOME: page('<a class="button" href="/contact/">Schedule Now</a>'),
+            f"{HOME}contact/": GRAVITY_CONTACT,
+        },
+    )
+
+    booking = audit.checks["booking"]
+    assert booking["value"] is False
+    assert booking["method"] == "cta"
+    assert booking["target_url"] == f"{HOME}contact/"
+    assert "no_online_booking" in codes(audit)
+    [finding] = [f for f in audit.findings if f["code"] == "no_online_booking"]
+    assert "Schedule Now" in finding["evidence_text"]
+    assert f"{HOME}contact/" in finding["evidence_text"]
+    assert finding["message"] == "Audit found no visible online booking flow on the homepage."
+    assert site.calls.count(f"{HOME}contact/") == 1, "one fetch of the target, no more"
+
+
+def test_a_booking_path_is_followed_the_same_way(db: Session) -> None:
+    audit, _ = audit_of(
+        db,
+        {
+            HOME: page('<a href="/schedule/"><img src="/cta.png" alt=""></a>'),
+            f"{HOME}schedule/": GRAVITY_CONTACT,
+        },
+    )
+
+    assert audit.checks["booking"]["method"] == "path"
+    assert "no_online_booking" in codes(audit)
+
+
+@pytest.mark.parametrize("target", [DATE_PICKER, DATE_INPUT, WIDGET])
+def test_book_now_to_a_real_booking_flow_is_verified_and_suppresses_the_finding(
+    db: Session, target: str
+) -> None:
+    audit, _ = audit_of(
+        db, {HOME: page('<a href="/book-online/">Book Now</a>'), f"{HOME}book-online/": target}
+    )
+
+    assert audit.checks["booking"]["method"] == "verified_target"
+    assert audit.checks["booking"]["value"] == "link text: Book Now"
+    assert "no_online_booking" not in codes(audit)
+
+
+@pytest.mark.parametrize(
+    ("pages", "robots", "why"),
+    [
+        ({HOME: page('<a href="/book/">Book Now</a>')}, "User-agent: *\n", "HTTP 404"),
+        (
+            {HOME: page('<a href="/book/">Book Now</a>'), f"{HOME}book/": DATE_INPUT},
+            "User-agent: *\nDisallow: /book/\n",
+            "disallows",
+        ),
+        ({HOME: page("<button>Book Now</button>")}, "User-agent: *\n", "no link"),
+    ],
+)
+def test_a_target_that_cannot_be_checked_is_unverified_and_draws_no_finding(
+    db: Session, pages: dict[str, str], robots: str, why: str
+) -> None:
+    """Certainty or silence."""
+    audit, site = audit_of(db, pages, robots=robots)
+
+    booking = audit.checks["booking"]
+    assert booking["method"] == "unverified"
+    assert booking["value"] is None
+    assert why in booking["evidence_text"]
+    assert "no_online_booking" not in codes(audit)
+    assert f"{HOME}book/" not in site.calls or why != "disallows"
+
+
+def test_a_fresha_link_suppresses_it_without_a_fetch(db: Session) -> None:
+    fresha = "https://www.fresha.com/a/wellington-salon-austin-abc123"
+    audit, site = audit_of(db, {HOME: page(f'<a href="{fresha}">Book Now</a>')})
+
+    assert audit.checks["booking"]["method"] == "booking_host"
+    assert audit.checks["booking"]["value"] == "Fresha"
+    assert "no_online_booking" not in codes(audit)
+    assert not any("fresha" in call for call in site.calls)
+
+
+def test_a_calendly_widget_suppresses_it_without_a_fetch(db: Session) -> None:
+    audit, site = audit_of(db, {HOME: WIDGET})
+
+    assert audit.checks["booking"]["method"] == "widget"
+    assert audit.checks["booking"]["value"] == "Calendly"
+    assert "no_online_booking" not in codes(audit)
+    assert [c for c in site.calls if not c.endswith("robots.txt")] == [HOME]
+
+
+def test_request_a_quote_is_no_online_booking_with_no_fetch(db: Session) -> None:
+    audit, site = audit_of(
+        db,
+        {HOME: page('<a href="/quote/">Request a Quote</a>'), f"{HOME}quote/": DATE_INPUT},
+    )
+
+    assert audit.checks["booking"]["value"] is False
+    assert "method" not in audit.checks["booking"]
+    assert "no_online_booking" in codes(audit)
+    assert f"{HOME}quote/" not in site.calls
+
+
+def test_no_fetch_outside_the_booking_industries(db: Session) -> None:
+    site = SiteBackend(
+        {HOME: page('<a href="/book/">Book Now</a>'), f"{HOME}book/": GRAVITY_CONTACT}
+    )
+    business = make_business(db, industry="law_firm")
+    audit = service.audit_business(db, business, tools=tools_for(site))
+
+    assert audit.checks["booking"]["method"] == "unverified"
+    assert f"{HOME}book/" not in site.calls
+    assert "no_online_booking" not in codes(audit)
+
+
+# --- the three pages Taimoor verified by hand (fixtures constructed, never fetched) -------
+
+
+def fixture(name: str) -> str:
+    return (PAGES / f"booking_{name}.html").read_text(encoding="utf-8")
+
+
+def audit_site(
+    db: Session, home: str, pages: dict[str, str], industry: str
+) -> tuple[Any, SiteBackend]:
+    site = SiteBackend(pages)
+    business = make_business(db, website=home, industry=industry)
+    audit = service.audit_business(db, business, tools=tools_for(site))
+    assert audit.status is AuditStatus.done
+    return audit, site
+
+
+def test_urban_betty_a_phorest_iframe_on_the_target_is_verified_booking(db: Session) -> None:
+    """No date input on /book-now/; the scheduler is an iframe to phorest.com."""
+    home = "https://urbanbetty.com/"
+    target = f"{home}book-now/"
+    audit, site = audit_site(
+        db,
+        home,
+        {home: page(f'<a href="{target}">Book Now</a>'), target: fixture("urban_betty_book_now")},
+        "hair_salon",
+    )
+
+    booking = audit.checks["booking"]
+    assert booking["method"] == "verified_target"
+    assert "Phorest" in booking["evidence_text"]
+    assert "no_online_booking" not in codes(audit)
+    assert site.calls.count(target) == 1
+
+
+def test_bishops_a_location_picker_is_multi_hop_and_draws_no_finding(db: Session) -> None:
+    """Real booking two hops away (a location page → Zenoti): never followed, never judged."""
+    home = "https://bishops.co/"
+    target = f"{home}locations/"
+    pages = {home: page(f'<a href="{target}">Book Now</a>'), target: fixture("bishops_locations")}
+    audit, site = audit_site(db, home, pages, "hair_salon")
+
+    booking = audit.checks["booking"]
+    assert booking["method"] == "unverified_multi_hop"
+    assert booking["value"] is None
+    assert "locations/placeholder-north" in booking["evidence_text"]
+    assert "no_online_booking" not in codes(audit)
+    assert [c for c in site.calls if not c.endswith("robots.txt")] == [home, target], "one hop"
+
+
+def test_atx_a_contact_form_with_only_google_hosts_fires_the_finding(db: Session) -> None:
+    """Gravity Forms, reCAPTCHA, Maps, Tag Manager, Ads: none of it is booking."""
+    home = "https://atxelectricalservices.com/"
+    target = f"{home}contact/"
+    pages = {home: page(f'<a href="{target}">Schedule Now</a>'), target: fixture("atx_contact")}
+    audit, _ = audit_site(db, home, pages, "electrical")
+
+    booking = audit.checks["booking"]
+    assert booking["method"] == "cta"
+    assert booking["value"] is False
+    [finding] = [f for f in audit.findings if f["code"] == "no_online_booking"]
+    assert "Schedule Now" in finding["evidence_text"]
+    assert target in finding["evidence_text"]
+
+
+def test_atx_the_enlightened_owl_footer_credit_does_not_silence_the_finding(
+    db: Session,
+) -> None:
+    """Found on the real page after the multi-hop rule was written, not by these tests."""
+    contact = fixture("atx_contact")
+    assert "https://enlightenedowl.com/" in contact
+    home = "https://atxelectricalservices.com/"
+    target = f"{home}contact/"
+    audit, _ = audit_site(
+        db,
+        home,
+        {home: page(f'<a href="{target}">Schedule Now</a>'), target: contact},
+        "electrical",
+    )
+
+    assert audit.checks["booking"]["method"] == "cta"
+    assert "enlightenedowl" not in audit.checks["booking"]["evidence_text"]
+    assert "no_online_booking" in codes(audit)
+
+
+def test_atx_schedule_now_on_contact_pointing_at_contact_is_caught_without_a_fetch(
+    db: Session,
+) -> None:
+    """A call to action that leads back to the page being audited is never booking."""
+    audited = "https://atxelectricalservices.com/contact/"
+    audit, site = audit_site(db, audited, {audited: fixture("atx_contact")}, "electrical")
+
+    booking = audit.checks["booking"]
+    assert booking["value"] is False
+    assert "links back to this page" in booking["evidence_text"]
+    assert "no_online_booking" in codes(audit)
+    assert site.calls.count(audited) == 1, "the page itself, and no second fetch"
+
+
+@pytest.mark.parametrize(
+    "markup",
+    [
+        '<iframe src="https://www.google.com/recaptcha/api2/anchor?k=x"></iframe>',
+        '<script src="https://maps.googleapis.com/maps/api/js"></script>',
+        '<script src="https://www.googletagmanager.com/gtag/js?id=G-X"></script>',
+        '<script src="https://googleads.g.doubleclick.net/pagead/x"></script>',
+        '<a href="https://www.google.com/maps/place/x">Directions</a>',
+    ],
+)
+def test_a_google_host_on_the_target_is_never_a_booking_signal(db: Session, markup: str) -> None:
+    audit, _ = audit_of(
+        db, {HOME: page('<a href="/book/">Book Now</a>'), f"{HOME}book/": GRAVITY_CONTACT + markup}
+    )
+
+    assert audit.checks["booking"]["method"] == "cta"
+    assert "no_online_booking" in codes(audit)
+
+
+@pytest.mark.parametrize(
+    ("markup", "why"),
+    [
+        ('<a href="https://wellington.invalid/booking/">Continue</a>', "leads on"),
+        ('<a href="https://other-shop.test/x">Reserve a table</a>', "leads on"),
+        ('<a href="https://other-shop.test/appointments">Next</a>', "leads on"),
+        (
+            '<a href="/locations/north/">North</a><a href="/locations/south/">South</a>',
+            "choice of locations",
+        ),
+        (
+            '<select name="location"><option>North</option><option>South</option></select>',
+            "which location",
+        ),
+    ],
+)
+def test_a_target_that_leads_on_to_booking_is_multi_hop(db: Session, markup: str, why: str) -> None:
+    audit, _ = audit_of(
+        db, {HOME: page('<a href="/book/">Book Now</a>'), f"{HOME}book/": page(markup)}
+    )
+
+    assert audit.checks["booking"]["method"] == "unverified_multi_hop"
+    assert why in audit.checks["booking"]["evidence_text"]
+    assert "no_online_booking" not in codes(audit)
+
+
+@pytest.mark.parametrize(
+    "markup",
+    [
+        # The real ATX footer credit (correction G): another host, and nothing more.
+        '<p>Website Crafted by <a href="https://enlightenedowl.com/">Enlightened Owl Digital'
+        "</a></p>",
+        '<a href="https://www.bbb.org/us/tx/austin/profile/x">BBB Accredited</a>',
+        '<a href="https://www.facebook.com/x">Facebook</a>',
+        '<a href="https://www.google.com/maps/place/x">Directions</a>',
+        '<a href="/locations/north/">Our one location</a>',
+        '<a href="https://example-bookkeeping.test/">Our accountant</a>',
+    ],
+)
+def test_a_bare_outside_link_or_single_location_does_not_silence_the_finding(
+    db: Session, markup: str
+) -> None:
+    audit, _ = audit_of(
+        db,
+        {HOME: page('<a href="/book/">Book Now</a>'), f"{HOME}book/": GRAVITY_CONTACT + markup},
+    )
+
+    assert audit.checks["booking"]["method"] == "cta"
+    assert "no_online_booking" in codes(audit)

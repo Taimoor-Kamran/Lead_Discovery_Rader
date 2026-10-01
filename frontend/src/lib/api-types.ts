@@ -1959,6 +1959,10 @@ export interface components {
             updated_at: string;
             /** Website Audit Id */
             website_audit_id: string | null;
+            /** Withdrawn At */
+            withdrawn_at?: string | null;
+            /** Withdrawn Reason */
+            withdrawn_reason?: string | null;
         };
         /**
          * Decision
@@ -2605,6 +2609,10 @@ export interface components {
             updated_at: string;
             /** Website Audit Id */
             website_audit_id: string | null;
+            /** Withdrawn At */
+            withdrawn_at?: string | null;
+            /** Withdrawn Reason */
+            withdrawn_reason?: string | null;
         };
         /**
          * OpportunitySource
@@ -2663,6 +2671,10 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+            /** Withdrawn At */
+            withdrawn_at?: string | null;
+            /** Withdrawn Reason */
+            withdrawn_reason?: string | null;
         };
         /** Page[BusinessSummary] */
         Page_BusinessSummary_: {
@@ -3044,6 +3056,10 @@ export interface components {
             weak: boolean;
             /** Website Audit Id */
             website_audit_id: string | null;
+            /** Withdrawn At */
+            withdrawn_at?: string | null;
+            /** Withdrawn Reason */
+            withdrawn_reason?: string | null;
         };
         /**
          * ReviewRequest

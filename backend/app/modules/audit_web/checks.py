@@ -47,9 +47,12 @@ from app.modules.audit_web.fingerprints import (
     PLACEHOLDER_LOCAL_PARTS,
     SOCIAL_PLATFORMS,
     TECH_SIGNATURES,
+    booking_host,
     booking_text_match,
     find_signatures,
     generator_label,
+    is_never_booking_host,
+    is_social_host,
     snippet_forward,
     trim_to_words,
 )
@@ -111,13 +114,22 @@ class CheckResult:
     # How much evidence is kept. 300 characters for almost everything; more only where a
     # person could not otherwise verify the claim (a broken JSON-LD block, v0.12.0).
     evidence_max: int = 300
+    # How the value was arrived at, and the page it points to, where that matters (only
+    # `booking` since v0.12.1). Stored only when set, so every other check is unchanged.
+    method: str | None = None
+    target_url: str | None = None
 
     def as_dict(self) -> dict[str, Any]:
-        return {
+        stored: dict[str, Any] = {
             "value": self.value,
             "evidence_text": clip(self.evidence_text, self.evidence_max),
             "evidence_url": self.evidence_url,
         }
+        if self.method is not None:
+            stored["method"] = self.method
+        if self.target_url is not None:
+            stored["target_url"] = self.target_url
+        return stored
 
 
 Checks = dict[str, CheckResult]
@@ -516,31 +528,249 @@ def is_placeholder_email(address: str) -> bool:
     return domain in AMBIGUOUS_EMAIL_DOMAINS and local in PLACEHOLDER_LOCAL_PARTS
 
 
-def _booking(soup: BeautifulSoup, lowered: str, url: str) -> CheckResult:
-    """A booking widget, a call to action that offers to book, or a link to a booking page.
+# How `booking` was decided (v0.12.1). Only the first three are a booking flow the audit
+# actually saw; `cta` and `path` are a link that *says* booking, to be followed once.
+BOOKING_WIDGET = "widget"
+BOOKING_HOST = "booking_host"
+BOOKING_VERIFIED_TARGET = "verified_target"
+BOOKING_CTA = "cta"
+BOOKING_PATH = "path"
+BOOKING_UNVERIFIED = "unverified"
+# The target reads fine and shows no scheduler, but leads on: a booking link, a location
+# picker, another host. The booking may be one hop further (Bishops: /locations/ → a
+# location → Zenoti), and only one page is ever fetched, so nothing is concluded.
+BOOKING_UNVERIFIED_MULTI_HOP = "unverified_multi_hop"
+BOOKING_TO_FOLLOW = frozenset({BOOKING_CTA, BOOKING_PATH})
+# Input types that are a date or a time, and the words in an input's name, id, class or
+# placeholder that say it is one (a Gravity Forms date field is `type="text"
+# class="datepicker"`).
+DATE_TIME_INPUT_TYPES = frozenset({"date", "time", "datetime-local", "month", "week"})
+# Words that make a link on a booking target lead on to booking (v0.12.1), matched as
+# whole words of its text or href: `facebook` and `bookkeeping` are not `book`.
+ONWARD_BOOKING_WORDS = frozenset(
+    {
+        "book",
+        "booking",
+        "bookings",
+        "appointment",
+        "appointments",
+        "schedule",
+        "scheduling",
+        "reserve",
+        "reservation",
+        "reservations",
+    }
+)
+# Words of a branch, store, location or city picker: a chain's "choose your salon" page.
+LOCATION_WORDS = frozenset(
+    {
+        "location",
+        "locations",
+        "branch",
+        "branches",
+        "store",
+        "stores",
+        "salon",
+        "salons",
+        "city",
+        "cities",
+    }
+)
+DATE_TIME_WORD = re.compile(r"(?:^|[^a-z])(date|time|datepicker|timepicker)(?:[^a-z]|$)")
 
-    Three ways in, most specific first. A widget script names the tool. A call to action is
-    read from whatever a visitor clicks — a link, a button, a submit input or an element
-    marked `role="button"` — by its text, or by its `aria-label`, `title` or `value` when
-    it has no text (an icon button). A link whose path is a booking page counts whatever
-    its label says.
+
+def _booking(soup: BeautifulSoup, lowered: str, url: str) -> CheckResult:
+    """A booking widget, a link to a booking provider, or a link that offers to book.
+
+    Most specific first. A widget signature names the tool. A link whose host is a known
+    booking provider is a booking page whatever it says. A call to action — read from
+    whatever a visitor clicks, by its text or by its `aria-label`, `title` or `value` —
+    and a link whose path is a booking page are only what the link *says*: they are
+    recorded with `method` `cta` or `path` and the page they point to, and the audit
+    follows that one link before it concludes anything (v0.12.1).
     """
     hits = find_signatures(lowered, BOOKING_SIGNATURES)
     if hits:
-        return CheckResult(hits[0].label, evidence_text=hits[0].evidence, evidence_url=url)
+        return CheckResult(
+            hits[0].label, evidence_text=hits[0].evidence, evidence_url=url, method=BOOKING_WIDGET
+        )
+    for link in find_tags(soup, "a", href=True):
+        href = str(link["href"]).strip()
+        provider = booking_host(urljoin(url, href))
+        if provider is not None:
+            return CheckResult(
+                provider,
+                evidence_text=str(link),
+                evidence_url=url,
+                method=BOOKING_HOST,
+                target_url=_link_target(url, href),
+            )
+    # A call to action that leads back to the page being audited is never evidence of
+    # booking (ATX's "Schedule Now" on /contact/ points at /contact/): skipped without a
+    # fetch, and named in the evidence if nothing else is found.
+    self_links: list[str] = []
     for element in _clickables(soup):
         label = _clickable_label(element)
         if label and booking_text_match(label.lower()) is not None:
-            return CheckResult(f"link text: {label}", evidence_text=str(element), evidence_url=url)
+            target = _clickable_target(element, url)
+            if target is not None and same_page(target, url):
+                self_links.append(f"'{label}' links back to this page")
+                continue
+            return CheckResult(
+                f"link text: {label}",
+                evidence_text=str(element),
+                evidence_url=url,
+                method=BOOKING_CTA,
+                target_url=target,
+            )
     for link in find_tags(soup, "a", href=True):
         href = str(link["href"]).strip()
         if _is_booking_path(href):
-            return CheckResult(f"link href: {href}", evidence_text=str(link), evidence_url=url)
-    return CheckResult(
-        False,
-        evidence_text="No known booking widget or 'book online' link on the homepage",
-        evidence_url=url,
-    )
+            target = _link_target(url, href)
+            if target is not None and same_page(target, url):
+                self_links.append(f"'{href}' links back to this page")
+                continue
+            return CheckResult(
+                f"link href: {href}",
+                evidence_text=str(link),
+                evidence_url=url,
+                method=BOOKING_PATH,
+                target_url=target,
+            )
+    evidence = "No known booking widget or 'book online' link on the homepage"
+    if self_links:
+        evidence = f"{evidence}; {self_links[0]}, which is not a booking flow"
+    return CheckResult(False, evidence_text=evidence, evidence_url=url)
+
+
+def _page_key(url: str) -> tuple[str, str]:
+    parts = urlsplit(url.strip().lower())
+    host = (parts.hostname or "").removeprefix("www.")
+    return host, parts.path.rstrip("/") or "/"
+
+
+def same_page(a: str, b: str) -> bool:
+    """Whether two URLs are the same page: host (with or without `www.`) and path.
+
+    The query and the fragment are ignored — `/contact/?ref=cta#form` is still `/contact/`.
+    """
+    return _page_key(a) == _page_key(b)
+
+
+def _link_target(base: str, href: str) -> str | None:
+    """The absolute http(s) page a link leads to, fragment dropped, or `None`."""
+    lowered = href.strip().lower()
+    if not lowered or lowered.startswith(("mailto:", "tel:", "javascript:", "sms:")):
+        return None
+    target = urljoin(base, href.strip()).split("#", 1)[0]
+    return target if urlsplit(target).scheme in ("http", "https") else None
+
+
+def _clickable_target(element: Tag, base: str) -> str | None:
+    """Where a call to action leads: its own `href`, or that of the link it sits in.
+
+    A button or a submit input with no enclosing link has no page to follow — a form's
+    `action` is where it posts, not a page to read — so it has no target.
+    """
+    link = element if element.name == "a" and element.get("href") else None
+    if link is None:
+        parent = element.find_parent("a", href=True)
+        link = parent if isinstance(parent, Tag) else None
+    if link is None:
+        return None
+    return _link_target(base, str(link["href"]))
+
+
+def booking_target_flow(outcome: FetchOutcome) -> str | None:
+    """What on a fetched booking-link target shows a real booking flow, or `None`.
+
+    A page served by a booking provider; a known booking vendor's host in an iframe
+    `src`, a script `src` or a link `href` (Urban Betty's scheduler is a Phorest iframe on a
+    page with no date input of its own); a known widget signature; or a date or time
+    input. A Google host is never a signal (`NEVER_BOOKING_HOSTS`). The answer is a short
+    description for the evidence, never a guess.
+    """
+    final = outcome.final_url or outcome.url
+    provider = booking_host(final)
+    if provider is not None:
+        return f"the page is served by {provider}"
+    if outcome.text is None:
+        return None
+    soup = BeautifulSoup(outcome.text, "lxml")
+    for tag, attribute in (("iframe", "src"), ("script", "src"), ("a", "href"), ("link", "href")):
+        for element in find_tags(soup, tag, **{attribute: True}):
+            provider = booking_host(urljoin(final, str(element[attribute]).strip()))
+            if provider is not None:
+                return f"the page embeds or links to {provider}: {clip(str(element), 160)}"
+    hits = find_signatures(outcome.text.lower(), BOOKING_SIGNATURES)
+    if hits:
+        return f"the page carries a {hits[0].label} widget"
+    for field in find_tags(soup, ["input", "select"]):
+        kind = str(field.get("type", "")).lower()
+        if kind == "hidden":
+            continue
+        if kind in DATE_TIME_INPUT_TYPES:
+            return f"the page has a {kind} input: {clip(str(field), 160)}"
+        classes = field.get("class") or []
+        words = " ".join(
+            [str(field.get(attr, "")) for attr in ("name", "id", "placeholder", "aria-label")]
+            + [str(c) for c in (classes if isinstance(classes, list) else [classes])]
+        ).lower()
+        if DATE_TIME_WORD.search(words):
+            return f"the page has a date or time field: {clip(str(field), 160)}"
+    return None
+
+
+def booking_onward_hop(outcome: FetchOutcome) -> str | None:
+    """Where a target with no scheduler of its own leads on to booking, or `None` (v0.12.1).
+
+    Only two things count. (a) A link whose text or href carries a booking word (book,
+    booking, appointment, schedule, reserve). (b) A choice of locations: two or more
+    links, or a select with two or more options, that read like a branch, store, location
+    or city picker. A bare outside link is **not** onward booking. ATX's contact page has
+    "Website Crafted by Enlightened Owl Digital" in its footer, and counting that would
+    silence the very finding this check exists for. Designer credits, trade bodies,
+    badges, directories, social and Google are ignored wherever they sit. Links back to
+    this page never count. Nothing is followed; the hop is only named.
+    """
+    if outcome.text is None:
+        return None
+    page = outcome.final_url or outcome.url
+    soup = BeautifulSoup(outcome.text, "lxml")
+    locations: list[str] = []
+    for link in find_tags(soup, "a", href=True):
+        target = _link_target(page, str(link["href"]))
+        if target is None or same_page(target, page):
+            continue
+        host = urlsplit(target).hostname or ""
+        if is_never_booking_host(host) or is_social_host(host):
+            continue
+        words = _words(f"{link.get_text(' ', strip=True)} {_clickable_label(link)} {target}")
+        if words & ONWARD_BOOKING_WORDS:
+            return f"'{_clickable_label(link) or target}' leads on to {target}"
+        if words & LOCATION_WORDS and target not in locations:
+            locations.append(target)
+    if len(locations) >= 2:
+        return f"the page offers a choice of locations, e.g. {locations[0]}"
+    for select in find_tags(soup, "select"):
+        named = _words(" ".join(str(select.get(a, "")) for a in ("name", "id", "aria-label")))
+        if named & LOCATION_WORDS and len(find_tags(select, "option")) >= 2:
+            return f"the page asks which location: {clip(str(select), 160)}"
+    return None
+
+
+def _words(text: str) -> set[str]:
+    return set(re.findall(r"[a-z]+", text.lower()))
+
+
+def looks_script_built(outcome: FetchOutcome) -> bool:
+    """A page whose content JavaScript assembles: what it offers cannot be read here."""
+    if outcome.text is None:
+        return False
+    soup = BeautifulSoup(outcome.text, "lxml")
+    cleaned = _cleaned(BeautifulSoup(outcome.text, "lxml"))
+    text = _text_of(cleaned.body or cleaned)
+    return bool(_js_shell(soup, outcome.final_url or outcome.url, text).value)
 
 
 def _clickables(soup: BeautifulSoup) -> list[Tag]:

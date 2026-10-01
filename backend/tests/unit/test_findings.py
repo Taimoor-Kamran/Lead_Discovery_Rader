@@ -383,10 +383,8 @@ def test_booking_link_text_without_a_known_widget_is_not_reported_as_no_booking(
     [
         '<a href="/book-online"><img src="/cta.png" alt=""></a>',
         '<a href="https://example.test/services/schedule-service/">Plumbing</a>',
-        '<a href="/request-service?from=home">Get started</a>',
         '<button aria-label="Book now"><svg></svg></button>',
         '<form action="/go"><input type="submit" value="Schedule service"></form>',
-        '<div role="button" tabindex="0">Request service</div>',
         '<a href="/x">Book a service</a>',
         '<a href="/x">Schedule an appointment</a>',
     ],
@@ -406,6 +404,13 @@ def test_a_booking_call_to_action_is_recognised_by_text_label_or_path(markup: st
         '<a href="/contact-us">Contact us</a>',
         '<a href="mailto:book@example.test">Email</a>',
         '<input type="text" value="Book now">',
+        # v0.12.1: a request is not scheduling, by text or by path.
+        '<a href="/request-service?from=home">Get started</a>',
+        '<div role="button" tabindex="0">Request service</div>',
+        '<a href="/quote">Request a Quote</a>',
+        '<a href="/quote">Request Quote</a>',
+        '<a href="/service">Request Service</a>',
+        '<a href="/quote">request a quote online</a>',
     ],
 )
 def test_links_that_are_not_booking_do_not_count(markup: str) -> None:

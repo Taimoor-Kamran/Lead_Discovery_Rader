@@ -25,9 +25,9 @@
           {
             "service": "booking_setup",
             "confidence": 0.7,
-            "rationale": "Audit found no online booking or scheduling link on the homepage.",
+            "rationale": "Audit found no visible online booking flow on the homepage.",
             "evidence": [
-              {"finding_code": "no_online_booking", "quote": "Audit found no online booking or scheduling link on the homepage.", "source_url": "https://zilkerpipeworks.invalid/"}
+              {"finding_code": "no_online_booking", "quote": "Audit found no visible online booking flow on the homepage.", "source_url": "https://zilkerpipeworks.invalid/"}
             ]
           }
         ],

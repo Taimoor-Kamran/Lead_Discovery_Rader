@@ -4,8 +4,8 @@ One row per registrable domain: the DNS snapshot and the RDAP snapshot (JSONB), 
 its own checked-at time. A cache only — every audit copies what it used into its own
 `checks`, so dropping this table loses no evidence.
 
-Revision ID: 0014_domain_intel
-Revises: 0013_not_readable_status
+Revision ID: 0015_domain_intel
+Revises: 0014_opportunity_withdrawal
 Create Date: 2026-10-01
 """
 
@@ -15,8 +15,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision: str = "0014_domain_intel"
-down_revision: str | None = "0013_not_readable_status"
+revision: str = "0015_domain_intel"
+down_revision: str | None = "0014_opportunity_withdrawal"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

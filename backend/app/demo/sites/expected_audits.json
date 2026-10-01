@@ -64,6 +64,7 @@
       "status": "done",
       "findings": [
         "no_live_chat",
+        "no_online_booking",
         "thin_content"
       ],
       "psi_score": 71,
@@ -187,6 +188,7 @@
       "status": "done",
       "findings": [
         "no_live_chat",
+        "no_online_booking",
         "thin_content"
       ],
       "psi_score": 78
@@ -295,7 +297,7 @@
       "psi_score": 76
     },
     "copperlineelectric.invalid": {
-      "case": "The Copperhead shape, v0.11.0: an Elementor 'BOOK A SERVICE' button that links to the contact page and no booking tool. The call to action counts as booking, so there is no no_online_booking. A WordPress '--wp--preset--shadow--crisp' CSS token that is not the Crisp chat widget, and headings that skip from h2 to h5.",
+      "case": "The Copperhead shape, v0.11.0: an Elementor 'BOOK A SERVICE' button that links to the contact page and no booking tool. Since v0.12.1 the call to action is followed once: its target (the demo serves the homepage for every path) has no date or time input and no booking widget, so no_online_booking fires, naming the button and the target. A WordPress '--wp--preset--shadow--crisp' CSS token that is not the Crisp chat widget, and headings that skip from h2 to h5.",
       "status": "done",
       "findings": [
         "heading_level_skipped",
@@ -303,6 +305,7 @@
         "missing_title",
         "no_h1",
         "no_live_chat",
+        "no_online_booking",
         "no_structured_data"
       ],
       "psi_score": 71
