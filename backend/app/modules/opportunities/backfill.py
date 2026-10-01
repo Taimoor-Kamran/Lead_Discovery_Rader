@@ -5,7 +5,8 @@ merged result to compare with here, so only the cited-findings test is applied: 
 row that cites at least one finding, none of which is in its business's latest audit. A
 row that cites nothing (`ads_social`) is never listed (correction C).
 
-Only a latest audit that is `done` or `skipped` can show a finding is gone. A row whose
+Only a latest audit that looked can show a finding is gone: `done` or `skipped` for page
+evidence, a working DNS / RDAP lookup for domain evidence (v0.13.0, amendment W). A row whose
 latest audit could not look is listed as skipped and never written (correction H).
 """
 
@@ -25,7 +26,7 @@ from app.modules.normalization.schemas import BusinessStatus
 from app.modules.opportunities.models import Opportunity, ReviewStatus
 from app.modules.opportunities.service import (
     OPEN_STATUSES,
-    can_withdraw_on,
+    can_judge,
     cited_findings,
     withdrawal_reasons,
 )
@@ -76,7 +77,7 @@ def find_orphans(
         if not reasons:
             continue
         reason = "; ".join(reasons)
-        if not can_withdraw_on(audit):
+        if not can_judge(row, audit):
             found.append(
                 Orphan(
                     opportunity_id=str(row.id),
@@ -162,7 +163,7 @@ def find_wrongly_withdrawn(session: Session, *, apply: bool = False) -> list[Res
         ids = tuple(dict.fromkeys(_AUDIT_ID.findall(reason)))
         audits = [session.get(WebsiteAudit, uuid.UUID(i)) for i in ids]
         named = [a for a in audits if a is not None]
-        if named and all(can_withdraw_on(a) for a in named):
+        if named and all(can_judge(row, a) for a in named):
             continue
         held: str | None = None
         if not named:

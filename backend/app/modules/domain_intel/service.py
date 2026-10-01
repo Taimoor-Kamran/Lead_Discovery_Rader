@@ -26,12 +26,12 @@ from app.core.rdap import RdapClient, RdapResult, build_rdap_client
 from app.modules.audit_web.checks import CheckResult
 from app.modules.audit_web.models import AuditStatus
 from app.modules.domain_intel import dns_lookup
+from app.modules.domain_intel.evidence import CHECK_KEY as CHECK_KEY
 from app.modules.domain_intel.models import DomainIntel
 from app.modules.domain_intel.selection import DomainTarget, select
 
 logger = get_logger("app.domain_intel")
 
-CHECK_KEY = "domain_intel"
 BUDGET_SECONDS = 15.0
 # Recorded DNS answers for development and CI. Absent from the production image, where the
 # live resolver answers instead; an unrecorded name is `unknown` (decision C13).
