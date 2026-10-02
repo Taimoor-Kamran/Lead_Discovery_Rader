@@ -35,6 +35,13 @@ INDEX_FILENAME = "index.html"
 ROBOTS_FILENAME = "robots.txt"
 HTML_CONTENT_TYPE = "text/html; charset=utf-8"
 TEXT_CONTENT_TYPE = "text/plain; charset=utf-8"
+# No idle connection is kept (v0.15.0, C2). httpcore reuses a pooled connection by origin
+# alone — scheme, host, port — and a pinned request's host is the IP, while SNI is sent
+# only when a connection opens. With keep-alive, a request for `b.example` could ride the
+# connection opened for `a.example` on the same shared-hosting IP, so `b.example`'s
+# certificate was never checked and a bad one went unrecorded. One TLS handshake per page
+# request is the price of every certificate being checked against its own hostname.
+FETCH_LIMITS = httpx.Limits(max_keepalive_connections=0)
 
 
 class FetchError(Exception):
@@ -117,7 +124,7 @@ class NetworkFetchBackend:
     def __init__(self, client: httpx.Client | None = None) -> None:
         # verify=True is the default and is written out to make it greppable: nothing in
         # this repository may ever construct a client that skips verification.
-        self._client = client or httpx.Client(verify=True, follow_redirects=False, trust_env=False)
+        self._client = client or fetch_client()
 
     def close(self) -> None:
         self._client.close()
@@ -158,6 +165,17 @@ class NetworkFetchBackend:
             raise ConnectFailedError(type(exc).__name__) from exc
         except httpx.HTTPError as exc:
             raise ConnectFailedError(type(exc).__name__) from exc
+
+
+def fetch_client(*, verify: Any = True) -> httpx.Client:
+    """The page-fetch client: certificates verified, redirects not followed, no keep-alive.
+
+    `verify` is only ever narrowed — a test hands in a context trusting its own CA — never
+    turned off.
+    """
+    if verify is False:
+        raise ValueError("The page-fetch client never skips certificate verification")
+    return httpx.Client(verify=verify, follow_redirects=False, trust_env=False, limits=FETCH_LIMITS)
 
 
 def pin_connection(request: FetchRequest) -> tuple[str, dict[str, str], dict[str, Any]]:

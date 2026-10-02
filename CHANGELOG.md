@@ -3,6 +3,24 @@
 All notable changes, one section per merged spec. Newest first.
 Format: `## [vX.Y.Z] - YYYY-MM-DD` followed by Added / Changed / Fixed.
 
+## [v0.15.0] - unreleased
+
+### Fixed — every certificate is checked against its own hostname (C2)
+
+- The page-fetch client no longer keeps idle connections
+  (`max_keepalive_connections=0`, `core/fetch_backends.py`). Before, httpcore reused a
+  pooled connection by IP address alone, so a business on the same shared-hosting IP as
+  the one audited just before it (within httpx's 5-second keep-alive) was fetched down the
+  first one's connection, and its own certificate was never checked. A bad certificate
+  there produced no `tls_invalid` finding. Production has at least four such shared IPs
+  (Squarespace, two Cloudflare, Fastly) serving eight businesses. The exposure is
+  confirmed; no specific hidden bad certificate is yet. This is a fix to a check that
+  silently did not run, independent of the concurrency work below. The cost is one TLS
+  handshake per page request. No limit, cap, interval or user agent changed.
+- `AUDIT_LOGIC_VERSION` is not bumped for this: what the TLS check concludes about a
+  certificate is unchanged; it now runs for every host. Stored audits are re-checked on
+  their normal schedule.
+
 ## [v0.14.0] - unreleased
 
 No migration, no new environment variable. Scoring, the audit and opportunity generation
