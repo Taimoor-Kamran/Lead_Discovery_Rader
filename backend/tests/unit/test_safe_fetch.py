@@ -30,7 +30,7 @@ from app.core.safe_fetch import (
     robots_allows,
     split_safe_url,
 )
-from tests.conftest import FakeClock
+from tests.conftest import FakeClock, redis_follows
 
 PUBLIC_IP = "93.184.216.34"
 HOME = "https://example.test/"
@@ -439,20 +439,23 @@ def test_robots_is_cached_per_host() -> None:
 # --- politeness -----------------------------------------------------------------------
 
 
-def test_one_host_is_asked_at_most_once_per_interval() -> None:
+def test_one_host_is_asked_at_most_once_per_interval(monkeypatch: pytest.MonkeyPatch) -> None:
     clock = FakeClock()
+    redis_follows(monkeypatch, clock)
     throttle = HostThrottle(
         fakeredis.FakeStrictRedis(), interval_seconds=5.0, clock=clock, sleeper=clock.sleep
     )
 
     assert throttle.wait("example.test") == 0.0
-    assert throttle.wait("example.test") == pytest.approx(5.0)
+    # 5 s, plus the millisecond past the key's expiry that Redis needs (v0.15.0).
+    assert throttle.wait("example.test") == pytest.approx(5.0, abs=0.002)
     assert throttle.wait("other.test") == 0.0, "a different host waits for nothing"
-    assert clock.delays == [pytest.approx(5.0)]
+    assert clock.delays == [pytest.approx(5.0, abs=0.002)]
 
 
-def test_the_throttle_is_shared_between_fetchers() -> None:
+def test_the_throttle_is_shared_between_fetchers(monkeypatch: pytest.MonkeyPatch) -> None:
     clock = FakeClock()
+    redis_follows(monkeypatch, clock)
     shared = fakeredis.FakeStrictRedis()
     backend = RecordingBackend(default=html("<html></html>"))
     first = build(backend, redis_client=shared, clock=clock, audit_host_throttle_seconds=5.0)
@@ -461,7 +464,7 @@ def test_the_throttle_is_shared_between_fetchers() -> None:
     first.fetch(HOME)
     second.fetch(HOME)
 
-    assert clock.delays == [pytest.approx(5.0)]
+    assert clock.delays == [pytest.approx(5.0, abs=0.002)]
 
 
 def test_the_concurrency_guard_releases_its_slot() -> None:

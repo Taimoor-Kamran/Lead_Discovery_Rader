@@ -57,6 +57,19 @@ def places_fixture(name: str) -> Any:
     return load_fixture("google_places", name)
 
 
+def redis_follows(monkeypatch: pytest.MonkeyPatch, clock: "FakeClock") -> None:
+    """Make fakeredis read `clock` for key expiry, so a `PX` key ages with simulated time.
+
+    The per-host throttle's claim lives exactly as long as its Redis key (v0.15.0), so a
+    test that sleeps on a `FakeClock` needs the key to expire on that clock too.
+    """
+    import types
+
+    import fakeredis._basefakesocket as fake_socket
+
+    monkeypatch.setattr(fake_socket, "time", types.SimpleNamespace(time=clock))
+
+
 class FakeClock:
     """A clock that only advances when something sleeps on it.
 

@@ -220,7 +220,15 @@ def default_resolver(host: str, port: int) -> Sequence[str]:
 
 
 class HostThrottle:
-    """At most one request per host per interval, shared by every process through Redis."""
+    """At most one request per host per interval, shared by every process through Redis.
+
+    The claim is one atomic `SET <key> <now> NX PX <interval>` (v0.15.0, C1): whoever sets
+    the key may go, and the key itself lasts exactly the interval, so the next claim on that
+    host succeeds only once the interval has passed. Until v0.15.0 the claim was a read and
+    then a write; two threads auditing one host at once could both read "free" and both go.
+    A refused caller sleeps for what is left of the key's life and tries again; only the
+    calling thread blocks.
+    """
 
     def __init__(
         self,
@@ -240,27 +248,22 @@ class HostThrottle:
         if self._interval <= 0:
             return 0.0
         key = f"{THROTTLE_PREFIX}:{host.lower()}"
+        interval_ms = max(round(self._interval * 1000), 1)
         waited = 0.0
         while True:
-            now = self._clock()
-            raw = self._redis.get(key)
-            last = _as_float(raw)
-            remaining = 0.0 if last is None else (last + self._interval) - now
-            if remaining <= 0:
-                self._redis.set(key, f"{now:.6f}", ex=max(int(self._interval) * 2, 1))
+            if self._redis.set(key, f"{self._clock():.6f}", nx=True, px=interval_ms):
                 return waited
-            self._sleeper(remaining)
-            waited += remaining
-
-
-def _as_float(raw: object) -> float | None:
-    if isinstance(raw, bytes | str):
-        text = raw.decode() if isinstance(raw, bytes) else raw
-        try:
-            return float(text)
-        except ValueError:
-            return None
-    return None
+            left_ms = int(cast(int, self._redis.pttl(key)))
+            if left_ms == -2:  # it expired between the two commands: claim again
+                continue
+            if left_ms == -1:  # no expiry on it (nothing writes one): give it the interval
+                self._redis.pexpire(key, interval_ms)
+                continue
+            # One millisecond past the expiry: Redis keeps a key alive at its exact
+            # expiry time, so sleeping only `left_ms` could wake to find it still there.
+            pause = (left_ms + 1) / 1000
+            self._sleeper(pause)
+            waited += pause
 
 
 class ConcurrencyGuard:
