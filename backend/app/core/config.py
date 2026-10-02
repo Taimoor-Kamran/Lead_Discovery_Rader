@@ -85,7 +85,12 @@ class Settings(BaseSettings):
     # Shown in the bot's User-Agent so a site owner can reach a human. Polite crawling
     # identifies itself; an empty value falls back to a description, never to a lie.
     bot_contact: str = ""
+    # Two different limits (v0.15.0). `audit_max_concurrency` caps page fetches in flight
+    # at once, across every process (a Redis counter, soft: a fetch waits up to 30 s for a
+    # slot, then goes ahead). `audit_concurrency` is how many businesses one audit run
+    # audits at once, each on its own thread. Keep the second at or below the first.
     audit_max_concurrency: int = 4
+    audit_concurrency: int = Field(default=4, ge=1)
     audit_max_bytes: int = 2_000_000
     audit_connect_timeout_seconds: float = 5.0
     audit_read_timeout_seconds: float = 10.0

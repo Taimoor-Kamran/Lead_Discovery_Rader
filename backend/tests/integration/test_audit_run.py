@@ -8,6 +8,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.modules.adapters import registry
 from app.modules.adapters.google_places.adapter import SOURCE_NAME as PLACES_SOURCE
 from app.modules.audit_web import service
@@ -391,7 +392,12 @@ def test_the_follow_up_key_stops_a_second_audit_run(db: Session) -> None:
 def test_a_cancelled_audit_run_stops_between_businesses(
     db: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Cancellation lands at a checkpoint, so one audit finishes and the next never starts."""
+    """Cancellation lands at a checkpoint, so one audit finishes and the next never starts.
+
+    One business at a time (`AUDIT_CONCURRENCY=1`): with more in flight, every in-flight
+    audit finishes first (v0.15.0, `test_audit_concurrency.py`).
+    """
+    monkeypatch.setattr(get_settings(), "audit_concurrency", 1)
     first = make_business(db, name="One Of Two")
     second = make_business(db, name="Two Of Two")
     _, resolution = pipeline(db, [first, second])
