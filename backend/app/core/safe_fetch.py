@@ -549,33 +549,38 @@ class SafeFetcher:
         pinned_ip: str | None = None
         if backend.resolves_dns:
             pinned_ip = self._validate_dns(host, port_of(parts), url)
-            # Politeness is owed to a real server. A fixture answered from disk has nobody
-            # to be polite to, which is what keeps a demo load and the test suite quick
-            # instead of sleeping five seconds between every page.
-            self.throttle.wait(host)
+        request = FetchRequest(
+            url=url,
+            parts=parts,
+            headers={
+                "User-Agent": self.user_agent,
+                "Accept": "text/html,application/xhtml+xml",
+                "Accept-Encoding": "gzip, deflate",
+            },
+            connect_timeout=self.settings.audit_connect_timeout_seconds,
+            read_timeout=min(
+                self.settings.audit_read_timeout_seconds,
+                read_timeout if read_timeout is not None else float("inf"),
+            ),
+            max_bytes=self.settings.audit_max_bytes,
+            pinned_ip=pinned_ip,
+        )
 
+        # The fetch slot first, then the host's claim, then the send (v0.15.0). The slot
+        # can wait (up to 30 s when slots are short); the claim must not be followed by
+        # anything that can, or under threads a second claim on the host comes due while
+        # the first request has not gone out, and two sends land closer than the
+        # interval. What is left between claim and send is thread scheduling.
         self.concurrency.acquire()
-        if record:
-            self.requested.append(url)
         try:
-            return backend.get(
-                FetchRequest(
-                    url=url,
-                    parts=parts,
-                    headers={
-                        "User-Agent": self.user_agent,
-                        "Accept": "text/html,application/xhtml+xml",
-                        "Accept-Encoding": "gzip, deflate",
-                    },
-                    connect_timeout=self.settings.audit_connect_timeout_seconds,
-                    read_timeout=min(
-                        self.settings.audit_read_timeout_seconds,
-                        read_timeout if read_timeout is not None else float("inf"),
-                    ),
-                    max_bytes=self.settings.audit_max_bytes,
-                    pinned_ip=pinned_ip,
-                )
-            )
+            if backend.resolves_dns:
+                # Politeness is owed to a real server. A fixture answered from disk has
+                # nobody to be polite to, which is what keeps a demo load and the test
+                # suite quick instead of sleeping five seconds between every page.
+                self.throttle.wait(host)
+            if record:
+                self.requested.append(url)
+            return backend.get(request)
         finally:
             self.concurrency.release()
 

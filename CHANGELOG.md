@@ -47,6 +47,13 @@ Format: `## [vX.Y.Z] - YYYY-MM-DD` followed by Added / Changed / Fixed.
   wrote the new one, so two threads on one host could both go. Production has no two
   businesses on one hostname today; this is fixed before concurrency makes it possible.
   A key left by the old code expires within twice the interval.
+- `SafeFetcher` takes the fetch slot before claiming the host, then sends. Before, the slot
+  was taken between the claim and the send; under threads a second claim on the host
+  could come due while the first request waited for its slot, and two sends landed closer
+  than the interval (17 ms under load against a 200 ms test interval). Neither the
+  throttle nor the slot limit changed, only their order. The guarantee is claims on a host
+  at least one interval apart, with sends within a few milliseconds of that; thread
+  scheduling is all that separates a claim from its send.
 
 No migration. New environment variable: `AUDIT_CONCURRENCY`. No rate limit, daily cap,
 per-host interval, user agent or `BOT_CONTACT` changed.

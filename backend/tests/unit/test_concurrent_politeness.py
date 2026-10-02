@@ -121,14 +121,13 @@ def test_the_per_run_cap_admits_exactly_what_is_left_when_more_threads_claim() -
     assert cap.used() == 5
 
 
-def test_several_businesses_on_one_host_through_one_shared_fetcher_are_claimed_apart() -> None:
-    """The pool shares one `SafeFetcher`; its claims on one host keep the interval.
+def test_several_businesses_on_one_host_through_one_shared_fetcher_keep_the_gap() -> None:
+    """The pool shares one `SafeFetcher`; on one host its claims keep the interval, and its
+    sends follow their claims with nothing that can wait in between.
 
-    What this does **not** assert is the gap between *sends*. A request is sent a little
-    after its claim (the fetch slot is taken in between), so two sends can be closer than
-    the interval by that delay: milliseconds normally, up to the 30-second slot wait when
-    `AUDIT_CONCURRENCY` exceeds `AUDIT_MAX_CONCURRENCY`. Serially it could not happen. See
-    the v0.15.0 blocker "send spacing"; the claim-to-send delay is recorded here.
+    The fetch slot is taken before the claim (v0.15.0), so what separates a claim from its
+    send is thread scheduling only. Sends are therefore not exactly spaced — no lock-free
+    design gets below "the operating system might pause us" — but within `SLACK` of it.
     """
     from app.core.config import Settings
     from app.core.fetch_backends import BackendResponse, FetchRequest
@@ -181,4 +180,64 @@ def test_several_businesses_on_one_host_through_one_shared_fetcher_are_claimed_a
     gaps = [later - earlier for earlier, later in pairwise(shared)]
     assert min(gaps) >= INTERVAL - SLACK, f"two claims {min(gaps):.4f}s apart"
     assert len(sent) == len(claims) == len(sites), "every send had its own claim"
+    sends = sorted(at for host, at in sent if host == "shared.test")
+    send_gaps = [later - earlier for earlier, later in pairwise(sends)]
+    assert min(send_gaps) >= INTERVAL - SLACK, f"two sends {min(send_gaps):.4f}s apart"
     assert {host for host, _ in sent} == {"shared.test", "own-a.test", "own-b.test"}
+
+
+def test_the_fetch_slot_is_taken_before_the_host_is_claimed_and_released_on_every_path() -> None:
+    """Nothing that can wait may sit between a host's claim and its send (v0.15.0)."""
+    from app.core.config import Settings
+    from app.core.fetch_backends import BackendResponse, FetchRequest
+    from app.core.safe_fetch import SafeFetcher
+
+    order: list[str] = []
+
+    class Guard:
+        def acquire(self) -> None:
+            order.append("slot")
+
+        def release(self) -> None:
+            order.append("release")
+
+    class Throttle:
+        fail = False
+
+        def wait(self, host: str) -> float:
+            order.append("claim")
+            if self.fail:
+                raise RuntimeError("redis went away")
+            return 0.0
+
+    class Backend:
+        resolves_dns = True
+
+        def handles(self, host: str) -> bool:
+            return True
+
+        def get(self, request: FetchRequest) -> BackendResponse:
+            order.append("send")
+            return BackendResponse(status_code=200, headers={"content-type": "text/html"})
+
+    throttle = Throttle()
+    fetcher = SafeFetcher(
+        redis=fakeredis.FakeStrictRedis(),
+        backends=[Backend()],
+        settings=Settings(
+            jwt_secret="x" * 32,  # type: ignore[arg-type]
+            bot_contact="https://agency.example/bot",
+        ),
+        resolver=lambda host, port: ["93.184.216.34"],
+        throttle=throttle,  # type: ignore[arg-type]
+        concurrency=Guard(),  # type: ignore[arg-type]
+    )
+
+    fetcher.fetch("https://example.test/")
+    assert order == ["slot", "claim", "send", "release"]
+
+    order.clear()
+    throttle.fail = True
+    with pytest.raises(RuntimeError):
+        fetcher.fetch("https://example.test/")
+    assert order == ["slot", "claim", "release"], "a failed claim still frees the slot"
