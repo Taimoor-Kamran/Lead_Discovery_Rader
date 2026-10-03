@@ -3,6 +3,61 @@
 All notable changes, one section per merged spec. Newest first.
 Format: `## [vX.Y.Z] - YYYY-MM-DD` followed by Added / Changed / Fixed.
 
+## [v0.15.0] - unreleased
+
+### Fixed — every certificate is checked against its own hostname (C2)
+
+- The page-fetch client no longer keeps idle connections
+  (`max_keepalive_connections=0`, `core/fetch_backends.py`). Before, httpcore reused a
+  pooled connection by IP address alone, so a business on the same shared-hosting IP as
+  the one audited just before it (within httpx's 5-second keep-alive) was fetched down the
+  first one's connection, and its own certificate was never checked. A bad certificate
+  there produced no `tls_invalid` finding. Production has at least four such shared IPs
+  (Squarespace, two Cloudflare, Fastly) serving eight businesses. The exposure is
+  confirmed; no specific hidden bad certificate is yet. This is a fix to a check that
+  silently did not run, independent of the concurrency work below. The cost is one TLS
+  handshake per page request. No limit, cap, interval or user agent changed.
+- `AUDIT_LOGIC_VERSION` is not bumped for this: what the TLS check concludes about a
+  certificate is unchanged; it now runs for every host. Stored audits are re-checked on
+  their normal schedule.
+
+### Added — several businesses audited at once
+
+- `AUDIT_CONCURRENCY` (default 4): an audit run audits that many businesses at once, each
+  on its own thread with its own database session and transaction. 1 is the old
+  one-at-a-time loop. The shared session and its savepoint are gone; a failure rolls back
+  only its own business, which still gets its `failed` row.
+- Only the run's own thread checkpoints and tallies the summary, as results arrive in any
+  order. Progress rises by one per finished audit to exactly `progress_total`.
+- Cancellation: no new business is handed out once a cancel is seen; the audits already in
+  flight finish and are stored, then the run stops. At most `AUDIT_CONCURRENCY` audits
+  finish after the cancel, instead of none.
+- The run's time limit (`RunTimedOut`) arrives on the run's thread while it waits. It
+  escapes without waiting for in-flight audits, which end with the work horse, uncommitted;
+  no business is written as a failed audit because of it. The limit itself is unchanged.
+- A run logs a warning at start when `AUDIT_CONCURRENCY` exceeds `AUDIT_MAX_CONCURRENCY`:
+  fetch slots run out, and each fetch waits up to 30 seconds and then proceeds anyway.
+  Both settings are documented together in `.env.example` and `.env.prod.example`.
+- `run_single_audit` calls the new `_audit_one(business_id)`; its behaviour is unchanged.
+
+### Changed — the per-host claim is atomic (C1)
+
+- `HostThrottle.wait` claims a host with one `SET <key> <now> NX PX <interval>`, same key
+  and same interval (`AUDIT_HOST_THROTTLE_SECONDS`). Before, it read the last time and then
+  wrote the new one, so two threads on one host could both go. Production has no two
+  businesses on one hostname today; this is fixed before concurrency makes it possible.
+  A key left by the old code expires within twice the interval.
+- `SafeFetcher` takes the fetch slot before claiming the host, then sends. Before, the slot
+  was taken between the claim and the send; under threads a second claim on the host
+  could come due while the first request waited for its slot, and two sends landed closer
+  than the interval (17 ms under load against a 200 ms test interval). Neither the
+  throttle nor the slot limit changed, only their order. The guarantee is claims on a host
+  at least one interval apart, with sends within a few milliseconds of that; thread
+  scheduling is all that separates a claim from its send.
+
+No migration. New environment variable: `AUDIT_CONCURRENCY`. No rate limit, daily cap,
+per-host interval, user agent or `BOT_CONTACT` changed.
+
 ## [v0.14.0] - unreleased
 
 No migration, no new environment variable. Scoring, the audit and opportunity generation
